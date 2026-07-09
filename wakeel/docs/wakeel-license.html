@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Wakeel — Dify License Compliance Brief</title>
+<style>
+  @page { size: A4; margin: 0; }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+    color: #1d1d1f; font-size: 10pt; line-height: 1.5; }
+  .page { width: 210mm; padding: 12mm 17mm 8mm; position: relative; page-break-after: always; }
+  .page:last-child { page-break-after: auto; }
+
+  .flag { position: absolute; top: 0; left: 0; right: 0; height: 4px; display: flex; }
+  .flag .r { width: 22%; background: #CE1126; } .flag .g { flex: 1; background: #00843D; }
+  .flag .w { flex: 1; background: #fff; border-bottom: 0.4pt solid #d9d9de; } .flag .b { flex: 1; background: #101214; }
+
+  .head { display: flex; align-items: center; gap: 12px; margin-bottom: 4mm; }
+  .mark { width: 44px; height: 44px; border-radius: 12px; background: #00843D; position: relative; overflow: hidden;
+    display: flex; align-items: center; justify-content: center; }
+  .mark::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 6px; background: #CE1126; }
+  .mark span { color: #fff; font-weight: 800; font-size: 15px; }
+  .head .t1 { font-weight: 800; font-size: 15pt; letter-spacing: -0.02em; }
+  .head .t2 { font-size: 8.5pt; color: #86868b; text-transform: uppercase; letter-spacing: 0.06em; }
+  .doc-meta { margin-left: auto; text-align: right; font-size: 8.5pt; color: #86868b; }
+
+  h1 { font-size: 19pt; font-weight: 800; letter-spacing: -0.02em; margin: 4mm 0 2mm; }
+  .subtitle { color: #48484d; font-size: 10.5pt; margin-bottom: 5mm; max-width: 150mm; }
+  h2 { font-size: 12pt; font-weight: 800; letter-spacing: -0.01em; margin: 4mm 0 2mm; color: #00602c; }
+  h2 .n { color: #b9c4bd; margin-right: 4px; }
+  p { margin-bottom: 3mm; }
+  .small { font-size: 9pt; color: #6b7280; }
+
+  .quote { border-left: 3px solid #00843D; background: #f2f8f4; padding: 2.6mm 4mm; border-radius: 0 8px 8px 0;
+    font-size: 9pt; color: #334; margin: 2mm 0 3mm; font-style: italic; }
+  .quote b { font-style: normal; }
+
+  table { border-collapse: collapse; width: 100%; margin: 2mm 0 3.5mm; font-size: 9.5pt; }
+  th { text-align: left; font-size: 8pt; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280;
+    padding: 2.5mm 3mm; border-bottom: 1.2pt solid #d9d9de; }
+  td { padding: 1.9mm 3mm; border-bottom: 0.5pt solid #ececf0; vertical-align: top; }
+  tr:last-child td { border-bottom: 0; }
+
+  .pill { display: inline-block; font-size: 8pt; font-weight: 700; border-radius: 20px; padding: 1px 8px; white-space: nowrap; }
+  .ok { background: #e7f6ed; color: #0b7a3e; }
+  .warn { background: #fdf3e3; color: #9a6b00; }
+  .stop { background: #fdecee; color: #CE1126; }
+
+  .grid2 { display: flex; gap: 6mm; }
+  .card { flex: 1; border: 0.7pt solid #e2e6ec; border-radius: 12px; padding: 3.5mm 4.5mm; }
+  .card h3 { font-size: 10.5pt; font-weight: 750; margin-bottom: 2mm; }
+  .card.green { background: #f4faf6; border-color: #cbe4d4; }
+  .card.amber { background: #fdf9f0; border-color: #ecdcb8; }
+  ul { padding-left: 5mm; margin: 2mm 0 3mm; }
+  li { margin-bottom: 1.6mm; }
+
+  .steps { counter-reset: st; margin: 3mm 0; }
+  .step { display: flex; gap: 4mm; margin-bottom: 2.8mm; }
+  .step .num { counter-increment: st; flex: none; width: 8mm; height: 8mm; border-radius: 50%;
+    background: #00843D; color: #fff; font-weight: 800; font-size: 10pt; display: flex; align-items: center; justify-content: center; }
+  .step .num::before { content: counter(st); }
+  .step h4 { font-size: 10.5pt; font-weight: 750; margin-bottom: 0.8mm; }
+  .step p { margin-bottom: 0; font-size: 9.5pt; color: #3b4453; }
+
+  .disclaimer { border: 0.7pt solid #ecdcb8; background: #fdf9f0; border-radius: 10px; padding: 3.5mm 4.5mm;
+    font-size: 9pt; color: #6b5a1f; margin-top: 4mm; }
+  .footer { margin-top: 4mm; display: flex; justify-content: space-between;
+    font-size: 8pt; color: #a0a6b3; border-top: 0.5pt solid #ececf0; padding-top: 2.5mm; }
+  .checklist td:first-child { width: 8mm; font-size: 11pt; color: #0b7a3e; }
+</style>
+</head>
+<body>
+
+<!-- PAGE 1 -->
+<div class="page">
+  <div class="flag"><i class="r"></i><i class="g"></i><i class="w"></i><i class="b"></i></div>
+  <div class="head">
+    <div class="mark"><span>وكيل</span></div>
+    <div><div class="t1">Wakeel</div><div class="t2">Agentic Platform for Government</div></div>
+    <div class="doc-meta">Internal compliance brief<br/>9 July 2026 · v1.0<br/>Classification: Internal</div>
+  </div>
+
+  <h1>Open-Source License Compliance</h1>
+  <div class="subtitle">What the Dify license permits Wakeel to do commercially, the two conditions that require action before production rollout, and the recommended path.</div>
+
+  <h2><span class="n">1.</span> Executive summary</h2>
+  <p>Wakeel (وكيل) is built on <b>Dify</b>, an open-source LLM application platform by LangGenius, Inc. Dify is licensed under a <b>modified Apache License 2.0</b> (the "Dify Open Source License"). The license <b>expressly permits commercial use</b>, including using Dify "as a backend service for other applications" — which is exactly Wakeel's architecture. Two additional conditions apply, and both are manageable:</p>
+  <ul>
+    <li><b>Multi-tenancy:</b> one Dify deployment may serve <b>one workspace (tenant)</b> without a commercial license. Wakeel's recommended per-entity deployment model satisfies this by design.</li>
+    <li><b>Dify console branding:</b> the Dify-provided console frontend must retain the Dify logo and copyright. Wakeel's own portal is unaffected; the embedded workflow editor requires one of three remedies before commercial go-live (Section 5).</li>
+  </ul>
+  <p><b>Bottom line:</b> Wakeel can be commercialised for Abu Dhabi government entities today under a per-entity deployment model, with one branding remedy applied — or a single commercial/white-label license obtained from LangGenius to clear both conditions at once.</p>
+
+  <h2><span class="n">2.</span> The license in brief</h2>
+  <p>Source: <span class="small">LICENSE file, Dify repository (github.com/langgenius/dify), © 2025 LangGenius, Inc.</span></p>
+  <div class="quote">"Dify may be utilized <b>commercially</b>, including as a <b>backend service for other applications</b> or as an application development platform for enterprises."</div>
+  <div class="quote"><b>Condition (a) — Multi-tenant service:</b> "Unless explicitly authorized by Dify in writing, you may not use the Dify source code to operate a multi-tenant environment. … one tenant corresponds to one workspace."</div>
+  <div class="quote"><b>Condition (b) — Logo and copyright:</b> "In the process of using Dify's frontend, you may not remove or modify the LOGO or copyright information in the Dify console or applications. This restriction is <b>inapplicable to uses of Dify that do not involve its frontend</b>." The frontend is defined as the <code>web/</code> directory / "web" Docker image.</div>
+  <p class="small">All other rights and restrictions follow the standard Apache License 2.0. The license also notes Dify's interactive design is protected by an appearance patent, and that LangGenius may revise the license terms.</p>
+
+  <div class="footer"><span>Wakeel — Dify License Compliance Brief</span><span>Prepared with Wakeel · Internal</span></div>
+</div>
+
+<!-- PAGE 2 -->
+<div class="page">
+  <div class="flag"><i class="r"></i><i class="g"></i><i class="w"></i><i class="b"></i></div>
+
+  <h2><span class="n">3.</span> What Wakeel may do commercially — no permission required</h2>
+  <table>
+    <tr><th>Activity</th><th>Status</th><th>Basis</th></tr>
+    <tr><td>Sell Wakeel deployments to government entities (setup, hosting, support, customisation fees)</td>
+        <td><span class="pill ok">Permitted</span></td><td>Commercial use expressly allowed</td></tr>
+    <tr><td>Operate the Wakeel portal (Build / Edit / Feedback / Deploy / Marketplace / Community) with full Wakeel &amp; UAE branding</td>
+        <td><span class="pill ok">Permitted</span></td><td>Original Wakeel code; logo clause "inapplicable to uses … that do not involve its frontend"</td></tr>
+    <tr><td>Use Dify's APIs as the engine (generation, workflows, knowledge, providers)</td>
+        <td><span class="pill ok">Permitted</span></td><td>"Backend service for other applications"</td></tr>
+    <tr><td>Modify and extend the backend / API source code</td>
+        <td><span class="pill ok">Permitted</span></td><td>Apache 2.0 terms</td></tr>
+    <tr><td>Sell pre-built marketplace workflows, consulting and managed services</td>
+        <td><span class="pill ok">Permitted</span></td><td>No restriction applies</td></tr>
+    <tr><td>Deploy <b>one Dify instance per entity</b> (each with a single workspace)</td>
+        <td><span class="pill ok">Permitted</span></td><td>Single-tenant per deployment — condition (a) not triggered</td></tr>
+  </table>
+
+  <h2><span class="n">4.</span> What requires a commercial license from LangGenius</h2>
+  <table>
+    <tr><th>Activity</th><th>Status</th><th>Why</th></tr>
+    <tr><td>A central "Wakeel SaaS" where multiple entities are separate <b>workspaces on one shared Dify deployment</b></td>
+        <td><span class="pill stop">License required</span></td><td>Condition (a): multi-tenant operation</td></tr>
+    <tr><td>Shipping the Dify console (embedded workflow editor) with Dify's logo/copyright removed or replaced</td>
+        <td><span class="pill warn">Remedy or license</span></td><td>Condition (b): console branding must remain</td></tr>
+    <tr><td>Re-implementing a visual canvas that copies Dify's interactive design</td>
+        <td><span class="pill warn">Caution</span></td><td>Appearance patent noted in license</td></tr>
+  </table>
+
+  <h2><span class="n">5.</span> Current Wakeel build — impact assessment</h2>
+  <div class="grid2">
+    <div class="card green">
+      <h3>Compliant as-is</h3>
+      <ul>
+        <li>Wakeel portal UI, server and branding (all original code)</li>
+        <li>Single-workspace deployment (current pilot)</li>
+        <li>All API-level usage: chat-to-build, testing, self-healing, knowledge, providers, marketplace installs</li>
+      </ul>
+    </div>
+    <div class="card amber">
+      <h3>Action before commercial go-live</h3>
+      <ul>
+        <li>The pilot's rebrand overlay currently replaces the Dify logo/copyright <b>inside the embedded console</b> (Edit tab). Choose one remedy:</li>
+      </ul>
+      <p style="font-size:9pt"><b>R1.</b> Restore Dify branding within the embedded editor only ("Powered by Dify" canvas) — zero cost. <b>R2.</b> Obtain LangGenius' commercial/white-label license — clears conditions (a) and (b) together. <b>R3.</b> Replace the embedded editor with an original, API-driven editing UI (larger build; observe the appearance-patent note).</p>
+    </div>
+  </div>
+
+  <div class="footer"><span>Wakeel — Dify License Compliance Brief</span><span>Prepared with Wakeel · Internal</span></div>
+</div>
+
+<!-- PAGE 3 -->
+<div class="page">
+  <div class="flag"><i class="r"></i><i class="g"></i><i class="w"></i><i class="b"></i></div>
+
+  <h2><span class="n">6.</span> Recommended path</h2>
+  <div class="steps">
+    <div class="step"><div class="num"></div><div>
+      <h4>Pilot (now)</h4><p>Continue the current single-instance evaluation. No license exposure for internal assessment; schedule the branding remedy before any external or paid use.</p></div></div>
+    <div class="step"><div class="num"></div><div>
+      <h4>Adopt per-entity deployments as the standard architecture</h4><p>One Dify instance per government entity (Azure UAE North or sovereign cloud). This eliminates the multi-tenant condition entirely and aligns with UAE data-residency and security-accreditation requirements.</p></div></div>
+    <div class="step"><div class="num"></div><div>
+      <h4>Apply branding remedy R1, and engage LangGenius in parallel</h4><p>Restore Dify branding in the embedded editor immediately (compliant at zero cost), while procurement engages LangGenius for an enterprise/white-label license — the preferred end-state for a fully Wakeel-branded product and vendor support.</p></div></div>
+    <div class="step"><div class="num"></div><div>
+      <h4>Maintain Apache 2.0 hygiene</h4><p>Retain LICENSE and attribution notices in any distributed source; document modifications to the backend; track upstream license changes at each version upgrade.</p></div></div>
+  </div>
+
+  <h2><span class="n">7.</span> Go-live compliance checklist</h2>
+  <table class="checklist">
+    <tr><td>☐</td><td>Deployment model confirmed: one Dify instance per entity (single workspace per instance)</td></tr>
+    <tr><td>☐</td><td>Embedded editor branding remedy applied (R1) <i>or</i> commercial license executed (R2)</td></tr>
+    <tr><td>☐</td><td>LICENSE and attribution files included in any code distribution</td></tr>
+    <tr><td>☐</td><td>No copying of Dify's canvas interactive design into original UI (appearance patent)</td></tr>
+    <tr><td>☐</td><td>License re-reviewed at each Dify version upgrade (terms may be revised by LangGenius)</td></tr>
+    <tr><td>☐</td><td>Legal review completed by the entity's counsel</td></tr>
+  </table>
+
+  <h2><span class="n">8.</span> Reference — the two defined terms</h2>
+  <table>
+    <tr><th>Term</th><th>License definition</th><th>Wakeel mapping</th></tr>
+    <tr><td><b>Tenant</b></td><td>One workspace, providing separated data and configuration</td><td>One government entity = one workspace = one deployment</td></tr>
+    <tr><td><b>Frontend</b></td><td>The <code>web/</code> directory / "web" Docker image (the Dify console)</td><td>Only the editor embedded in Wakeel's Edit tab; the Wakeel portal itself is out of scope</td></tr>
+  </table>
+
+  <div class="disclaimer"><b>Disclaimer.</b> This brief is an engineering interpretation of the Dify Open Source License (as read on 9 July 2026) prepared to support internal planning. It is not legal advice. The license permits LangGenius, Inc. to revise its terms; final determinations should be made by qualified legal counsel prior to any commercial commitment.</div>
+
+  <div class="footer"><span>Wakeel — Dify License Compliance Brief</span><span>Prepared with Wakeel · Internal</span></div>
+</div>
+
+</body>
+</html>

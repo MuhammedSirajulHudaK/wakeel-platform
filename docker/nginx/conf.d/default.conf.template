@@ -50,8 +50,48 @@ server {
       include proxy.conf;
     }
 
+    # ---- Wakeel platform (single URL: everything under this host) ----
+    location = / {
+      return 302 /wakeel/;
+    }
+    location = /wakeel {
+      return 302 /wakeel/;
+    }
+    location /wakeel/ {
+      proxy_pass http://host.docker.internal:8800/;
+      include proxy.conf;
+    }
+
+    # ---- Wakeel branding overrides (served straight from mounted assets) ----
+    location = /innogent.js {
+      default_type application/javascript;
+      alias /innogent/innogent-inject.js;
+    }
+    location = /innogent-assistant.js {
+      default_type application/javascript;
+      alias /innogent/studio-assistant.js;
+    }
+    location = /logo/logo.svg {
+      default_type image/svg+xml;
+      alias /innogent/innogent-logo.svg;
+    }
+    location = /logo/logo-monochrome-white.svg {
+      default_type image/svg+xml;
+      alias /innogent/innogent-logo-white.svg;
+    }
+    location = /favicon.ico {
+      default_type image/svg+xml;
+      alias /innogent/innogent-favicon.svg;
+    }
+
     location / {
       proxy_pass http://web:3000;
+      proxy_set_header Accept-Encoding "";
+      # allow the Studio to be embedded inside the Wakeel Edit tab (same host)
+      proxy_hide_header X-Frame-Options;
+      sub_filter_once on;
+      sub_filter_types text/html;
+      sub_filter '</head>' '<script src="/innogent.js" defer></script></head>';
       include proxy.conf;
     }
 
@@ -70,4 +110,20 @@ server {
 
     # placeholder for https config defined in https.conf.template
     ${HTTPS_CONFIG}
+}
+
+# Wakeel Community — proxy champions.innoventures.ae on a dedicated port so it can
+# be embedded (the origin sends frame-ancestors 'none'; we strip it here).
+server {
+    listen 8081;
+    server_name _;
+
+    location / {
+      proxy_pass https://champions.innoventures.ae;
+      proxy_set_header Host champions.innoventures.ae;
+      proxy_ssl_server_name on;
+      proxy_hide_header X-Frame-Options;
+      proxy_hide_header Content-Security-Policy;
+      proxy_set_header Accept-Encoding "";
+    }
 }

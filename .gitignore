@@ -262,3 +262,8 @@ scripts/stress-test/reports/
 
 # Vitest local reports
 web/.vitest-reports/
+
+# --- Wakeel: runtime data, not code (added for private repo push) ---
+docker/volumes/
+wakeel/activity.jsonl
+wakeel/settings.json

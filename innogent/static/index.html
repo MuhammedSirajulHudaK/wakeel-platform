@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Innogent</title>
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+<div class="app">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="ws">
+      <div class="ws-logo">in</div>
+      <div class="ws-meta">
+        <div class="ws-name">Innogent</div>
+        <div class="ws-plan">Workspace</div>
+      </div>
+      <svg class="ws-caret" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/></svg>
+    </div>
+
+    <button class="new-btn" id="newBtn"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> New</button>
+
+    <nav class="nav">
+      <a class="nav-i active" data-view="home"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8M5 10v10h14V10"/></svg> Home</a>
+      <a class="nav-i" data-view="agents"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 12 0v1"/></svg> Agents</a>
+      <a class="nav-i" data-view="workflows"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M10 6.5h6a2 2 0 0 1 2 2V14"/></svg> Workflows</a>
+      <a class="nav-i" data-view="skills"><svg viewBox="0 0 24 24"><path d="M12 2l2.4 5.5L20 9l-4.5 3.8L17 19l-5-3-5 3 1.5-6.2L4 9l5.6-1.5z"/></svg> Skills</a>
+      <a class="nav-i" data-view="integrations"><svg viewBox="0 0 24 24"><path d="M10 3v6M14 3v6M7 9h10v3a5 5 0 0 1-10 0zM12 17v4"/></svg> Integrations</a>
+      <a class="nav-i" data-view="knowledge"><svg viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h12v18H6a2 2 0 0 1-2-2z"/><path d="M8 3v18"/></svg> Knowledge</a>
+      <a class="nav-i" data-view="tasks"><svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg> Tasks</a>
+    </nav>
+
+    <div class="nav-sub">Your agents</div>
+    <div class="nav" id="agentMini"></div>
+
+    <div class="user">
+      <div class="avatar">S</div>
+      <div class="user-meta"><div class="user-name">Siraj</div><div class="user-mail">msirajulhudak…</div></div>
+      <span class="dot online"></span>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+    <header class="topbar">
+      <div class="crumb" id="crumb">Home</div>
+      <div class="top-actions">
+        <button class="ghost" id="searchBtn"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg> Search <kbd>⌘K</kbd></button>
+        <button class="ghost" id="copilotBtn"><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 4 17l4 1-1-4a9 9 0 0 0-7-15z"/></svg> Copilot</button>
+      </div>
+    </header>
+
+    <!-- HOME / chat-first -->
+    <section class="view" id="view-home">
+      <div class="hero">
+        <div class="spark">✦</div>
+        <h1>What do you want to build?</h1>
+        <p class="sub">Describe it in plain English. Innogent turns it into a running agent or workflow.</p>
+
+        <div class="composer">
+          <div class="mode-pills">
+            <button class="pill active" data-mode="agent"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 12 0v1"/></svg> Build an Agent</button>
+            <button class="pill" data-mode="workflow"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M10 6.5h6a2 2 0 0 1 2 2V14"/></svg> Build a Workflow</button>
+          </div>
+          <textarea id="prompt" rows="3" placeholder="e.g. An agent that reads customer support emails, detects sentiment, and drafts a reply…"></textarea>
+          <div class="composer-foot">
+            <div class="hint">↵ to build · Shift+↵ for newline</div>
+            <button class="send" id="sendBtn"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg> Build</button>
+          </div>
+        </div>
+
+        <div class="chips" id="chips">
+          <button class="chip" data-mode="agent">Support email responder</button>
+          <button class="chip" data-mode="workflow">Summarize &amp; translate a document</button>
+          <button class="chip" data-mode="agent">Lead qualification agent</button>
+          <button class="chip" data-mode="workflow">Sentiment routing pipeline</button>
+        </div>
+
+        <div class="recommended">
+          <div class="rec-head">Recommended</div>
+          <div class="rec-grid">
+            <div class="rec-card" data-mode="agent" data-p="A research agent that searches the web, reads sources, and writes a cited brief."><div class="rec-ic blue">🔎</div><div class="rec-t">Research Agent</div><div class="rec-d">Search, read, cite</div></div>
+            <div class="rec-card" data-mode="workflow" data-p="Take a long article and produce a summary, key points, and a social post."><div class="rec-ic blue">📝</div><div class="rec-t">Content Repurposer</div><div class="rec-d">Summarize → repurpose</div></div>
+            <div class="rec-card" data-mode="agent" data-p="A support triage agent that classifies tickets and drafts replies by priority."><div class="rec-ic blue">🎫</div><div class="rec-t">Support Triage</div><div class="rec-d">Classify → respond</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- build result -->
+      <div class="build" id="build" hidden>
+        <div class="build-head">
+          <button class="ghost sm" id="backBtn"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg> Back</button>
+          <div class="build-title" id="buildTitle">Building…</div>
+        </div>
+        <div class="chat" id="chat"></div>
+        <div class="deploybar" id="deploybar" hidden>
+          <input id="appName" placeholder="Name your build" />
+          <button class="send" id="deployBtn"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg> Deploy to Innogent</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- generic list views -->
+    <section class="view" id="view-list" hidden>
+      <div class="list-head"><h2 id="listTitle">Agents</h2><button class="send sm" id="listNew">+ New</button></div>
+      <div class="cards" id="cards"></div>
+    </section>
+  </main>
+
+  <!-- Copilot -->
+  <aside class="copilot" id="copilot" hidden>
+    <div class="cop-head"><span>✦ Innogent Copilot</span><button class="x" id="copClose">×</button></div>
+    <div class="cop-body">
+      <div class="cop-msg bot">Hi Siraj — I can build agents and workflows, or edit the one you're viewing. What should we do?</div>
+    </div>
+    <div class="cop-foot"><input placeholder="Ask Innogent…" id="copInput"/><button class="send sm" id="copSend">Send</button></div>
+  </aside>
+</div>
+<script src="/app.js"></script>
+</body>
+</html>
