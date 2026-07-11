@@ -817,7 +817,7 @@ function openGoogleSetup(onSaved) {
         <div class="gs-d">Click each and press <b>Enable</b>:</div>
         <div class="gs-links">${link("https://console.cloud.google.com/apis/library/gmail.googleapis.com", "Enable Gmail")}${link("https://console.cloud.google.com/apis/library/sheets.googleapis.com", "Enable Sheets")}${link("https://console.cloud.google.com/apis/library/drive.googleapis.com", "Enable Drive")}</div></li>
       <li><div class="gs-h"><span class="gs-num">3</span><b>OAuth consent screen</b></div>
-        <div class="gs-d">Choose <b>External</b> → fill app name + your email → under <b>Test users</b> add <b>your own Gmail</b> → Save.</div>${link("https://console.cloud.google.com/apis/credentials/consent", "Open consent screen")}</li>
+        <div class="gs-d">Choose <b>External</b> → fill app name + your email → under <b>Test users</b> add the <b>exact Gmail you'll click “Sign in with Google” with</b> (skip this and Google blocks you with a 403 “not a tester” error) → Save.</div>${link("https://console.cloud.google.com/apis/credentials/consent", "Open consent screen")}</li>
       <li><div class="gs-h"><span class="gs-num">4</span><b>Create the OAuth client</b></div>
         <div class="gs-d"><b>Create credentials → OAuth client ID → Web application</b>. Under <b>Authorized redirect URIs</b> add this exact line:</div>
         <div class="gs-copy"><input class="input" id="gsRedir" readonly value="${esc(redirect)}"><button class="btn xs" id="gsCopy">Copy</button></div>
