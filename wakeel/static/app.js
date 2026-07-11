@@ -317,9 +317,8 @@ const NAV = [["home", "Home", IC.home], ["skills", "Skills", IC.skills], ["proje
 
 function renderShell() {
   applyDir();
-  // Chat-first: the Build Assistant is the constant companion on the clean flow and
-  // config tabs. Only the advanced Studio canvas (which has its own assistant) hides it.
-  const showCop = COPILOT && VIEW === "agent" && ASUB !== "studio" && ASUB !== "config";
+  // Chat-first: the Build Assistant sits beside the Dify flow diagram and config tabs.
+  const showCop = COPILOT && VIEW === "agent" && ASUB !== "config";
   $("#root").innerHTML = `
   <div class="app">
     <aside class="side">
@@ -582,8 +581,8 @@ async function viewAgent() {
     else if (ASUB === "memory") renderMemory(info);
     else if (ASUB === "governance") renderGovernance(info);
     else if (ASUB === "instructions") renderInstructions(info);
-    else if (ASUB === "studio") renderFlowStudio(info);
-    else renderFlow(info); // default "flow" (and "simple") = clean, chat-first cards
+    else if (ASUB === "simple") renderFlow(info); // simplified card view (alternative)
+    else renderFlowStudio(info); // default "flow" = the real Dify diagram, cleaned, + chatbot
   } catch (e) { $("#flowWrap").innerHTML = `<div class="empty-state">⚠️ ${esc(e.message)}</div>`; }
 }
 
@@ -930,13 +929,13 @@ function renderFlowStudio(info) {
   window.__graph = info.graph || { nodes: [], edges: [] };
   $("#flowWrap").innerHTML = `
     <div class="flow-head">
-      <div><h1>Advanced canvas</h1><p>The full node editor — for power users. Most edits are easier by chatting.</p></div>
+      <div><h1>Flow</h1><p>${esc(info.name || "Your agent")} · ${(info.nodes || []).length} steps · <span style="color:var(--wakeel)">edit it by chatting with the assistant →</span></p></div>
       <div class="ctrls">
-        <button class="draft-btn" id="simpleBtn">← Back to flow</button>
+        <button class="draft-btn ghost" id="simpleBtn" title="Simplified card view">${IC.views} Simple view</button>
       </div>
     </div>
     <div class="studio-embed"><iframe id="studioFrame" src="/app/${AGENT}/workflow?embed=wakeel" title="Flow"></iframe></div>`;
-  $("#simpleBtn").onclick = () => { ASUB = "flow"; viewAgent(); };
+  $("#simpleBtn").onclick = () => { ASUB = "simple"; viewAgent(); };
 }
 function orderedNodes(info) {
   const g = info.graph || {}; const edges = g.edges || [];
