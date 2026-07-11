@@ -320,32 +320,99 @@ function applyDir() { document.documentElement.dir = LANG === "ar" ? "rtl" : "lt
 function logo(cls = "") { return `<div class="logo ${cls}"><span>و</span></div>`; }
 
 /* ---------- login ---------- */
+const PLOGO = {
+  inno: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4.5 12a3 3 0 1 1 6 0 3 3 0 1 0 6 0 3 3 0 1 1-6 0 3 3 0 1 0-6 0z"/></svg>',
+  takalam: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M5 5h14v9H9l-4 4z"/><path d="M9 9h6M9 11.5h3" stroke-linecap="round"/></svg>',
+  notension: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="11" width="3.2" height="8" rx="1"/><rect x="10.4" y="6" width="3.2" height="13" rx="1"/><rect x="16.8" y="13" width="3.2" height="6" rx="1"/></svg>',
+};
+const GOOGLE_G = '<svg viewBox="0 0 24 24" width="17" height="17"><path fill="#4285F4" d="M23 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.2a5.3 5.3 0 0 1-2.3 3.5v2.9h3.7C21.7 18.9 23 15.9 23 12.3z"/><path fill="#34A853" d="M12 24c3.1 0 5.7-1 7.6-2.8l-3.7-2.9c-1 .7-2.3 1.1-3.9 1.1-3 0-5.5-2-6.4-4.8H1.8v3C3.7 21.3 7.5 24 12 24z"/><path fill="#FBBC05" d="M5.6 14.6a7.2 7.2 0 0 1 0-4.6v-3H1.8a12 12 0 0 0 0 10.6l3.8-3z"/><path fill="#EA4335" d="M12 4.8c1.7 0 3.2.6 4.4 1.7l3.3-3.3C17.7 1.2 15.1 0 12 0 7.5 0 3.7 2.7 1.8 6.6l3.8 3c.9-2.8 3.4-4.8 6.4-4.8z"/></svg>';
+
 function renderLogin() {
   applyDir();
+  const partners = [["Innoventures", PLOGO.inno], ["Takalam", PLOGO.takalam], ["notension.ai", PLOGO.notension]];
   $("#root").innerHTML = `
   <div class="signin fade">
     <div class="signin-hero">
       <div class="wave"></div>
-      <div class="hero-logo"><div class="logo" style="width:40px;height:40px;border-radius:12px"><span>وكيل</span></div><div style="font-size:22px;font-weight:800">Wakeel</div></div>
-      <div class="hero-copy"><h2>The agentic platform for government.</h2><p>Any employee builds, tests and deploys AI agents — in Arabic or English. Describe the task, Wakeel does the rest.</p></div>
-      <div class="hero-foot">Innoventures × Takalam × notension.ai</div>
+      <div class="hero-logo"><div class="logo" style="width:34px;height:34px;border-radius:10px"><span>و</span></div><div style="font-size:20px;font-weight:800">Wakeel</div></div>
+      <div class="hero-copy">
+        <h2>Build <span class="wk-accent">وكيل</span> agents for Arabic-first government work</h2>
+        <p>Design flows, run tasks, and keep approvals moving across English and Arabic operating surfaces.</p>
+        <p class="hero-ar" dir="rtl">وكلاء ذكاء اصطناعي يفهمون السياق الحكومي ويعملون بالعربية والإنجليزية</p>
+        <div class="built">
+          <div class="built-lab">Built with</div>
+          <div class="built-row">${partners.map(([n, lg]) => `<div class="built-card"><span class="plg">${lg}</span><span>${n}</span></div>`).join("")}</div>
+          <div class="hero-pills"><span class="hpill">Arabic-first</span><span class="hpill">Self-hosted</span><span class="hpill">Government-ready</span></div>
+        </div>
+      </div>
     </div>
-    <div class="signin-form"><div class="signin-card">
-      <h1>Sign in</h1><div class="sub">Use your entity account to continue.</div>
-      <div class="field"><label>Email address</label><input class="input" id="em" type="email" autocomplete="username"/></div>
-      <div class="field"><label>Password</label><input class="input" id="pw" type="password" autocomplete="current-password"/></div>
-      <button class="btn primary block" id="go">Sign in</button>
-      <div class="err" id="err"></div>
-      <div style="margin-top:22px;color:var(--faint);font-size:12px">Innoventures × Takalam × notension.ai · <span class="linky" id="lang">${LANG === "en" ? "العربية" : "English"}</span></div>
-    </div></div>
+    <div class="signin-form">
+      <div class="form-top"><span class="linky" id="lang">${LANG === "en" ? "العربية" : "English"}</span></div>
+      <div class="signin-card" id="authCard">
+        <h1>Sign in</h1><div class="sub">Sign in with your entity account, a magic link or single sign-on.</div>
+        <div class="field"><input class="input" id="em" type="email" placeholder="Enter your email address" autocomplete="username"/></div>
+        <div class="field" id="pwField" hidden><input class="input" id="pw" type="password" placeholder="Password" autocomplete="current-password"/></div>
+        <button class="btn primary block" id="go">Continue</button>
+        <button class="btn block ghost" id="magic">Get magic link</button>
+        <div class="or"><span>Or continue with</span></div>
+        <button class="btn block" id="google">${GOOGLE_G} Sign in with Google</button>
+        <button class="btn block" id="sso">${IC.lock} Sign in with SSO</button>
+        <div class="err" id="err"></div>
+      </div>
+    </div>
   </div>`;
   $("#lang").onclick = () => { LANG = LANG === "en" ? "ar" : "en"; localStorage.setItem("wakeel_lang", LANG); renderLogin(); };
-  const go = async () => {
-    $("#go").disabled = true; $("#go").textContent = "Signing in…"; $("#err").textContent = "";
+  const errEl = () => $("#err");
+  const setErr = (msg, info) => { const e = errEl(); if (e) { e.textContent = msg; e.className = "err" + (info ? " info" : ""); } };
+
+  const doLogin = async () => {
+    $("#go").disabled = true; $("#go").textContent = "Signing in…"; setErr("");
     try { await api("POST", "login", { email: $("#em").value.trim(), password: $("#pw").value }); await boot(); }
-    catch (e) { $("#err").textContent = "Invalid credentials"; $("#go").disabled = false; $("#go").textContent = "Sign in"; }
+    catch (e) { setErr("Invalid email or password."); $("#go").disabled = false; $("#go").textContent = "Sign in"; }
   };
-  $("#go").onclick = go; $("#pw").addEventListener("keydown", e => { if (e.key === "Enter") go(); });
+  const onContinue = () => {
+    const email = $("#em").value.trim();
+    if (!email || !email.includes("@")) { setErr("Enter a valid email address."); $("#em").focus(); return; }
+    if ($("#pwField").hidden) { $("#pwField").hidden = false; $("#go").textContent = "Sign in"; $("#pw").focus(); return; }
+    doLogin();
+  };
+  $("#go").onclick = onContinue;
+  $("#em").addEventListener("keydown", e => { if (e.key === "Enter") onContinue(); });
+  $("#pw") && $("#pw").addEventListener("keydown", e => { if (e.key === "Enter") doLogin(); });
+
+  $("#magic").onclick = async () => {
+    const email = $("#em").value.trim();
+    if (!email || !email.includes("@")) { setErr("Enter your email first — we'll send the link there."); $("#em").focus(); return; }
+    $("#magic").disabled = true; $("#magic").textContent = "Sending…"; setErr("");
+    try {
+      const r = await api("POST", "magic-request", { email });
+      if (r.error) throw new Error(r.error);
+      renderMagicSent(r);
+    } catch (e) { setErr(e.message); $("#magic").disabled = false; $("#magic").textContent = "Get magic link"; }
+  };
+  $("#google").onclick = () => setErr("Google Workspace sign-in is enabled per workspace by your admin.", true);
+  $("#sso").onclick = () => setErr("Single sign-on activates once IT completes the Entra ID / SAML handshake.", true);
+}
+
+function renderMagicSent(r) {
+  const token = (r.link || "").split("magic=")[1] || "";
+  const card = $("#authCard");
+  card.innerHTML = `
+    <div class="magic-ic">${IC.send}</div>
+    <h1>Check your email</h1>
+    <div class="sub">We sent a one-time sign-in link to <b>${esc(r.email)}</b>. It expires in 10 minutes.</div>
+    ${r.provisioned
+      ? `<button class="btn primary block" id="mgo">Continue as ${esc(r.email)}</button>
+         <div class="magic-note">Pilot: email delivery is configured by IT — for now, use the button above to open your link.</div>`
+      : `<div class="magic-note warn">This account isn't provisioned for passwordless sign-in yet. Sign in with your password, or ask IT to enable magic link / SSO for it.</div>`}
+    <button class="btn block ghost" id="mback">Use a different email</button>
+    <div class="err" id="err"></div>`;
+  if ($("#mgo")) $("#mgo").onclick = async () => {
+    $("#mgo").disabled = true; $("#mgo").textContent = "Signing in…";
+    try { await api("POST", "magic-consume", { token }); await boot(); }
+    catch (e) { $("#err").textContent = e.message; $("#mgo").disabled = false; $("#mgo").textContent = "Continue"; }
+  };
+  $("#mback").onclick = () => renderLogin();
 }
 
 /* ---------- shell ---------- */
@@ -2062,6 +2129,12 @@ async function boot() {
   const lm = q.match(/[?&]lang=(en|ar)/); if (lm) { LANG = lm[1]; localStorage.setItem("wakeel_lang", LANG); }
   const m = q.match(/[?&]t=([a-f0-9]{40})/);
   if (m) { document.cookie = `wakeel_t=${m[1]}; Path=/; Max-Age=86400; SameSite=Lax`; }
+  const mg = q.match(/[?&]magic=([A-Za-z0-9_-]+)/);
+  if (mg) {
+    history.replaceState(null, "", location.pathname + location.hash);
+    try { const r = await api("POST", "magic-consume", { token: mg[1] }); if (r && r.token) document.cookie = `wakeel_t=${r.token}; Path=/; Max-Age=86400; SameSite=Lax`; }
+    catch (e) { ME = null; renderLogin(); setTimeout(() => { const el = document.getElementById("err"); if (el) el.textContent = "This sign-in link has expired. Request a new one."; }, 30); return; }
+  }
   const rn = q.match(/[?&]run=([^&]+)/); if (rn) window.__autorun = decodeURIComponent(rn[1]);
   const nd = q.match(/[?&]node=(\d+)/); if (nd) window.__autonode = parseInt(nd[1]);
   const tl = q.match(/[?&]tool=(\d+)/); if (tl) window.__autotool = parseInt(tl[1]);

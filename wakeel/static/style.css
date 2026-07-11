@@ -23,17 +23,38 @@ svg{fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-l
 
 /* login */
 .signin{display:grid;grid-template-columns:1.05fr .95fr;min-height:100vh}
-.signin-hero{position:relative;overflow:hidden;background:radial-gradient(circle at 20% 80%,rgba(0,168,98,.4),transparent 34%),linear-gradient(150deg,#03130c 0%,#062a1a 46%,#020a13 100%);display:flex;flex-direction:column;justify-content:space-between;padding:44px}
-.wave{position:absolute;inset:6% -18% 18% -14%;background:repeating-radial-gradient(ellipse at center,rgba(60,220,150,.55) 0 2px,transparent 3px 13px),linear-gradient(135deg,rgba(0,140,80,.55),rgba(6,40,26,.1));opacity:.6;transform:rotate(-10deg) skewX(-9deg);mask-image:radial-gradient(ellipse at center,#000 0 46%,transparent 72%)}
-.hero-logo{position:relative;z-index:2;display:flex;align-items:center;gap:12px}
-.hero-copy{position:relative;z-index:2;max-width:440px}
-.hero-copy h2{font-size:30px;font-weight:800;letter-spacing:-.02em;line-height:1.15;margin:0 0 12px}
-.hero-copy p{color:#bfe6d3;font-size:15px;line-height:1.6;margin:0}
-.hero-foot{position:relative;z-index:2;color:#8fc6ac;font-size:12.5px;display:flex;gap:8px;align-items:center}
-.signin-form{display:flex;align-items:center;justify-content:center;padding:40px;background:var(--bg)}
-.signin-card{width:380px;max-width:100%}
-.signin-card h1{font-size:26px;font-weight:800;letter-spacing:-.02em;margin:0 0 6px}
-.signin-card .sub{color:var(--muted);font-size:14px;margin:0 0 28px}
+.signin-hero{position:relative;overflow:hidden;background:radial-gradient(circle at 25% 78%,rgba(0,168,98,.42),transparent 40%),linear-gradient(150deg,#03130c 0%,#062a1a 46%,#020a13 100%);display:flex;flex-direction:column;justify-content:space-between;padding:44px}
+.wave{position:absolute;inset:-6% -18% -6% -14%;background:repeating-radial-gradient(ellipse at center,rgba(60,220,150,.5) 0 2px,transparent 3px 15px),linear-gradient(135deg,rgba(0,140,80,.45),rgba(6,40,26,.05));opacity:.55;transform:rotate(-10deg) skewX(-9deg);mask-image:radial-gradient(ellipse at 40% 50%,#000 0 52%,transparent 78%)}
+.hero-logo{position:relative;z-index:2;display:flex;align-items:center;gap:11px}
+.hero-copy{position:relative;z-index:2;max-width:500px}
+.hero-copy h2{font-size:clamp(28px,3.2vw,38px);font-weight:820;letter-spacing:-.025em;line-height:1.12;margin:0 0 14px}
+.wk-accent{color:#3ee08a}
+.hero-copy p{color:#bfe6d3;font-size:15.5px;line-height:1.6;margin:0}
+.hero-ar{color:#7fcea8 !important;font-size:15px !important;margin-top:12px !important;font-weight:600}
+.built{margin-top:30px}
+.built-lab{font-size:11px;font-weight:750;letter-spacing:.16em;text-transform:uppercase;color:#6fae8d;margin-bottom:11px}
+.built-row{display:flex;flex-wrap:wrap;gap:10px}
+.built-card{display:inline-flex;align-items:center;gap:9px;padding:9px 14px 9px 10px;border-radius:12px;background:rgba(9,32,21,.72);border:1px solid rgba(62,224,138,.22);font-size:13.5px;font-weight:700;color:#e8f6ee;backdrop-filter:blur(4px)}
+.plg{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;background:linear-gradient(135deg,#0e3a24,#0a2417);color:#3ee08a;flex:none}
+.plg svg{width:16px;height:16px}
+.hero-pills{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.hpill{font-size:12.5px;font-weight:650;padding:5px 13px;border-radius:99px;color:#a9dcc2;border:1px solid rgba(62,224,138,.3);background:rgba(62,224,138,.06)}
+.signin-form{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;background:var(--bg)}
+.form-top{position:absolute;top:22px;inset-inline-end:26px}
+.signin-card{width:360px;max-width:100%;text-align:center}
+.signin-card h1{font-size:27px;font-weight:820;letter-spacing:-.02em;margin:0 0 8px}
+.signin-card .sub{color:var(--muted);font-size:13.5px;line-height:1.55;margin:0 auto 24px;max-width:34ch}
+.signin-card .field{text-align:start}
+.signin-card .btn.block{margin-bottom:10px}
+.btn.ghost{background:transparent}
+.btn.ghost:hover{background:var(--panel-2)}
+.or{display:flex;align-items:center;gap:12px;margin:16px 2px;color:var(--muted-2);font-size:12px}
+.or::before,.or::after{content:"";flex:1;height:1px;background:var(--line)}
+.magic-ic{width:52px;height:52px;border-radius:14px;margin:0 auto 16px;display:grid;place-items:center;background:rgba(0,168,98,.12);border:1px solid rgba(0,168,98,.3);color:var(--wakeel)}
+.magic-ic svg{width:24px;height:24px}
+.magic-note{font-size:12px;color:var(--faint);line-height:1.5;margin:2px 0 14px}
+.magic-note.warn{color:#e6b02e;background:rgba(230,176,46,.08);border:1px solid rgba(230,176,46,.25);border-radius:10px;padding:10px 12px}
+.err.info{color:var(--muted);}
 .field{margin-bottom:15px}
 .field label{display:block;font-size:12.5px;color:var(--muted);margin-bottom:7px;font-weight:600}
 .input{width:100%;min-height:44px;border:1px solid var(--line);border-radius:var(--radius-sm);background:#060c18;padding:0 14px;outline:none;transition:border-color .15s,box-shadow .15s}

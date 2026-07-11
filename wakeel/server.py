@@ -109,6 +109,56 @@ def new_session(email, password):
     return token
 
 
+# ---- Passwordless "magic link" sign-in ----
+# Wakeel's session is a Dify console session, so a passwordless link can only
+# sign in accounts the server holds a provisioned credential for (the service
+# account, or MAGIC_ACCOUNTS="email:pw,..."). This mirrors how an SSO/IdP vouches
+# for an identity and the app maps it to a provisioned account — no per-user
+# passwords are stored beyond what the operator configures in env.
+MAGIC = {}  # token -> {"email", "exp", "used"}
+
+
+def _provisioned_pw(email):
+    email = (email or "").strip().lower()
+    svc_email = (os.environ.get("WAKEEL_SVC_EMAIL") or "").strip().lower()
+    if email and email == svc_email:
+        return os.environ.get("WAKEEL_SVC_PW")
+    for pair in os.environ.get("MAGIC_ACCOUNTS", "").split(","):
+        if ":" in pair:
+            e, pw = pair.split(":", 1)
+            if e.strip().lower() == email:
+                return pw.strip()
+    return None
+
+
+def magic_request(email):
+    email = (email or "").strip().lower()
+    if "@" not in email or "." not in email.split("@")[-1]:
+        return {"error": "Enter a valid email address."}
+    token = secrets.token_urlsafe(24)
+    MAGIC[token] = {"email": email, "exp": time.time() + 600, "used": False}
+    # In production this link is emailed to the address; the pilot has no SMTP,
+    # so we return it for the UI to present (and log it server-side).
+    link = f"/wakeel/?magic={token}"
+    provisioned = _provisioned_pw(email) is not None
+    print(f"[magic-link] {email} -> {link} (provisioned={provisioned})")
+    return {"ok": True, "email": email, "link": link,
+            "provisioned": provisioned, "emailed": False}
+
+
+def magic_consume(token):
+    m = MAGIC.get(token)
+    if not m or m.get("used") or m.get("exp", 0) < time.time():
+        raise RuntimeError("This sign-in link has expired or was already used. Request a new one.")
+    pw = _provisioned_pw(m["email"])
+    if not pw:
+        raise RuntimeError("This account isn't provisioned for passwordless sign-in yet. "
+                           "Sign in with your password, or ask IT to enable magic link / SSO for it.")
+    m["used"] = True
+    tok = new_session(m["email"], pw)
+    return SESSIONS[tok], tok
+
+
 def dify_browser_cookies(sess):
     """Set-Cookie header values that hand the Dify console session to the browser,
     so the embedded Studio (same host) is already signed in."""
@@ -1923,6 +1973,17 @@ class H(BaseHTTPRequestHandler):
                 return self._send(200, {"token": token},
                                   cookies=[f"wakeel_t={token}; Path=/; Max-Age=86400; SameSite=Lax"]
                                           + dify_browser_cookies(sess))
+            if p == "/api/magic-request":
+                return self._send(200, magic_request(b.get("email", "")))
+            if p == "/api/magic-consume":
+                try:
+                    msess, mtok = magic_consume(b.get("token", ""))
+                except Exception as e:
+                    return self._send(401, {"error": str(e)})
+                log_act(msess, "login")
+                return self._send(200, {"token": mtok},
+                                  cookies=[f"wakeel_t={mtok}; Path=/; Max-Age=86400; SameSite=Lax"]
+                                          + dify_browser_cookies(msess))
             sess = self._sess()
             if not sess:
                 return self._send(401, {"error": "login required"})
