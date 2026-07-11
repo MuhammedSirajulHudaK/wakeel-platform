@@ -328,42 +328,61 @@ def _judge(inp, expected, output):
     return ok, "keyword match" if ok else "expected text not found in output"
 
 
-def test_case(sess, app_id, inp, expected):
+def run_agent(sess, app_id, inp):
+    """Execute an agent once and return output + node log. Handles all Dify app
+    modes: workflow, advanced-chat (chatflow) and basic chat/agent."""
     info = app_info(sess, app_id)
+    mode = info.get("mode")
     events_out, output = [], ""
-    if info["mode"] == "workflow":
-        inputs = {}
-        for i, v in enumerate(info["vars"]):
-            inputs[v["name"]] = inp if i == 0 else ""
-        t0 = time.time()
+    t0 = time.time()
+    inputs = {}
+    for i, v in enumerate(info.get("vars", [])):
+        inputs[v["name"]] = inp if i == 0 else ""
+    if mode == "workflow":
         evs = dify_sse(sess, f"/apps/{app_id}/workflows/draft/run",
                        {"inputs": inputs, "response_mode": "streaming"})
-        for ev in evs:
-            e, d = ev.get("event"), ev.get("data", {}) or {}
-            if e == "node_started":
-                events_out.append({"title": d.get("title"), "status": "running"})
-            elif e == "node_finished":
-                for x in events_out:
-                    if x["title"] == d.get("title") and x["status"] == "running":
-                        x["status"] = d.get("status", "succeeded")
-                        x["ms"] = int((d.get("elapsed_time") or 0) * 1000)
-            elif e == "workflow_finished":
-                outs = d.get("outputs") or {}
-                output = "\n".join(str(v) for v in outs.values()) if isinstance(outs, dict) else str(outs)
-        elapsed = int((time.time() - t0) * 1000)
+    elif mode == "advanced-chat":
+        evs = dify_sse(sess, f"/apps/{app_id}/advanced-chat/workflows/draft/run",
+                       {"inputs": inputs, "query": inp, "response_mode": "streaming",
+                        "conversation_id": "", "files": []})
     else:
-        # conversational app — run via chat
         evs = dify_sse(sess, f"/apps/{app_id}/chat-messages",
                        {"inputs": {}, "query": inp, "response_mode": "streaming", "conversation_id": "",
                         "model_config": {"model": get_model(), "pre_prompt": "", "user_input_form": [],
                                          "agent_mode": {"enabled": False, "tools": []}}})
-        for ev in evs:
-            if ev.get("event") in ("message", "agent_message"):
-                output += ev.get("answer", "")
         events_out.append({"title": "Chat", "status": "succeeded"})
-        elapsed = 0
-    ok, reason = _judge(inp, expected, output)
-    return {"output": output[:4000], "events": events_out, "pass": ok, "reason": reason, "ms": elapsed}
+    for ev in evs:
+        e, d = ev.get("event"), ev.get("data", {}) or {}
+        if e == "node_started":
+            events_out.append({"title": d.get("title"), "status": "running"})
+        elif e == "node_finished":
+            for x in events_out:
+                if x["title"] == d.get("title") and x["status"] == "running":
+                    x["status"] = d.get("status", "succeeded")
+                    x["ms"] = int((d.get("elapsed_time") or 0) * 1000)
+        elif e == "workflow_finished":
+            outs = d.get("outputs") or {}
+            if outs:
+                output = "\n".join(str(v) for v in outs.values()) if isinstance(outs, dict) else str(outs)
+        elif e in ("message", "agent_message"):
+            output += ev.get("answer", "")
+        elif e == "error":
+            events_out.append({"title": "Error", "status": "failed"})
+            if not output:
+                output = "Error: " + str(ev.get("message", "") or ev.get("code", ""))[:400]
+        elif e == "workflow_finished" and (d.get("status") == "failed"):
+            events_out.append({"title": "Run failed", "status": "failed"})
+            if not output and d.get("error"):
+                output = "Error: " + str(d.get("error"))[:400]
+    elapsed = int((time.time() - t0) * 1000)
+    status = "failed" if any(x.get("status") == "failed" for x in events_out) else "succeeded"
+    return {"name": info.get("name"), "output": (output or "").strip()[:4000], "nodes": events_out, "ms": elapsed, "status": status}
+
+
+def test_case(sess, app_id, inp, expected):
+    r = run_agent(sess, app_id, inp)
+    ok, reason = _judge(inp, expected, r["output"])
+    return {"output": r["output"], "events": r["nodes"], "pass": ok, "reason": reason, "ms": r["ms"]}
 
 
 def providers_list(sess):
@@ -978,6 +997,73 @@ def eval_save(sess, app_id, cases):
     return {"ok": True}
 
 
+# ---------------- Beam-compatible public API (x-api-key) ----------------
+BEAMKEYS_FILE = os.path.join(HERE, "beamkeys.json")
+_SVC = {}
+
+
+def _svc_session():
+    """A headless Dify session for the Beam API — uses a service account from env
+    (WAKEEL_SVC_EMAIL / WAKEEL_SVC_PW). Never stores per-user passwords."""
+    email = os.environ.get("WAKEEL_SVC_EMAIL")
+    pw = os.environ.get("WAKEEL_SVC_PW")
+    if not email or not pw:
+        raise RuntimeError("service account not configured (set WAKEEL_SVC_EMAIL / WAKEEL_SVC_PW)")
+    s = _SVC.get("sess")
+    if s and s.get("email") == email:
+        return s
+    token = new_session(email, pw)
+    _SVC["sess"] = SESSIONS[token]
+    return _SVC["sess"]
+
+
+def beam_keys():
+    try:
+        with open(BEAMKEYS_FILE) as f:
+            return json.load(f)
+    except Exception:
+        return {"keys": []}
+
+
+def beam_key_new(sess, label):
+    data = beam_keys()
+    key = "wk-" + secrets.token_hex(20)
+    data["keys"].append({"key": key, "label": (label or "API key")[:60], "created": int(time.time()),
+                         "email": sess["email"]})
+    with open(BEAMKEYS_FILE, "w") as f:
+        json.dump(data, f)
+    log_act(sess, "apikey", "platform key issued")
+    return {"key": key, "label": label}
+
+
+def beam_keys_list(sess):
+    ks = beam_keys().get("keys", [])
+    return {"keys": [{"label": k.get("label"), "created": k.get("created"),
+                      "preview": (k.get("key", "")[:7] + "…" + k.get("key", "")[-4:])} for k in ks]}
+
+
+def beam_key_ok(key):
+    return bool(key) and any(k.get("key") == key for k in beam_keys().get("keys", []))
+
+
+def beam_task_shape(t):
+    return {"id": t.get("id"), "agentId": t.get("app_id"), "agentName": t.get("app_name"),
+            "status": t.get("status"), "input": t.get("input"), "output": t.get("output"),
+            "steps": t.get("nodes", []), "createdAt": t.get("started"), "completedAt": t.get("ended")}
+
+
+def beam_create_task(sess, agent_id, inp):
+    tid = secrets.token_hex(8)
+    started = int(time.time())
+    r = run_agent(sess, agent_id, inp)
+    task = {"id": tid, "email": sess["email"], "app_id": agent_id, "app_name": r.get("name"),
+            "input": inp, "status": r["status"], "output": r["output"], "nodes": r["nodes"],
+            "started": started, "ended": int(time.time()), "source": "api"}
+    save_task(task)
+    log_act(sess, "run", "api · " + (inp or "")[:50])
+    return beam_task_shape(task)
+
+
 # ---------------- HTTP ----------------
 
 class H(BaseHTTPRequestHandler):
@@ -1056,6 +1142,13 @@ class H(BaseHTTPRequestHandler):
                     inputs[v["name"]] = inp if i == 0 else ""
                 data = json.dumps({"inputs": inputs, "response_mode": "streaming"}).encode()
                 path = DIFY + f"/apps/{app_id}/workflows/draft/run"
+            elif info.get("mode") == "advanced-chat":
+                inputs = {}
+                for i, v in enumerate(info.get("vars", [])):
+                    inputs[v["name"]] = inp if i == 0 else ""
+                data = json.dumps({"inputs": inputs, "query": inp, "response_mode": "streaming",
+                                   "conversation_id": "", "files": []}).encode()
+                path = DIFY + f"/apps/{app_id}/advanced-chat/workflows/draft/run"
             else:
                 data = json.dumps({"inputs": {}, "query": inp, "response_mode": "streaming",
                                    "conversation_id": "",
@@ -1095,8 +1188,65 @@ class H(BaseHTTPRequestHandler):
         task["ended"] = int(time.time())
         save_task(task)
 
+    def _beam(self):
+        """Beam-compatible public API (base /beam, auth: x-api-key header)."""
+        key = self.headers.get("x-api-key") or self.headers.get("X-Api-Key")
+        if not beam_key_ok(key):
+            return self._send(401, {"error": {"code": 401, "message": "invalid or missing x-api-key"}})
+        try:
+            sess = _svc_session()
+        except Exception as e:
+            return self._send(503, {"error": {"code": 503, "message": str(e)}})
+        p = self.path.split("?")[0]
+        parts = [x for x in p.split("/") if x]  # ['beam', 'agent-tasks', '{id}', 'approve']
+        method = self.command
+        try:
+            if method == "GET" and p == "/beam/users/current":
+                return self._send(200, {"email": sess["email"], "workspace": "wakeel"})
+            if method == "GET" and p == "/beam/agents":
+                res = dify(sess, "GET", "/apps?page=1&limit=50")
+                return self._send(200, {"data": [{"id": a["id"], "name": a["name"], "mode": a["mode"]}
+                                                 for a in res.get("data", [])]})
+            if method == "GET" and len(parts) == 3 and parts[1] in ("agents", "agent-graphs"):
+                return self._send(200, app_info(sess, parts[2]))
+            if len(parts) >= 2 and parts[1] == "agent-tasks":
+                if method == "POST" and len(parts) == 2:
+                    b = self._body()
+                    aid = b.get("agentId") or b.get("agent_id")
+                    if not aid:
+                        return self._send(400, {"error": {"code": 400, "message": "agentId is required"}})
+                    return self._send(201, beam_create_task(sess, aid, b.get("input", "")))
+                if method == "GET" and len(parts) == 3 and parts[2] == "analytics":
+                    return self._send(200, analytics(sess, 30))
+                if method == "GET" and len(parts) == 2:
+                    items = _read_tasks(sess); items.reverse()
+                    return self._send(200, {"data": [beam_task_shape(t) for t in items[:100]]})
+                if method == "GET" and len(parts) == 3:
+                    t = task_get(sess, parts[2])
+                    if t.get("error"):
+                        return self._send(404, {"error": {"code": 404, "message": "task not found"}})
+                    return self._send(200, beam_task_shape(t))
+                if method == "POST" and len(parts) == 4:
+                    tid, action = parts[2], parts[3]
+                    if action in ("approve", "reject"):
+                        decide(sess, tid, "approved" if action == "approve" else "rejected", "")
+                        return self._send(200, {"id": tid, "status": action + ("d" if action == "approve" else "ed")})
+                    if action == "rate":
+                        b = self._body(); rate_output(sess, tid, b.get("rating", "up"))
+                        return self._send(200, {"id": tid, "rating": b.get("rating", "up")})
+                    if action == "retry":
+                        t = task_get(sess, tid)
+                        if t.get("error"):
+                            return self._send(404, {"error": {"code": 404, "message": "task not found"}})
+                        return self._send(201, beam_create_task(sess, t.get("app_id"), t.get("input", "")))
+            return self._send(404, {"error": {"code": 404, "message": "unknown endpoint"}})
+        except Exception as e:
+            return self._send(500, {"error": {"code": 500, "message": str(e)[:300]}})
+
     def do_GET(self):
         p = self.path.split("?")[0]
+        if p.startswith("/beam/"):
+            return self._beam()
         if p in ("/", "/index.html"):
             return self._file("index.html", "text/html; charset=utf-8")
         if p == "/app.js":
@@ -1152,6 +1302,8 @@ class H(BaseHTTPRequestHandler):
             if p == "/api/records":
                 q = dict(x.split("=", 1) for x in (self.path.split("?", 1) + [""])[1].split("&") if "=" in x)
                 return self._send(200, records_get(sess, q.get("id", "")))
+            if p == "/api/beam-keys":
+                return self._send(200, beam_keys_list(sess))
             if p == "/api/governance":
                 q = dict(x.split("=", 1) for x in (self.path.split("?", 1) + [""])[1].split("&") if "=" in x)
                 return self._send(200, governance(sess, q.get("id", ""), q.get("force") == "1"))
@@ -1173,6 +1325,8 @@ class H(BaseHTTPRequestHandler):
 
     def do_POST(self):
         p = self.path.split("?")[0]
+        if p.startswith("/beam/"):
+            return self._beam()
         try:
             b = self._body()
             if p == "/api/login":
@@ -1252,6 +1406,8 @@ class H(BaseHTTPRequestHandler):
                 return self._send(200, rate_output(sess, b.get("task_id", ""), b.get("rating", "up")))
             if p == "/api/eval-save":
                 return self._send(200, eval_save(sess, b.get("app_id", ""), b.get("cases", [])))
+            if p == "/api/beam-key":
+                return self._send(200, beam_key_new(sess, b.get("label", "")))
             if p == "/api/records-save":
                 return self._send(200, records_save(sess, b.get("app_id", ""), b.get("view", ""), b.get("columns", []), b.get("rows", [])))
             if p == "/api/test-tool":
