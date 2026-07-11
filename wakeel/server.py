@@ -1138,6 +1138,88 @@ def automation_run(sess, wid):
         return {"ok": False, "message": str(e)[:300]}
 
 
+# ---------------- Multi-Agent Collaboration (Agent Teams) ----------------
+TEAMS_FILE = os.path.join(HERE, "teams.json")
+
+
+def _teams_all():
+    try:
+        with open(TEAMS_FILE) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def teams_list(sess):
+    return {"teams": [t for t in _teams_all().values() if t.get("email") == sess["email"]]}
+
+
+def team_save(sess, team):
+    data = _teams_all()
+    tid = team.get("id") or ("tm-" + secrets.token_hex(6))
+    data[tid] = {"id": tid, "email": sess["email"], "name": (team.get("name") or "Team")[:60],
+                 "goal": (team.get("goal") or "")[:400], "members": (team.get("members") or [])[:8]}
+    with open(TEAMS_FILE, "w") as f:
+        json.dump(data, f)
+    log_act(sess, "team", "saved · " + data[tid]["name"])
+    return data[tid]
+
+
+def team_delete(sess, tid):
+    data = _teams_all()
+    data.pop(tid, None)
+    with open(TEAMS_FILE, "w") as f:
+        json.dump(data, f)
+    return {"ok": True}
+
+
+def team_run(sess, tid, inp):
+    """Supervisor orchestrates specialist agents: route -> run each -> synthesize."""
+    team = _teams_all().get(tid)
+    if not team:
+        raise RuntimeError("team not found")
+    apps = {a["id"]: a["name"] for a in dify(sess, "GET", "/apps?page=1&limit=100").get("data", [])}
+    members = [{"i": i, "id": m, "name": apps.get(m, "Agent")}
+               for i, m in enumerate(team.get("members", [])) if m in apps]
+    if not members:
+        raise RuntimeError("this team has no valid member agents")
+    roster = "\n".join(f'{m["i"]}. {m["name"]}' for m in members)
+    route_raw = _openai_chat([
+        {"role": "system", "content":
+         "You are the SUPERVISOR of a team of specialist UAE government AI agents. Given the task, decide "
+         "which agents to involve and the specific sub-task to give each. Use ONLY the listed agents. "
+         'Return ONLY JSON: {"plan":"<1-2 sentence plan>","calls":[{"member":<index>,"input":"<sub-task>"}]}. '
+         "Use 1-4 calls."},
+        {"role": "user", "content": f"TASK:\n{inp}\n\nAVAILABLE AGENTS:\n{roster}"}])
+    route = _extract_json(route_raw)
+    steps = []
+    for c in (route.get("calls") or [])[:4]:
+        m = next((x for x in members if x["i"] == c.get("member")), None)
+        if not m:
+            continue
+        sub = c.get("input") or inp
+        try:
+            r = run_agent(sess, m["id"], sub)
+            steps.append({"agent": m["name"], "input": sub, "output": r["output"], "status": r["status"]})
+        except Exception as e:
+            steps.append({"agent": m["name"], "input": sub, "output": "⚠️ " + str(e)[:200], "status": "failed"})
+    combined = "\n\n".join(f'[{s["agent"]}]\n{s["output"]}' for s in steps) or "(no agent output)"
+    final = _openai_chat([
+        {"role": "system", "content":
+         "You are the supervisor. Combine the specialist agents' outputs into ONE clear, professional final "
+         "answer for a UAE government officer. Be concise. Flag anything that needs a human decision."},
+        {"role": "user", "content": f"TASK:\n{inp}\n\nSPECIALIST OUTPUTS:\n{combined}"}])
+    save_task({"id": secrets.token_hex(8), "email": sess["email"], "app_id": tid,
+               "app_name": team["name"] + " · team", "input": inp[:400], "status": "succeeded",
+               "output": final[:4000],
+               "nodes": [{"title": "Supervisor · plan & route", "status": "succeeded"}]
+               + [{"title": s["agent"], "status": s["status"]} for s in steps]
+               + [{"title": "Supervisor · synthesize", "status": "succeeded"}],
+               "started": int(time.time()), "ended": int(time.time()), "source": "team"})
+    log_act(sess, "run", "team · " + team["name"][:40])
+    return {"plan": route.get("plan", ""), "steps": steps, "final": final}
+
+
 EVAL_FILE = os.path.join(HERE, "evaluations.json")
 
 
@@ -1474,6 +1556,8 @@ class H(BaseHTTPRequestHandler):
                     return self._send(200, automations_list(sess))
                 except Exception as e:
                     return self._send(200, {"automations": [], "error": str(e)[:200]})
+            if p == "/api/teams":
+                return self._send(200, teams_list(sess))
             if p == "/api/beam-keys":
                 return self._send(200, beam_keys_list(sess))
             if p == "/api/governance":
@@ -1586,6 +1670,12 @@ class H(BaseHTTPRequestHandler):
                 return self._send(200, automation_toggle(sess, b.get("id", ""), b.get("active", False)))
             if p == "/api/automation-run":
                 return self._send(200, automation_run(sess, b.get("id", "")))
+            if p == "/api/team-save":
+                return self._send(200, team_save(sess, b.get("team", {})))
+            if p == "/api/team-delete":
+                return self._send(200, team_delete(sess, b.get("id", "")))
+            if p == "/api/team-run":
+                return self._send(200, team_run(sess, b.get("id", ""), b.get("input", "")))
             if p == "/api/beam-key":
                 return self._send(200, beam_key_new(sess, b.get("label", "")))
             if p == "/api/records-save":

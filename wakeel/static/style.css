@@ -632,3 +632,14 @@ textarea.input{padding:12px 14px;min-height:auto;resize:none}
 .skill-chip .skx{border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:16px;line-height:1;padding:0 2px}
 .skill-chip .skx:hover{color:var(--text)}
 .skill-hint{color:var(--muted);font-size:14px;margin:-8px 0 20px;text-align:center;max-width:52ch;margin-inline:auto}
+
+/* ---------- Teams (multi-agent) ---------- */
+.astep.ag-violet{color:#a78bfa}
+.team-members{display:flex;flex-direction:column;gap:4px;max-height:240px;overflow:auto;border:1px solid var(--line);border-radius:11px;padding:8px;background:var(--panel-2)}
+.team-mem{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:13.5px}
+.team-mem:hover{background:var(--panel-3)}
+.team-mem input{width:16px;height:16px;accent-color:var(--wakeel)}
+.team-plan{padding:13px 15px;border-radius:11px;background:linear-gradient(180deg,rgba(124,58,237,.10),var(--panel-2));border:1px solid #3a2a6a;margin-bottom:12px}
+.team-plan b{display:flex;align-items:center;gap:7px;font-size:13px}
+.team-plan b svg{width:15px;height:15px;color:#a78bfa}
+.team-plan p{margin:6px 0 0;font-size:13.5px;color:var(--muted);line-height:1.55}

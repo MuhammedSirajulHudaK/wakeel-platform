@@ -30,6 +30,7 @@ const IC = {
   help: I('<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 4 2c0 1.5-2 2-2 3.2M12 17h.01"/>'),
   thumb: I('<path d="M7 11v9H4a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1zM7 11l4-7a2 2 0 0 1 2 2v3h4.6a2 2 0 0 1 2 2.3l-1 6A2 2 0 0 1 16.6 20H7"/>'),
   trophy: I('<path d="M8 21h8M12 17v4M6 4h12v5a6 6 0 0 1-12 0zM6 6H3v1a4 4 0 0 0 3 3.9M18 6h3v1a4 4 0 0 1-3 3.9"/>'),
+  team: I('<circle cx="12" cy="6" r="2.6"/><circle cx="5" cy="17.5" r="2.6"/><circle cx="19" cy="17.5" r="2.6"/><path d="M11 8.2l-4.4 6.6M13 8.2l4.4 6.6"/>'),
 };
 
 /* ---------- gov templates ---------- */
@@ -202,7 +203,7 @@ const T = {
   "Home": "الرئيسية", "Skills": "المهارات", "Projects": "المشاريع", "Inbox": "الوارد",
   "Ready-made AI helpers. Pick one and it runs in chat — paste your text and get the result.": "مساعدات ذكاء جاهزة. اختر واحدة لتعمل في المحادثة — الصق نصّك واحصل على النتيجة.",
   "Search skills…": "ابحث عن المهارات…", "Use in chat": "استخدمها في المحادثة",
-  "Tasks": "المهام", "Agent templates": "قوالب الوكلاء", "Integrations": "التكاملات",
+  "Tasks": "المهام", "Agent templates": "قوالب الوكلاء", "Integrations": "التكاملات", "Teams": "الفِرق",
   "Automations": "الأتمتة", "Analytics": "التحليلات", "Your agents": "وكلاؤك",
   "New agent": "وكيل جديد", "Chat & support": "المحادثة والدعم", "Loading…": "جارٍ التحميل…",
   "No agents yet": "لا يوجد وكلاء بعد", "Wakeel AI": "وكيل الذكي", "Beta": "تجريبي",
@@ -340,7 +341,7 @@ function renderLogin() {
 }
 
 /* ---------- shell ---------- */
-const NAV = [["home", "Home", IC.home], ["skills", "Skills", IC.skills], ["projects", "Projects", IC.projects], ["inbox", "Inbox", IC.inbox], ["tasks", "Tasks", IC.tasks], ["templates", "Agent templates", IC.templates], ["integrations", "Integrations", IC.integrations], ["automations", "Automations", IC.flow], ["views", "Analytics", IC.views]];
+const NAV = [["home", "Home", IC.home], ["skills", "Skills", IC.skills], ["templates", "Agent templates", IC.templates], ["teams", "Teams", IC.team], ["inbox", "Inbox", IC.inbox], ["tasks", "Tasks", IC.tasks], ["integrations", "Integrations", IC.integrations], ["automations", "Automations", IC.flow], ["views", "Analytics", IC.views]];
 
 function renderShell() {
   applyDir();
@@ -367,7 +368,7 @@ function renderShell() {
   $("#userBtn").onclick = openProfile;
   $("#supBtn").onclick = () => window.open("https://champions.innoventures.ae/", "_blank", "noopener");
   loadAgents();
-  ({ home: viewHome, skills: viewSkills, projects: () => viewEmpty("Projects", "Group related agents, files and notes.", IC.projects), inbox: viewInbox, tasks: viewTasks, templates: viewTemplates, integrations: viewIntegrations, automations: viewAutomations, views: viewAnalytics, developers: viewDevelopers, agent: viewAgent }[VIEW])();
+  ({ home: viewHome, skills: viewSkills, teams: viewTeams, projects: () => viewEmpty("Projects", "Group related agents, files and notes.", IC.projects), inbox: viewInbox, tasks: viewTasks, templates: viewTemplates, integrations: viewIntegrations, automations: viewAutomations, views: viewAnalytics, developers: viewDevelopers, agent: viewAgent }[VIEW])();
   if (showCop) wireCopilot();
 }
 
@@ -1514,6 +1515,85 @@ function wireSkillChip() {
   if (x) x.onclick = (e) => { e.stopPropagation(); ACTIVE_SKILL = null; renderShell(); };
 }
 
+/* ---------- Teams (multi-agent collaboration) ---------- */
+let TEAMS = [];
+function viewTeams() {
+  $("#mainCol").innerHTML = `<div class="topbar"><div class="crumbs"><b>${t("Teams")}</b><span class="sep">·</span><span style="color:var(--muted)">Multi-agent collaboration</span></div>
+      <div class="top-actions"><button class="btn primary sm" id="teamNew">${IC.plus} New team</button></div></div>
+    <div class="content"><div class="pad" style="max-width:900px">
+      <h1 class="page-h">${t("Teams")}</h1>
+      <p class="page-sub">A team is a <b>supervisor</b> that routes a request to your specialist agents, runs them, and combines the result — one request, many agents working together.</p>
+      <div id="teamList"><div class="empty-mini">Loading…</div></div>
+    </div></div>`;
+  $("#teamNew").onclick = () => openTeamBuilder();
+  loadTeams();
+}
+async function loadTeams() {
+  const el = $("#teamList"); if (!el) return;
+  try {
+    if (!APPS.length) { try { const ad = await api("GET", "apps"); APPS = ad.apps || []; } catch (e) {} }
+    const d = await api("GET", "teams"); TEAMS = d.teams || [];
+    if (!TEAMS.length) { el.innerHTML = `<div class="empty-state" style="padding:38px 0"><div class="big">${IC.team}</div><h3>No teams yet</h3><div>Create a team of agents that work together on one request.</div></div>`; return; }
+    el.innerHTML = "";
+    TEAMS.forEach(tm => {
+      const c = document.createElement("div"); c.className = "gcard auto-card"; c.style.cursor = "default";
+      const memNames = (tm.members || []).map(id => { const a = APPS.find(x => x.id === id); return a ? a.name : "Agent"; });
+      const memCount = (tm.members || []).length;
+      c.innerHTML = `<div style="display:flex;align-items:center;gap:11px;margin-bottom:10px">
+          <div class="dot ag-violet">${IC.team}</div>
+          <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:15px">${esc(tm.name)}</div><div style="font-size:12px;color:var(--muted-2)">${memCount} agents${tm.goal ? " · " + esc(tm.goal) : ""}</div></div>
+          <button class="btn primary sm" data-a="run">${IC.play} Run</button>
+          <button class="btn sm" data-a="edit">Edit</button>
+          <button class="icn-btn" data-a="del" title="Delete">✕</button></div>
+        <div class="auto-steps">${memCount ? memNames.map((n, i) => `${i ? `<span class="astep-arr">+</span>` : ""}<span class="astep ag-violet">${esc(n)}</span>`).join("") : `<span style="color:var(--faint);font-size:12.5px">No agents — edit to add members.</span>`}</div>`;
+      c.querySelector('[data-a="run"]').onclick = () => openTeamRun(tm);
+      c.querySelector('[data-a="edit"]').onclick = () => openTeamBuilder(tm);
+      c.querySelector('[data-a="del"]').onclick = async () => { if (!confirm("Delete this team?")) return; try { await api("POST", "team-delete", { id: tm.id }); loadTeams(); } catch (e) { alert(e.message); } };
+      el.appendChild(c);
+    });
+  } catch (e) { el.innerHTML = `<div class="empty-mini">⚠️ ${esc(e.message)}</div>`; }
+}
+function openTeamBuilder(tm) {
+  const editing = !!tm; tm = tm || { name: "", goal: "", members: [] };
+  const d = document.createElement("div"); d.className = "modal-back";
+  d.innerHTML = `<div class="modal fade" style="width:560px" onclick="event.stopPropagation()"><div style="display:flex"><h2 style="flex:1">${editing ? "Edit team" : "New team"}</h2><button class="x" id="tbx">×</button></div>
+    <div class="field"><label>Team name</label><input class="input" id="tbName" value="${esc(tm.name)}" placeholder="e.g. Citizen Services Desk"/></div>
+    <div class="field"><label>Goal</label><input class="input" id="tbGoal" value="${esc(tm.goal)}" placeholder="What this team handles"/></div>
+    <div class="field"><label>Member agents — the supervisor decides who to use per request</label><div class="team-members" id="tbMembers"></div></div>
+    <button class="btn primary block" id="tbSave">${editing ? "Save team" : "Create team"}</button></div>`;
+  document.body.appendChild(d); d.onclick = () => d.remove(); $("#tbx").onclick = () => d.remove();
+  const sel = new Set(tm.members || []);
+  $("#tbMembers").innerHTML = APPS.map(a => `<label class="team-mem"><input type="checkbox" data-id="${a.id}" ${sel.has(a.id) ? "checked" : ""}><span>${esc(a.name)}</span></label>`).join("") || `<div class="empty-mini">No agents yet — build one first.</div>`;
+  $("#tbMembers").querySelectorAll("input").forEach(i => i.onchange = () => { i.checked ? sel.add(i.dataset.id) : sel.delete(i.dataset.id); });
+  $("#tbSave").onclick = async () => {
+    const name = $("#tbName").value.trim(); if (!name) return;
+    $("#tbSave").disabled = true;
+    try { await api("POST", "team-save", { team: { id: tm.id, name, goal: $("#tbGoal").value.trim(), members: [...sel] } }); d.remove(); loadTeams(); }
+    catch (e) { alert(e.message); $("#tbSave").disabled = false; }
+  };
+}
+function openTeamRun(tm) {
+  const d = document.createElement("div"); d.className = "modal-back";
+  d.innerHTML = `<div class="modal fade" style="width:680px;max-width:94vw" onclick="event.stopPropagation()"><div style="display:flex"><h2 style="flex:1">${IC.team} Run ${esc(tm.name)}</h2><button class="x" id="trx">×</button></div>
+    <div style="color:var(--muted);font-size:13px;margin:-8px 0 14px">The supervisor routes your request to the right agents, runs them, and combines the result.</div>
+    <div class="field"><label>Request</label><textarea class="input" id="trIn" rows="3" placeholder="Describe what needs handling — the supervisor picks the agents…"></textarea></div>
+    <button class="btn primary block" id="trGo">${IC.play} Run team</button>
+    <div id="trOut" hidden style="margin-top:16px"></div></div>`;
+  document.body.appendChild(d); d.onclick = () => d.remove(); $("#trx").onclick = () => d.remove(); $("#trIn").focus();
+  $("#trGo").onclick = async () => {
+    const input = $("#trIn").value.trim(); if (!input) return;
+    $("#trGo").disabled = true; $("#trGo").innerHTML = `<span class="spin"></span> Orchestrating…`;
+    const out = $("#trOut"); out.hidden = false; out.innerHTML = `<div class="empty-mini">The supervisor is planning, then running each agent…</div>`;
+    try {
+      const r = await api("POST", "team-run", { id: tm.id, input });
+      out.innerHTML = `<div class="team-plan"><b>${IC.team} Supervisor plan</b><p>${esc(r.plan || "")}</p></div>
+        <div class="rn-steps">${(r.steps || []).map(s => `<div class="rn-step ${s.status === "failed" ? "bad" : "ok"}"><span class="rn-tick">${s.status === "failed" ? "✕" : IC.check}</span> ${esc(s.agent)}</div>`).join("")}</div>
+        <div class="rn-out"><div class="rn-out-h">${IC.check} Combined result</div><div class="rn-out-b">${esc(r.final || "").slice(0, 6000)}</div></div>`;
+    } catch (e) { out.innerHTML = `<div class="empty-mini">⚠️ ${esc(e.message)}</div>`; }
+    finally { $("#trGo").disabled = false; $("#trGo").innerHTML = `${IC.play} Run again`; }
+  };
+}
+
 /* ---------- Tasks (run history) ---------- */
 function statusPill(s) { const m = { succeeded: "ok", completed: "ok", running: "run", failed: "bad", planned: "idle" }; return `<span class="st-pill ${m[s] || "idle"}">${esc(s || "—")}</span>`; }
 function viewTasks() {
@@ -1831,7 +1911,7 @@ async function boot() {
   if (m) history.replaceState(null, "", location.pathname + location.hash);
   const h = location.hash.replace("#", "");
   if (h.startsWith("agent/")) { AGENT = h.split("/")[1]; VIEW = "agent"; COPILOT = true; if (window.__autosub) { ASUB = window.__autosub; window.__autosub = null; } }
-  else if (["home", "skills", "projects", "inbox", "tasks", "templates", "integrations", "automations", "views", "developers"].includes(h)) VIEW = h;
+  else if (["home", "skills", "teams", "projects", "inbox", "tasks", "templates", "integrations", "automations", "views", "developers"].includes(h)) VIEW = h;
   try { ME = await api("GET", "me"); } catch (e) { ME = null; }
   if (!ME) return renderLogin();
   try { await api("GET", "sso"); } catch (e) {}
