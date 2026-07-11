@@ -183,12 +183,25 @@ async function openToolConfig(name) {
     };
   } catch (e) { $("#tcBody").innerHTML = `<div class="empty-mini">⚠️ ${esc(e.message)}</div>`; }
 }
-const SKILLS = ["ai-product-strategy", "conducting-user-interviews", "giving-presentations", "writing-prds", "positioning-messaging", "pricing-strategy", "personas", "writing-north-star-metrics", "running-effective-1-1s", "having-difficult-conversations", "writing-job-descriptions"];
+/* Skills = ready-made AI capabilities the user can run in chat. Each has a system
+   instruction so it actually performs the task. */
+const SKILLS = [
+  { id: "draft-letter", name: "Draft a bilingual letter", ic: "book", desc: "Turn your notes into a formal government letter in English and Arabic.", ph: "Paste your notes / what the letter should say…", prompt: "You are a UAE government correspondence officer. Draft a formal, professional letter from the user's notes. Provide it in BOTH English and Arabic, with a subject line, salutation, body and official closing, in a MoHRE / Abu Dhabi government tone." },
+  { id: "summarize-doc", name: "Summarize a document", ic: "book", desc: "Turn a long legal or policy document into plain-language key points.", ph: "Paste the document text…", prompt: "You summarize legal and policy documents for UAE government officers. Produce a plain-language summary: purpose, key points, obligations, dates/deadlines and any risks. Be concise and accurate. If the text is Arabic, summarize in Arabic." },
+  { id: "classify-complaint", name: "Classify & route a complaint", ic: "inbox", desc: "Categorize a citizen complaint and recommend the responsible entity.", ph: "Paste the citizen complaint…", prompt: "You triage citizen complaints for Abu Dhabi government. For the complaint, output: category, urgency (Low/Medium/High), the responsible entity, a 2-sentence summary and a recommended next action. Do not make final legal decisions." },
+  { id: "translate", name: "Translate (Arabic ⇄ English)", ic: "skills", desc: "Accurately translate government text, preserving formal tone.", ph: "Paste the text to translate…", prompt: "You are a professional Arabic⇄English translator for UAE government documents. Detect the source language and translate to the other, preserving formal tone and official terminology." },
+  { id: "extract-data", name: "Extract data to a table", ic: "projects", desc: "Pull key fields from an application or document into a clean table.", ph: "Paste the application / document…", prompt: "You extract structured data from government application text. Return a clean markdown table of the key fields (name, ID, dates, amounts, status…) found, plus a short note of anything missing or unclear." },
+  { id: "pre-check", name: "Pre-check an application", ic: "check", desc: "Screen an application for completeness before officer review.", ph: "Paste the application summary…", prompt: "You pre-screen government service applications. Check the summary for completeness, list what's present and what's missing/unclear, give a verdict (Complete / Incomplete) and recommend next steps. Do not approve or reject." },
+  { id: "draft-decision", name: "Draft an approval / rejection", ic: "book", desc: "Draft a decision letter with a clear, respectful justification.", ph: "Describe the case and the decision…", prompt: "You draft government decision letters. Draft an approval or rejection with a clear, respectful justification and the applicant's next steps. Note that a human officer must confirm the final decision." },
+  { id: "answer-policy", name: "Answer a service question", ic: "help", desc: "Answer a citizen or officer question about a government service.", ph: "Ask a question about a government service…", prompt: "You answer questions about UAE government services and procedures clearly and helpfully, in the language asked. If unsure, say so and suggest where to verify." },
+];
 
 /* ---------- i18n ---------- */
 const T = {
   // shell / nav
   "Home": "الرئيسية", "Skills": "المهارات", "Projects": "المشاريع", "Inbox": "الوارد",
+  "Ready-made AI helpers. Pick one and it runs in chat — paste your text and get the result.": "مساعدات ذكاء جاهزة. اختر واحدة لتعمل في المحادثة — الصق نصّك واحصل على النتيجة.",
+  "Search skills…": "ابحث عن المهارات…", "Use in chat": "استخدمها في المحادثة",
   "Tasks": "المهام", "Agent templates": "قوالب الوكلاء", "Integrations": "التكاملات",
   "Automations": "الأتمتة", "Analytics": "التحليلات", "Your agents": "وكلاؤك",
   "New agent": "وكيل جديد", "Chat & support": "المحادثة والدعم", "Loading…": "جارٍ التحميل…",
@@ -284,7 +297,7 @@ function t(s) { return LANG === "ar" ? (T[s] || s) : s; }
 /* ---------- state ---------- */
 let ME = null, LANG = localStorage.getItem("wakeel_lang") || "en";
 let VIEW = "home", BUILD = true, AGENT = null, ASUB = "flow", COPILOT = false;
-let APPS = [], THREAD = [], LASTGRAPH = null, LASTDESIGN = null, DEPT = "all", CFGNODE = null;
+let APPS = [], THREAD = [], LASTGRAPH = null, LASTDESIGN = null, DEPT = "all", CFGNODE = null, ACTIVE_SKILL = null;
 
 async function api(method, path, body) {
   const r = await fetch("api/" + path, { method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined, credentials: "include" });
@@ -348,7 +361,7 @@ function renderShell() {
     <main class="main" id="mainCol"></main>
     ${showCop ? renderCopilot() : ""}
   </div>`;
-  document.querySelectorAll(".nav a").forEach(a => a.onclick = () => { VIEW = a.dataset.v; AGENT = null; COPILOT = false; location.hash = a.dataset.v; renderShell(); });
+  document.querySelectorAll(".nav a").forEach(a => a.onclick = () => { VIEW = a.dataset.v; AGENT = null; COPILOT = false; if (a.dataset.v !== "home") ACTIVE_SKILL = null; location.hash = a.dataset.v; renderShell(); });
   $("#newAgent").onclick = () => { VIEW = "home"; THREAD = []; renderShell(); };
   $("#userBtn").onclick = openProfile;
   $("#supBtn").onclick = () => window.open("https://champions.innoventures.ae/", "_blank", "noopener");
@@ -399,11 +412,12 @@ function viewHome() {
 function drawComposerHome() {
   $("#homeArea").innerHTML = `
     <div class="home-inner fade">
-      <h1>${t("What do you want to work on?")}</h1>
+      <h1>${ACTIVE_SKILL ? esc(ACTIVE_SKILL.name) : t("What do you want to work on?")}</h1>
+      ${ACTIVE_SKILL ? `<p class="skill-hint">${esc(ACTIVE_SKILL.desc)}</p>` : ""}
       <div class="composer">
-        <textarea id="ins" rows="2" placeholder="${t("Ask Wakeel to perform tasks, build an agent, or brainstorm ideas")}"></textarea>
+        <textarea id="ins" rows="2" placeholder="${ACTIVE_SKILL ? esc(ACTIVE_SKILL.ph) : t("Ask Wakeel to perform tasks, build an agent, or brainstorm ideas")}"></textarea>
         <div class="composer-foot">
-          <div class="toggle-pill ${BUILD ? "on" : ""}" id="buildToggle"><span class="lm">و</span> ${t("Build agents")}</div>
+          ${ACTIVE_SKILL ? skillChip() : `<div class="toggle-pill ${BUILD ? "on" : ""}" id="buildToggle"><span class="lm">و</span> ${t("Build agents")}</div>`}
           <button class="plus-btn" id="plusBtn">${IC.plus}<div class="pop" id="plusPop" hidden>
             <a data-a="upload">${IC.upload} ${t("Upload file")}</a>
             <a data-a="skills">${IC.skills} ${t("Add skills")}</a>
@@ -422,7 +436,8 @@ function drawComposerHome() {
         </div>
       </div>
     </div>`;
-  $("#buildToggle").onclick = () => { BUILD = !BUILD; $("#buildToggle").classList.toggle("on", BUILD); };
+  if ($("#buildToggle")) $("#buildToggle").onclick = () => { BUILD = !BUILD; $("#buildToggle").classList.toggle("on", BUILD); };
+  wireSkillChip();
   $("#plusBtn").onclick = (e) => { e.stopPropagation(); const p = $("#plusPop"); p.hidden = !p.hidden; };
   document.querySelectorAll("#plusPop a").forEach(a => a.onclick = (e) => { e.stopPropagation(); plusAction(a.dataset.a); });
   document.querySelectorAll(".chip").forEach(c => c.onclick = () => { $("#ins").value = c.textContent; $("#ins").focus(); });
@@ -460,8 +475,8 @@ async function onSend() {
       drawThread();
     } catch (e) { done(s2, "Error"); THREAD.push({ role: "ai", text: "⚠️ " + e.message }); drawThread(); }
   } else {
-    const s1 = step("Thinking");
-    try { const r = await api("POST", "chat", { message: text, history: THREAD.filter(m => m.role === "me" || m.role === "ai").map(m => ({ role: m.role === "me" ? "user" : "assistant", content: m.text })) }); done(s1, "Answered"); THREAD.push({ role: "ai", text: r.reply }); drawThread(); }
+    const s1 = step(ACTIVE_SKILL ? ACTIVE_SKILL.name : "Thinking");
+    try { const r = await api("POST", "chat", { message: text, system: ACTIVE_SKILL ? ACTIVE_SKILL.prompt : "", history: THREAD.filter(m => m.role === "me" || m.role === "ai").map(m => ({ role: m.role === "me" ? "user" : "assistant", content: m.text })) }); done(s1, "Answered"); THREAD.push({ role: "ai", text: r.reply }); drawThread(); }
     catch (e) { done(s1, "Error"); THREAD.push({ role: "ai", text: "⚠️ " + e.message }); drawThread(); }
   }
 }
@@ -477,10 +492,11 @@ function drawThread() {
     else if (m.role === "design") th.appendChild(designCard(m));
   });
   const c = document.createElement("div"); c.className = "composer"; c.style.marginTop = "10px";
-  c.innerHTML = `<textarea id="ins" rows="1" placeholder="${t(LASTDESIGN ? "Reply with any changes, or press Build this agent…" : "Reply to Wakeel…")}"></textarea>
-    <div class="composer-foot"><div class="toggle-pill ${BUILD ? "on" : ""}" id="buildToggle"><span class="lm">و</span> ${t("Build agents")}</div><button class="send-btn" id="sendBtn">${IC.up}</button></div>`;
+  c.innerHTML = `<textarea id="ins" rows="1" placeholder="${ACTIVE_SKILL ? esc(ACTIVE_SKILL.ph) : t(LASTDESIGN ? "Reply with any changes, or press Build this agent…" : "Reply to Wakeel…")}"></textarea>
+    <div class="composer-foot">${ACTIVE_SKILL ? skillChip() : `<div class="toggle-pill ${BUILD ? "on" : ""}" id="buildToggle"><span class="lm">و</span> ${t("Build agents")}</div>`}<button class="send-btn" id="sendBtn">${IC.up}</button></div>`;
   th.appendChild(c);
-  $("#buildToggle").onclick = () => { BUILD = !BUILD; $("#buildToggle").classList.toggle("on", BUILD); };
+  if ($("#buildToggle")) $("#buildToggle").onclick = () => { BUILD = !BUILD; $("#buildToggle").classList.toggle("on", BUILD); };
+  wireSkillChip();
   $("#sendBtn").onclick = onSend;
   $("#ins").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); } });
   area.scrollTop = area.scrollHeight; th.scrollTop = th.scrollHeight;
@@ -1467,24 +1483,34 @@ function viewIntegrations() {
 }
 
 /* ---------- skills ---------- */
+function useSkill(s) { ACTIVE_SKILL = s; VIEW = "home"; THREAD = []; BUILD = false; location.hash = "home"; renderShell(); setTimeout(() => { const i = $("#ins"); if (i) i.focus(); }, 60); }
 function viewSkills() {
-  $("#mainCol").innerHTML = `<div class="topbar"><div class="crumbs"><b>Skills</b></div></div>
+  $("#mainCol").innerHTML = `<div class="topbar"><div class="crumbs"><b>${t("Skills")}</b></div></div>
     <div class="content"><div class="pad">
-      <h1 class="page-h">Skills</h1><p class="page-sub">Reusable capabilities Wakeel uses to get work done.</p>
-      <div class="tabs"><button class="active">All skills</button><button>Active</button></div>
-      <div class="searchbar">${IC.search}<input id="ssearch" placeholder="Search skills by name…"/></div>
-      <div class="rowlist" id="skillList"></div>
+      <h1 class="page-h">${t("Skills")}</h1><p class="page-sub">${t("Ready-made AI helpers. Pick one and it runs in chat — paste your text and get the result.")}</p>
+      <div class="searchbar">${IC.search}<input id="ssearch" placeholder="${t("Search skills…")}"/></div>
+      <div class="grid" id="skillList"></div>
     </div></div>`;
   const draw = (q = "") => {
     const el = $("#skillList"); el.innerHTML = "";
-    SKILLS.filter(s => s.includes(q.toLowerCase())).forEach(s => {
-      const r = document.createElement("div"); r.className = "lrow";
-      r.innerHTML = `<div class="ic">${IC.book}</div><div class="info"><div class="t">${esc(s)} <span class="sys-tag">System skill</span></div><div class="d">Capability available to your agents and chat.</div></div><button class="btn sm">Try in chat</button>`;
-      r.querySelector("button").onclick = () => { VIEW = "home"; THREAD = []; BUILD = false; renderShell(); setTimeout(() => { const i = $("#ins"); if (i) { i.value = "Use the " + s + " skill to help me with "; i.focus(); } }, 50); };
-      el.appendChild(r);
+    SKILLS.filter(s => (s.name + " " + s.desc).toLowerCase().includes(q.toLowerCase())).forEach(s => {
+      const c = document.createElement("div"); c.className = "gcard";
+      c.innerHTML = `<div class="ic">${IC[s.ic] || IC.book}</div><h3>${esc(s.name)}</h3><p>${esc(s.desc)}</p><div class="foot"><span></span><button class="btn primary sm">${IC.chat} ${t("Use in chat")}</button></div>`;
+      c.querySelector("button").onclick = () => useSkill(s);
+      el.appendChild(c);
     });
+    if (!el.children.length) el.innerHTML = `<div class="empty-mini">No skills match “${esc(q)}”.</div>`;
   };
   draw(); $("#ssearch").addEventListener("input", e => draw(e.target.value));
+}
+/* a compact skill chip shown in the chat composer when a skill is active */
+function skillChip() {
+  if (!ACTIVE_SKILL) return "";
+  return `<div class="skill-chip" id="skillChip">${IC[ACTIVE_SKILL.ic] || IC.book}<span>${esc(ACTIVE_SKILL.name)}</span><button class="skx" title="Remove skill">×</button></div>`;
+}
+function wireSkillChip() {
+  const x = document.querySelector("#skillChip .skx");
+  if (x) x.onclick = (e) => { e.stopPropagation(); ACTIVE_SKILL = null; renderShell(); };
 }
 
 /* ---------- Tasks (run history) ---------- */

@@ -830,11 +830,11 @@ def _openai_chat(messages):
     raise RuntimeError(f"chat unavailable: {last_err}")
 
 
-def chat(sess, message, history):
-    msgs = [{"role": "system", "content":
-             "You are Wakeel (وكيل), an assistant for UAE government employees in Abu Dhabi. "
-             "Help with research, drafting, summarizing and government service questions. "
-             "Be concise and professional. Answer in the language the user writes in (English or Arabic)."}]
+def chat(sess, message, history, system=""):
+    default_sys = ("You are Wakeel (وكيل), an assistant for UAE government employees in Abu Dhabi. "
+                   "Help with research, drafting, summarizing and government service questions. "
+                   "Be concise and professional. Answer in the language the user writes in (English or Arabic).")
+    msgs = [{"role": "system", "content": (system.strip() or default_sys)}]
     for h in (history or [])[-10:]:
         if h.get("role") in ("user", "assistant") and h.get("content"):
             msgs.append({"role": h["role"], "content": str(h["content"])[:4000]})
@@ -1604,7 +1604,7 @@ class H(BaseHTTPRequestHandler):
             if p == "/api/settings":
                 return self._send(200, settings_set(b.get("provider", ""), b.get("model", "")))
             if p == "/api/chat":
-                r = chat(sess, b.get("message", ""), b.get("history", []))
+                r = chat(sess, b.get("message", ""), b.get("history", []), b.get("system", ""))
                 log_act(sess, "chat", b.get("message", "")[:60])
                 return self._send(200, r)
             if p == "/api/knowledge":
