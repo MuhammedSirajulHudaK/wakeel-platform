@@ -141,6 +141,8 @@ textarea.input{padding:12px 14px;min-height:auto;resize:none}
 
 /* home */
 .home{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px 24px 60px;overflow:auto}
+/* once a conversation/proposal is showing, top-align so the whole thing is scrollable from the top */
+.home.has-thread{justify-content:flex-start}
 .home-inner{width:100%;max-width:780px}
 .home h1{text-align:center;font-size:30px;font-weight:800;letter-spacing:-.025em;margin:0 0 24px}
 .composer{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:16px 16px 12px;box-shadow:0 20px 60px rgba(0,0,0,.35)}

@@ -487,6 +487,7 @@ function viewHome() {
 }
 
 function drawComposerHome() {
+  $("#homeArea").classList.remove("has-thread");
   $("#homeArea").innerHTML = `
     <div class="home-inner fade">
       <h1>${ACTIVE_SKILL ? esc(ACTIVE_SKILL.name) : t("What do you want to work on?")}</h1>
@@ -568,13 +569,15 @@ async function onSend() {
 
 function drawThread() {
   const area = $("#homeArea");
+  area.classList.add("has-thread"); // top-align so long proposals are scrollable from the top
   area.innerHTML = `<div class="thread" id="thread"></div>`;
   const th = $("#thread");
+  let lastDesignEl = null;
   THREAD.forEach(m => {
     if (m.role === "me") { const d = document.createElement("div"); d.className = "bubble me"; d.textContent = m.text; th.appendChild(d); }
     else if (m.role === "ai") { const d = document.createElement("div"); d.className = "bubble ai"; d.textContent = m.text; th.appendChild(d); }
     else if (m.role === "plan") th.appendChild(planCard(m));
-    else if (m.role === "design") th.appendChild(designCard(m));
+    else if (m.role === "design") { lastDesignEl = designCard(m); th.appendChild(lastDesignEl); }
   });
   const c = document.createElement("div"); c.className = "composer"; c.style.marginTop = "10px";
   c.innerHTML = `<textarea id="ins" rows="1" placeholder="${ACTIVE_SKILL ? esc(ACTIVE_SKILL.ph) : t(LASTDESIGN ? "Reply with any changes, or press Build this agent…" : "Reply to Wakeel…")}"></textarea>
@@ -584,7 +587,17 @@ function drawThread() {
   wireSkillChip();
   $("#sendBtn").onclick = onSend;
   $("#ins").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); } });
-  area.scrollTop = area.scrollHeight; th.scrollTop = th.scrollHeight;
+  // When the newest item is a design proposal (the approval window), show it from its
+  // TOP so it reads top-to-bottom; otherwise follow the conversation to the bottom.
+  const last = THREAD[THREAD.length - 1];
+  if (last && last.role === "design" && lastDesignEl) {
+    requestAnimationFrame(() => {
+      const top = lastDesignEl.getBoundingClientRect().top - area.getBoundingClientRect().top + area.scrollTop;
+      area.scrollTop = Math.max(0, top - 14);
+    });
+  } else {
+    area.scrollTop = area.scrollHeight; th.scrollTop = th.scrollHeight;
+  }
 }
 
 function planCard(m) {
