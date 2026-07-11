@@ -836,6 +836,7 @@ AUDIT_MAP = {
     "connect": ("Integration", "A connector was linked", "info"),
     "provider": ("Integration", "A model provider was configured", "info"),
     "apikey": ("Security", "A platform API key was issued", "warn"),
+    "security": ("Security", "A security or access setting changed", "warn"),
     "login": ("Access", "A user signed in", "info"),
     "chat": ("Assistant", "The assistant was used", "info"),
     "data": ("Integration", "Knowledge data was added", "info"),
@@ -967,6 +968,124 @@ def audit_csv(sess):
         det = str(e.get("detail", "")).replace('"', "'").replace("\n", " ")
         out.append(f'{e["ts"]},"{iso}","{e["actor"]}","{e["category"]}","{e["action"]}","{det}"')
     return "\n".join(out)
+
+
+# ---- Security & Access (RBAC + SSO config framework) ----
+SECURITY_FILE = os.path.join(HERE, "security.json")
+
+# Government-facing RBAC roles. Wakeel maps each Dify workspace member to one
+# of these, and the UI shows/uses the effective role. (Beam "Roles & access".)
+RBAC_ROLES = [
+    {"id": "admin", "name": "Administrator",
+     "desc": "Full control — build agents, configure connectors, manage members and security.",
+     "can": ["Build, publish & delete agents", "Configure connectors & model providers",
+             "Manage members & assign roles", "Configure SSO & security policy",
+             "Approve / reject outputs (HITL)", "View analytics & full audit trail"]},
+    {"id": "officer", "name": "Government Officer",
+     "desc": "Operate agents and make the human-in-the-loop decisions.",
+     "can": ["Run agents & multi-agent teams", "Approve / reject outputs (HITL)",
+             "Use skills & the assistant", "Build automations", "View analytics"],
+     "cannot": ["Manage members or roles", "Configure SSO & security"]},
+    {"id": "viewer", "name": "Viewer / Auditor",
+     "desc": "Read-only — review runs, outputs and the audit trail for oversight.",
+     "can": ["View tasks, runs & outputs", "View analytics", "Export the audit log"],
+     "cannot": ["Run, edit or delete agents", "Approve outputs", "Change any settings"]},
+]
+# how Dify's native workspace roles fall back to Wakeel RBAC roles
+_DIFY_ROLE_MAP = {"owner": "admin", "admin": "admin", "editor": "officer",
+                  "normal": "viewer", "dataset_operator": "viewer"}
+
+SSO_PROVIDERS = [
+    {"id": "entra", "name": "Microsoft Entra ID", "proto": "OpenID Connect / SAML 2.0",
+     "fields": ["tenant_id", "client_id", "metadata_url"]},
+    {"id": "saml", "name": "SAML 2.0 (generic)", "proto": "SAML 2.0",
+     "fields": ["entity_id", "metadata_url", "acs_url"]},
+    {"id": "uaepass", "name": "UAE PASS", "proto": "OpenID Connect",
+     "fields": ["client_id", "metadata_url"]},
+]
+
+
+def _sec_all():
+    try:
+        with open(SECURITY_FILE) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _sec_ws(sess):
+    """Per-workspace security config, keyed by the signed-in user's email."""
+    return _sec_all().get(sess["email"], {})
+
+
+def _sec_save_ws(sess, cfg):
+    allw = _sec_all()
+    allw[sess["email"]] = cfg
+    with open(SECURITY_FILE, "w") as f:
+        json.dump(allw, f)
+
+
+def _effective_role(sess, email, dify_role, overlay):
+    if email in overlay:
+        return overlay[email]
+    return _DIFY_ROLE_MAP.get(dify_role, "viewer")
+
+
+def security_get(sess):
+    cfg = _sec_ws(sess)
+    overlay = cfg.get("roles", {})
+    try:
+        r = dify(sess, "GET", "/workspaces/current/members")
+        raw = r.get("accounts") or r.get("data") or (r if isinstance(r, list) else [])
+    except Exception:
+        raw = [{"name": sess["email"].split("@")[0], "email": sess["email"], "role": "owner",
+                "status": "active", "last_active_at": int(time.time())}]
+    members = [{"name": m.get("name") or (m.get("email") or "").split("@")[0],
+                "email": m.get("email", ""), "dify_role": m.get("role", "normal"),
+                "role": _effective_role(sess, m.get("email", ""), m.get("role", "normal"), overlay),
+                "status": m.get("status", "active"), "last_active": m.get("last_active_at", 0)}
+               for m in raw]
+    sso = cfg.get("sso", {"provider": "off"})
+    policy = cfg.get("policy", {"session_timeout_min": 30, "mfa_required": True,
+                                "allowed_domains": "gov.ae, abudhabi.ae", "ip_allowlist": ""})
+    me = next((m["role"] for m in members if m["email"] == sess["email"]), "admin")
+    return {"members": members, "roles": RBAC_ROLES, "sso": sso, "policy": policy,
+            "sso_providers": SSO_PROVIDERS, "my_role": me}
+
+
+def security_set_role(sess, email, role):
+    if role not in ("admin", "officer", "viewer"):
+        return {"error": "invalid role"}
+    cfg = _sec_ws(sess)
+    cfg.setdefault("roles", {})[email] = role
+    _sec_save_ws(sess, cfg)
+    log_act(sess, "security", f"role · {email} → {role}")
+    return {"ok": True}
+
+
+def sso_save(sess, sso):
+    provider = sso.get("provider", "off")
+    cfg = _sec_ws(sess)
+    clean = {"provider": provider, "config": {k: str(v)[:300] for k, v in (sso.get("config") or {}).items()},
+             "status": "configured" if provider != "off" else "off",
+             "updated": int(time.time())}
+    cfg["sso"] = clean
+    _sec_save_ws(sess, cfg)
+    log_act(sess, "security", f"sso · {provider}")
+    return {"ok": True, "sso": clean}
+
+
+def policy_save(sess, policy):
+    cfg = _sec_ws(sess)
+    cfg["policy"] = {
+        "session_timeout_min": int(policy.get("session_timeout_min", 30) or 30),
+        "mfa_required": bool(policy.get("mfa_required", True)),
+        "allowed_domains": str(policy.get("allowed_domains", ""))[:300],
+        "ip_allowlist": str(policy.get("ip_allowlist", ""))[:300],
+    }
+    _sec_save_ws(sess, cfg)
+    log_act(sess, "security", "policy updated")
+    return {"ok": True, "policy": cfg["policy"]}
 
 
 _KNOWLEDGE_KEY = {"token": ""}
@@ -1696,6 +1815,8 @@ class H(BaseHTTPRequestHandler):
                 csv = audit_csv(sess)
                 return self._send(200, csv, ctype="text/csv; charset=utf-8",
                                   extra={"Content-Disposition": "attachment; filename=wakeel-audit-log.csv"})
+            if p == "/api/security":
+                return self._send(200, security_get(sess))
             if p == "/api/tasks":
                 return self._send(200, tasks_list(sess))
             if p == "/api/task":
@@ -1840,6 +1961,12 @@ class H(BaseHTTPRequestHandler):
                 return self._send(200, team_delete(sess, b.get("id", "")))
             if p == "/api/team-run":
                 return self._send(200, team_run(sess, b.get("id", ""), b.get("input", "")))
+            if p == "/api/security-role":
+                return self._send(200, security_set_role(sess, b.get("email", ""), b.get("role", "")))
+            if p == "/api/security-sso":
+                return self._send(200, sso_save(sess, b.get("sso", {})))
+            if p == "/api/security-policy":
+                return self._send(200, policy_save(sess, b.get("policy", {})))
             if p == "/api/beam-key":
                 return self._send(200, beam_key_new(sess, b.get("label", "")))
             if p == "/api/records-save":

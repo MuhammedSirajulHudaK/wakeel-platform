@@ -33,6 +33,7 @@ const IC = {
   team: I('<circle cx="12" cy="6" r="2.6"/><circle cx="5" cy="17.5" r="2.6"/><circle cx="19" cy="17.5" r="2.6"/><path d="M11 8.2l-4.4 6.6M13 8.2l4.4 6.6"/>'),
   shield: I('<path d="M12 3l7 3v5c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V6z"/><path d="M9.2 12l2 2 3.6-3.8"/>'),
   download: I('<path d="M12 4v11M8 11l4 4 4-4M4 19h16"/>'),
+  lock: I('<rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/><circle cx="12" cy="15.5" r="1.3"/>'),
 };
 
 /* ---------- gov templates ---------- */
@@ -211,7 +212,7 @@ const T = {
   "No agents yet": "لا يوجد وكلاء بعد", "Wakeel AI": "وكيل الذكي", "Beta": "تجريبي",
   // agent tabs
   "Flow": "المخطط", "Triggers": "المشغّلات", "Memory": "الذاكرة",
-  "Governance": "الحوكمة", "Instructions": "التعليمات", "Automation": "أوضاع الأتمتة", "Evaluate": "التقييم", "Records": "السجلات",
+  "Governance": "الحوكمة", "Security": "الأمن", "Instructions": "التعليمات", "Automation": "أوضاع الأتمتة", "Evaluate": "التقييم", "Records": "السجلات",
   // home
   "What do you want to work on?": "بماذا تريد أن تعمل؟",
   "Ask Wakeel to perform tasks, build an agent, or brainstorm ideas": "اطلب من وكيل تنفيذ المهام أو بناء وكيل أو طرح الأفكار",
@@ -343,7 +344,7 @@ function renderLogin() {
 }
 
 /* ---------- shell ---------- */
-const NAV = [["home", "Home", IC.home], ["skills", "Skills", IC.skills], ["templates", "Agent templates", IC.templates], ["teams", "Teams", IC.team], ["inbox", "Inbox", IC.inbox], ["tasks", "Tasks", IC.tasks], ["integrations", "Integrations", IC.integrations], ["automations", "Automations", IC.flow], ["governance", "Governance", IC.shield], ["views", "Analytics", IC.views]];
+const NAV = [["home", "Home", IC.home], ["skills", "Skills", IC.skills], ["templates", "Agent templates", IC.templates], ["teams", "Teams", IC.team], ["inbox", "Inbox", IC.inbox], ["tasks", "Tasks", IC.tasks], ["integrations", "Integrations", IC.integrations], ["automations", "Automations", IC.flow], ["governance", "Governance", IC.shield], ["security", "Security", IC.lock], ["views", "Analytics", IC.views]];
 
 function renderShell() {
   applyDir();
@@ -370,7 +371,7 @@ function renderShell() {
   $("#userBtn").onclick = openProfile;
   $("#supBtn").onclick = () => window.open("https://champions.innoventures.ae/", "_blank", "noopener");
   loadAgents();
-  ({ home: viewHome, skills: viewSkills, teams: viewTeams, governance: viewGovernance, projects: () => viewEmpty("Projects", "Group related agents, files and notes.", IC.projects), inbox: viewInbox, tasks: viewTasks, templates: viewTemplates, integrations: viewIntegrations, automations: viewAutomations, views: viewAnalytics, developers: viewDevelopers, agent: viewAgent }[VIEW])();
+  ({ home: viewHome, skills: viewSkills, teams: viewTeams, governance: viewGovernance, security: viewSecurity, projects: () => viewEmpty("Projects", "Group related agents, files and notes.", IC.projects), inbox: viewInbox, tasks: viewTasks, templates: viewTemplates, integrations: viewIntegrations, automations: viewAutomations, views: viewAnalytics, developers: viewDevelopers, agent: viewAgent }[VIEW])();
   if (showCop) wireCopilot();
 }
 
@@ -1646,6 +1647,101 @@ async function loadGovernance() {
   } catch (e) { el.innerHTML = `<div class="empty-mini">⚠️ ${esc(e.message)}</div>`; }
 }
 
+/* ---------- Security & Access (RBAC + SSO) ---------- */
+let SEC = null;
+const ROLE_BADGE = { admin: "r-admin", officer: "r-officer", viewer: "r-viewer" };
+function viewSecurity() {
+  $("#mainCol").innerHTML = `<div class="topbar"><div class="crumbs"><b>${t("Security")}</b><span class="sep">·</span><span style="color:var(--muted)">Access &amp; identity</span></div></div>
+    <div class="content"><div class="pad" style="max-width:1000px">
+      <h1 class="page-h">${t("Security")} &amp; access</h1>
+      <p class="page-sub">Role-based access, single sign-on and the session policy your workspace runs under — the identity controls an enterprise government deployment requires.</p>
+      <div id="secBody"><div class="empty-mini">Loading…</div></div>
+    </div></div>`;
+  loadSecurity();
+}
+async function loadSecurity() {
+  const el = $("#secBody"); if (!el) return;
+  try {
+    SEC = await api("GET", "security");
+    const isAdmin = SEC.my_role === "admin";
+    const sso = SEC.sso || { provider: "off" };
+    const pol = SEC.policy || {};
+    const roleName = { admin: "Administrator", officer: "Officer", viewer: "Viewer" };
+    const ssoName = (SEC.sso_providers.find(p => p.id === sso.provider) || {}).name;
+    el.innerHTML = `
+      <div class="side-sub" style="padding-inline:0">Roles &amp; permissions (RBAC)</div>
+      <div class="role-grid">${SEC.roles.map(r => `
+        <div class="gcard role-card" style="cursor:default">
+          <div class="rc-h"><span class="rbadge ${ROLE_BADGE[r.id]}">${roleName[r.id]}</span></div>
+          <div class="rc-desc">${esc(r.desc)}</div>
+          <ul class="rc-can">${r.can.map(c => `<li class="yes">${IC.check} ${esc(c)}</li>`).join("")}${(r.cannot || []).map(c => `<li class="no">✕ ${esc(c)}</li>`).join("")}</ul>
+        </div>`).join("")}</div>
+
+      <div class="side-sub" style="padding-inline:0;margin-top:24px">Members</div>
+      <div class="gcard" style="cursor:default;padding:6px 4px">
+        <div class="mem-tbl">${SEC.members.map(m => `
+          <div class="mem-row">
+            <div class="av">${esc((m.name || "U")[0].toUpperCase())}</div>
+            <div class="mem-info"><div class="mem-n">${esc(m.name)} ${m.email === ME.email ? '<span class="you">you</span>' : ""}</div><div class="mem-e">${esc(m.email)}</div></div>
+            <div class="mem-last">${m.last_active ? "active " + timeAgo(m.last_active) : ""}</div>
+            ${isAdmin
+        ? `<select class="input sm role-sel" data-email="${esc(m.email)}" style="width:150px;min-height:36px">${["admin", "officer", "viewer"].map(rid => `<option value="${rid}" ${m.role === rid ? "selected" : ""}>${roleName[rid]}</option>`).join("")}</select>`
+        : `<span class="rbadge ${ROLE_BADGE[m.role]}">${roleName[m.role]}</span>`}
+          </div>`).join("")}</div>
+      </div>
+
+      <div class="sec-grid">
+        <div class="gcard" style="cursor:default">
+          <div class="gv-h">${IC.lock} Single sign-on (SSO)</div>
+          <div class="sso-state ${sso.provider !== "off" ? "on" : ""}">${sso.provider !== "off" ? `${IC.check} ${esc(ssoName)} — configured` : "Not configured — using Wakeel accounts"}</div>
+          <div class="field" style="margin-top:12px"><label>Identity provider</label>
+            <select class="input" id="ssoProv" ${isAdmin ? "" : "disabled"}>
+              <option value="off" ${sso.provider === "off" ? "selected" : ""}>Off — Wakeel accounts</option>
+              ${SEC.sso_providers.map(p => `<option value="${p.id}" ${sso.provider === p.id ? "selected" : ""}>${esc(p.name)} · ${esc(p.proto)}</option>`).join("")}
+            </select></div>
+          <div id="ssoFields"></div>
+          ${isAdmin ? `<button class="btn primary block" id="ssoSave" style="margin-top:6px">Save SSO configuration</button>
+          <div class="sso-note">Federation activates once your IT team completes the handshake with the identity provider.</div>` : ""}
+        </div>
+
+        <div class="gcard" style="cursor:default">
+          <div class="gv-h">${IC.shield} Session &amp; access policy</div>
+          <div class="field"><label>Session timeout (minutes)</label><input class="input" id="polTimeout" type="number" min="5" max="480" value="${pol.session_timeout_min || 30}" ${isAdmin ? "" : "disabled"}></div>
+          <label class="pol-check"><input type="checkbox" id="polMfa" ${pol.mfa_required ? "checked" : ""} ${isAdmin ? "" : "disabled"}><span>Require multi-factor authentication (MFA)</span></label>
+          <div class="field"><label>Allowed email domains</label><input class="input" id="polDomains" value="${esc(pol.allowed_domains || "")}" placeholder="gov.ae, abudhabi.ae" ${isAdmin ? "" : "disabled"}></div>
+          <div class="field"><label>IP allowlist (optional)</label><input class="input" id="polIp" value="${esc(pol.ip_allowlist || "")}" placeholder="e.g. 194.170.0.0/16" ${isAdmin ? "" : "disabled"}></div>
+          ${isAdmin ? `<button class="btn primary block" id="polSave">Save policy</button>` : `<div class="sso-note">Only an Administrator can change the security policy.</div>`}
+        </div>
+      </div>`;
+
+    // role change
+    el.querySelectorAll(".role-sel").forEach(s => s.onchange = async () => {
+      try { await api("POST", "security-role", { email: s.dataset.email, role: s.value }); toast("Role updated"); }
+      catch (e) { toast(e.message, true); }
+    });
+    // SSO provider fields
+    const renderSsoFields = () => {
+      const pid = $("#ssoProv").value;
+      const prov = SEC.sso_providers.find(p => p.id === pid);
+      const cfg = (SEC.sso && SEC.sso.config) || {};
+      const labelize = (k) => ({ tenant_id: "Directory (tenant) ID", client_id: "Application (client) ID", metadata_url: "Federation metadata URL", entity_id: "Entity ID / Issuer", acs_url: "Assertion Consumer Service (ACS) URL" }[k] || k);
+      $("#ssoFields").innerHTML = prov ? prov.fields.map(f => `<div class="field"><label>${labelize(f)}</label><input class="input sso-f" data-k="${f}" value="${esc(cfg[f] || "")}" ${isAdmin ? "" : "disabled"}></div>`).join("") : "";
+    };
+    if ($("#ssoProv")) { $("#ssoProv").onchange = renderSsoFields; renderSsoFields(); }
+    if ($("#ssoSave")) $("#ssoSave").onclick = async () => {
+      const provider = $("#ssoProv").value;
+      const config = {}; el.querySelectorAll(".sso-f").forEach(i => config[i.dataset.k] = i.value.trim());
+      try { const r = await api("POST", "security-sso", { sso: { provider, config } }); SEC.sso = r.sso; toast("SSO configuration saved"); loadSecurity(); }
+      catch (e) { toast(e.message, true); }
+    };
+    if ($("#polSave")) $("#polSave").onclick = async () => {
+      const policy = { session_timeout_min: $("#polTimeout").value, mfa_required: $("#polMfa").checked, allowed_domains: $("#polDomains").value, ip_allowlist: $("#polIp").value };
+      try { await api("POST", "security-policy", { policy }); toast("Security policy saved"); }
+      catch (e) { toast(e.message, true); }
+    };
+  } catch (e) { el.innerHTML = `<div class="empty-mini">⚠️ ${esc(e.message)}</div>`; }
+}
+
 /* ---------- Tasks (run history) ---------- */
 function statusPill(s) { const m = { succeeded: "ok", completed: "ok", running: "run", failed: "bad", planned: "idle" }; return `<span class="st-pill ${m[s] || "idle"}">${esc(s || "—")}</span>`; }
 function viewTasks() {
@@ -1963,7 +2059,7 @@ async function boot() {
   if (m) history.replaceState(null, "", location.pathname + location.hash);
   const h = location.hash.replace("#", "");
   if (h.startsWith("agent/")) { AGENT = h.split("/")[1]; VIEW = "agent"; COPILOT = true; if (window.__autosub) { ASUB = window.__autosub; window.__autosub = null; } }
-  else if (["home", "skills", "teams", "governance", "projects", "inbox", "tasks", "templates", "integrations", "automations", "views", "developers"].includes(h)) VIEW = h;
+  else if (["home", "skills", "teams", "governance", "security", "projects", "inbox", "tasks", "templates", "integrations", "automations", "views", "developers"].includes(h)) VIEW = h;
   try { ME = await api("GET", "me"); } catch (e) { ME = null; }
   if (!ME) return renderLogin();
   try { await api("GET", "sso"); } catch (e) {}
