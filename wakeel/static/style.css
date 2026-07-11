@@ -568,3 +568,27 @@ textarea.input{padding:12px 14px;min-height:auto;resize:none}
 
 /* fix: node panel must actually hide when [hidden] (was showing as a blank column) */
 .node-panel[hidden]{display:none}
+
+/* ---------- fit all agent tabs when the assistant panel is open ---------- */
+.topbar .crumbs{min-width:0}
+.topbar .crumbs b{max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:bottom}
+.agent-tabs{margin-inline-start:10px;flex:0 1 auto;gap:1px}
+.agent-tabs button{padding:6px 9px;font-size:12px;white-space:nowrap}
+.main .topbar .top-actions{flex:none}
+
+/* ---------- Developers / API page ---------- */
+.code-card{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--black,#070b12);margin-bottom:12px}
+.cc-h{display:flex;align-items:center;justify-content:space-between;padding:9px 13px;border-bottom:1px solid var(--line-2);font-size:12px;font-weight:650;color:var(--muted)}
+.code-card pre{margin:0;padding:14px 15px;font-family:var(--mono);font-size:12.5px;line-height:1.7;color:#d7e3ec;white-space:pre-wrap;overflow-x:auto}
+.key-reveal{display:flex;align-items:center;gap:12px;margin-top:14px;padding:13px 15px;border-radius:11px;background:var(--green-soft);border:1px solid #123a2a}
+.key-reveal svg{color:var(--wakeel);flex:none}
+.key-reveal b{font-size:13px}
+.key-val{font-family:var(--mono);font-size:13px;color:var(--text);margin-top:4px;word-break:break-all}
+.key-reveal .btn{flex:none;margin-inline-start:auto}
+.acard code{font-family:var(--mono);background:var(--panel-3);padding:1px 5px;border-radius:5px;font-size:12px}
+
+/* ---------- toast (publish confirmation etc.) ---------- */
+.wk-toast{position:fixed;bottom:24px;left:50%;transform:translate(-50%,20px);z-index:400;display:flex;align-items:center;gap:9px;background:var(--panel-3);border:1px solid #123a2a;border-radius:12px;padding:12px 18px;font-size:13.5px;font-weight:600;color:var(--text);box-shadow:0 16px 40px -14px rgba(0,0,0,.6);opacity:0;transition:.28s;max-width:520px}
+.wk-toast.in{opacity:1;transform:translate(-50%,0)}
+.wk-toast svg{color:var(--wakeel);width:17px;height:17px;flex:none}
+.wk-toast.bad{border-color:#5a1e26}

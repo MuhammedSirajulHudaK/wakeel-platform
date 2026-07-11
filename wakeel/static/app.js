@@ -340,7 +340,7 @@ function renderShell() {
   $("#userBtn").onclick = openProfile;
   $("#supBtn").onclick = openHelp;
   loadAgents();
-  ({ home: viewHome, skills: viewSkills, projects: () => viewEmpty("Projects", "Group related agents, files and notes.", IC.projects), inbox: viewInbox, tasks: viewTasks, templates: viewTemplates, integrations: viewIntegrations, automations: viewAutomations, views: viewAnalytics, agent: viewAgent }[VIEW])();
+  ({ home: viewHome, skills: viewSkills, projects: () => viewEmpty("Projects", "Group related agents, files and notes.", IC.projects), inbox: viewInbox, tasks: viewTasks, templates: viewTemplates, integrations: viewIntegrations, automations: viewAutomations, views: viewAnalytics, developers: viewDevelopers, agent: viewAgent }[VIEW])();
   if (showCop) wireCopilot();
 }
 
@@ -932,10 +932,32 @@ function renderFlowStudio(info) {
       <div><h1>Flow</h1><p>${esc(info.name || "Your agent")} · ${(info.nodes || []).length} steps · <span style="color:var(--wakeel)">edit it by chatting with the assistant →</span></p></div>
       <div class="ctrls">
         <button class="draft-btn ghost" id="simpleBtn" title="Simplified card view">${IC.views} Simple view</button>
+        <button class="draft-btn run" id="studioRun">${IC.play} Run</button>
+        <button class="btn primary sm" id="studioPub">Publish</button>
       </div>
     </div>
     <div class="studio-embed"><iframe id="studioFrame" src="/app/${AGENT}/workflow?embed=wakeel" title="Flow"></iframe></div>`;
   $("#simpleBtn").onclick = () => { ASUB = "simple"; viewAgent(); };
+  $("#studioRun").onclick = () => openRunModal(info);
+  $("#studioPub").onclick = () => publishAgent($("#studioPub"));
+}
+/* Publish = make the current draft the live version (Beam-style "publish/deploy"),
+   so triggers, the API and the automation engine all run this version. */
+async function publishAgent(btn) {
+  const orig = btn.textContent; btn.disabled = true; btn.textContent = "Publishing…";
+  try {
+    await api("POST", "publish", { app_id: AGENT });
+    btn.textContent = "✓ Published";
+    toast("Agent published — it's now live. Triggers, the API and automations run this version.");
+    setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2600);
+  } catch (e) { toast("⚠️ " + e.message, true); btn.textContent = orig; btn.disabled = false; }
+}
+function toast(msg, bad) {
+  const t = document.createElement("div"); t.className = "wk-toast" + (bad ? " bad" : "");
+  t.innerHTML = `${bad ? "" : IC.check} <span>${esc(msg)}</span>`;
+  document.body.appendChild(t);
+  requestAnimationFrame(() => t.classList.add("in"));
+  setTimeout(() => { t.classList.remove("in"); setTimeout(() => t.remove(), 300); }, 3200);
 }
 function orderedNodes(info) {
   const g = info.graph || {}; const edges = g.edges || [];
@@ -995,7 +1017,7 @@ function renderFlow(info) {
   $("#zi").onclick = () => { scale = Math.min(1.3, scale + .1); vf.style.transform = `scale(${scale})`; };
   $("#zo").onclick = () => { scale = Math.max(.6, scale - .1); vf.style.transform = `scale(${scale})`; };
   $("#tmode").onclick = () => $("#tmode").classList.toggle("on");
-  $("#pubBtn").onclick = async () => { $("#pubBtn").textContent = "Publishing…"; try { await api("POST", "publish", { app_id: AGENT }); $("#pubBtn").textContent = "✓ Published"; } catch (e) { alert(e.message); $("#pubBtn").textContent = "Publish"; } };
+  $("#pubBtn").onclick = () => publishAgent($("#pubBtn"));
   $("#runBtn").onclick = () => openRunModal(info);
   if ($("#studioBtn")) $("#studioBtn").onclick = () => { ASUB = "studio"; viewAgent(); };
   if (window.__autorun) { const tx = window.__autorun; window.__autorun = null; $("#tmode").classList.add("on"); setTimeout(() => runFlow(tx), 700); }
@@ -1527,6 +1549,64 @@ function viewAnalytics() {
 }
 function metric(label, val, change, tone) { return `<div class="metric ${tone || ""}"><div class="mv">${val} ${change || ""}</div><div class="ml">${label}</div></div>`; }
 
+/* ---------- Developers / API (Beam-compatible) ---------- */
+function viewDevelopers() {
+  const base = `${location.origin}/wakeel/beam`;
+  const codeblock = (title, body) => `<div class="code-card"><div class="cc-h"><span>${title}</span><button class="btn sm cc-copy">Copy</button></div><pre>${esc(body)}</pre></div>`;
+  const exCreate = `curl -X POST ${base}/agent-tasks \\
+  -H "x-api-key: YOUR_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"agentId":"<AGENT_ID>","input":"A resident reports a broken street light."}'`;
+  const exList = `curl ${base}/agents -H "x-api-key: YOUR_KEY"`;
+  const exGet = `curl ${base}/agent-tasks/<TASK_ID> -H "x-api-key: YOUR_KEY"`;
+  const exActs = `# approve / reject / rate / retry a task
+curl -X POST ${base}/agent-tasks/<TASK_ID>/approve -H "x-api-key: YOUR_KEY"
+curl -X POST ${base}/agent-tasks/<TASK_ID>/rate -H "x-api-key: YOUR_KEY" \\
+  -H "Content-Type: application/json" -d '{"rating":"up"}'`;
+  $("#mainCol").innerHTML = `<div class="topbar"><div class="crumbs"><b>Developers</b><span class="sep">·</span><span style="color:var(--muted)">Beam-compatible API</span></div></div>
+    <div class="content"><div class="pad" style="max-width:860px">
+      <h1 class="page-h">Developers &amp; API</h1>
+      <p class="page-sub">Call your agents from any system with a Beam-compatible REST API. Wakeel translates it to Dify &amp; the bundled automation engine underneath.</p>
+
+      <div class="side-sub" style="padding-inline:0">API keys</div>
+      <div class="gcard" style="cursor:default">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><input class="input" id="keyLabel" placeholder="Key label (e.g. n8n integration)" style="flex:1;min-width:200px"/><button class="btn primary" id="keyGen">${IC.plus} Create API key</button></div>
+        <div id="keyNew"></div>
+        <div id="keyList" style="margin-top:14px"><div class="empty-mini">Loading…</div></div>
+      </div>
+
+      <div class="side-sub" style="padding-inline:0;margin-top:24px">Base URL &amp; auth</div>
+      <div class="acard" style="max-width:100%"><div class="lab">BASE URL</div><div style="font-family:var(--mono);font-size:14px;color:var(--text);margin:5px 0 7px;word-break:break-all">${base}</div><div style="font-size:13px;color:var(--muted)">Send <code>x-api-key: YOUR_KEY</code> on every request. JSON in, JSON out.</div></div>
+
+      <div class="side-sub" style="padding-inline:0;margin-top:24px">Examples</div>
+      ${codeblock("Create a task (run an agent)", exCreate)}
+      ${codeblock("List agents", exList)}
+      ${codeblock("Get a task", exGet)}
+      ${codeblock("Approve / rate a task", exActs)}
+
+      <div class="side-sub" style="padding-inline:0;margin-top:24px">Endpoints</div>
+      <div class="rec-wrap"><table class="rec-tbl"><thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead><tbody>
+        ${[["GET", "/agents", "List agents"], ["GET", "/agent-graphs/{id}", "Agent graph"], ["POST", "/agent-tasks", "Create task (run) {agentId, input}"], ["GET", "/agent-tasks", "List tasks"], ["GET", "/agent-tasks/{id}", "Task details"], ["GET", "/agent-tasks/analytics", "Analytics"], ["POST", "/agent-tasks/{id}/approve", "Approve"], ["POST", "/agent-tasks/{id}/reject", "Reject"], ["POST", "/agent-tasks/{id}/rate", "Rate output {rating}"], ["POST", "/agent-tasks/{id}/retry", "Retry"], ["GET", "/users/current", "Current user"]].map(([m, p, d]) => `<tr><td><span class="st-pill ${m === "GET" ? "info" : "ok"}">${m}</span></td><td style="font-family:var(--mono)">${esc(p)}</td><td class="mut">${esc(d)}</td></tr>`).join("")}
+      </tbody></table></div>
+    </div></div>`;
+  document.querySelectorAll(".cc-copy").forEach(b => b.onclick = () => { const pre = b.closest(".code-card").querySelector("pre"); navigator.clipboard && navigator.clipboard.writeText(pre.textContent); b.textContent = "Copied ✓"; setTimeout(() => b.textContent = "Copy", 1500); });
+  const loadKeys = async () => {
+    try { const d = await api("GET", "beam-keys"); const el = $("#keyList");
+      el.innerHTML = (d.keys || []).length ? (d.keys || []).map(k => `<div class="lrow" style="padding:9px 2px"><div class="ic">${IC.skills}</div><div class="info"><div class="t" style="font-size:13.5px">${esc(k.label)}</div><div class="d" style="font-family:var(--mono)">${esc(k.preview)}</div></div><span class="sys-tag" style="border:0">${timeAgo(k.created)}</span></div>`).join("") : `<div class="empty-mini">No keys yet. Create one to call the API.</div>`;
+    } catch (e) { $("#keyList").innerHTML = `<div class="empty-mini">⚠️ ${esc(e.message)}</div>`; }
+  };
+  $("#keyGen").onclick = async () => {
+    $("#keyGen").disabled = true;
+    try { const r = await api("POST", "beam-key", { label: $("#keyLabel").value.trim() });
+      $("#keyNew").innerHTML = `<div class="key-reveal">${IC.check} <div><b>New key — copy it now, it won't be shown again</b><div class="key-val" id="kv">${esc(r.key)}</div></div><button class="btn sm" id="kvCopy">Copy</button></div>`;
+      $("#kvCopy").onclick = () => { navigator.clipboard && navigator.clipboard.writeText(r.key); $("#kvCopy").textContent = "Copied ✓"; };
+      $("#keyLabel").value = ""; loadKeys();
+    } catch (e) { $("#keyNew").innerHTML = `<div class="empty-mini">⚠️ ${esc(e.message)}</div>`; }
+    finally { $("#keyGen").disabled = false; }
+  };
+  loadKeys();
+}
+
 /* ---------- Automations (Wakeel's bundled engine — embedded same-origin, auto-signed-in) ---------- */
 const AUTO_CREDS = { user: "admin@wakeel.local", pass: "Wakeel12345" };
 function viewAutomations() {
@@ -1612,12 +1692,14 @@ async function openProfile() {
   d.innerHTML = `<div class="modal fade" style="width:380px" onclick="event.stopPropagation()">
     <h2>${esc(ME.email.split("@")[0])} <button class="x" id="pmx">×</button></h2>
     <div style="color:var(--muted);font-size:13px;margin:-8px 0 16px">${esc(ME.email)}</div>
+    <button class="btn block" id="pmDev" style="margin-bottom:12px">${IC.skills} Developers &amp; API</button>
     <div class="side-sub" style="padding-inline:0">Activity</div>
-    <div id="pmActs" style="max-height:280px;overflow:auto"><div class="empty-mini">…</div></div>
+    <div id="pmActs" style="max-height:260px;overflow:auto"><div class="empty-mini">…</div></div>
     <button class="btn block" style="margin-top:14px;border-color:#5a1e26;color:#ff9ba3" id="pmOut">Sign out</button>
   </div>`;
   document.body.appendChild(d);
   d.onclick = () => d.remove(); $("#pmx").onclick = () => d.remove();
+  $("#pmDev").onclick = () => { d.remove(); VIEW = "developers"; renderShell(); };
   $("#pmOut").onclick = async () => { try { await api("POST", "logout"); } catch (e) {} ME = null; d.remove(); renderLogin(); };
   try {
     const r = await api("GET", "activity");
@@ -1642,7 +1724,7 @@ async function boot() {
   if (m) history.replaceState(null, "", location.pathname + location.hash);
   const h = location.hash.replace("#", "");
   if (h.startsWith("agent/")) { AGENT = h.split("/")[1]; VIEW = "agent"; COPILOT = true; if (window.__autosub) { ASUB = window.__autosub; window.__autosub = null; } }
-  else if (["home", "skills", "projects", "inbox", "tasks", "templates", "integrations", "automations", "views"].includes(h)) VIEW = h;
+  else if (["home", "skills", "projects", "inbox", "tasks", "templates", "integrations", "automations", "views", "developers"].includes(h)) VIEW = h;
   try { ME = await api("GET", "me"); } catch (e) { ME = null; }
   if (!ME) return renderLogin();
   try { await api("GET", "sso"); } catch (e) {}
