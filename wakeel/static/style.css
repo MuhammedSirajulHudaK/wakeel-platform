@@ -540,3 +540,16 @@ textarea.input{padding:12px 14px;min-height:auto;resize:none}
 .sch-row .sch-name{flex:1;min-height:38px}
 .sch-row .sch-type{width:120px;flex:none;min-height:38px}
 .sch-row .icn-btn{flex:none}
+
+/* ---------- Getting Started / Core Concepts help ---------- */
+.help-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:20px 0}
+@media(max-width:640px){.help-grid{grid-template-columns:1fr}}
+.help-card{display:flex;gap:12px;padding:14px 15px;border:1px solid var(--line);border-radius:12px;background:var(--panel-2)}
+.help-card .hc-ic{width:32px;height:32px;border-radius:9px;background:var(--panel-3);display:grid;place-items:center;color:var(--wakeel);flex:none}
+.help-card .hc-ic svg{width:17px;height:17px}
+.help-card b{font-size:14px}
+.help-card p{margin:4px 0 0;font-size:12.5px;color:var(--muted);line-height:1.5}
+.help-cta{display:flex;align-items:center;gap:16px;padding:16px 18px;border-radius:13px;background:linear-gradient(180deg,rgba(0,168,98,.10),var(--panel-2));border:1px solid #123a2a}
+.help-cta b{display:block;font-size:15px}
+.help-cta span{font-size:12.5px;color:var(--muted)}
+.help-cta .btn{flex:none;margin-inline-start:auto}

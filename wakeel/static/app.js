@@ -329,7 +329,7 @@ function renderShell() {
   document.querySelectorAll(".nav a").forEach(a => a.onclick = () => { VIEW = a.dataset.v; AGENT = null; COPILOT = false; location.hash = a.dataset.v; renderShell(); });
   $("#newAgent").onclick = () => { VIEW = "home"; THREAD = []; renderShell(); };
   $("#userBtn").onclick = openProfile;
-  $("#supBtn").onclick = () => { VIEW = "home"; renderShell(); };
+  $("#supBtn").onclick = openHelp;
   loadAgents();
   ({ home: viewHome, skills: viewSkills, projects: () => viewEmpty("Projects", "Group related agents, files and notes.", IC.projects), inbox: viewInbox, tasks: viewTasks, templates: viewTemplates, integrations: viewIntegrations, automations: viewAutomations, views: viewAnalytics, agent: viewAgent }[VIEW])();
   if (showCop) wireCopilot();
@@ -1565,6 +1565,30 @@ function viewEmpty(title, sub, ic) {
 }
 
 /* ---------- profile ---------- */
+/* ---------- Getting Started / Core Concepts (Beam-style help) ---------- */
+const CONCEPTS = [
+  ["agent", "Agents", "An autonomous worker you build by describing the job. Wakeel proposes a design, you approve, it builds."],
+  ["flow", "Flow &amp; Triggers", "The step-by-step workflow and how it starts — manual, on a schedule, by webhook, or a Microsoft 365 event."],
+  ["bolt", "Automation Modes", "Per-step Copilot (an officer approves) or Autopilot (runs on its own) — human-in-the-loop where it matters."],
+  ["check", "Evaluate", "Build a test dataset, run it, score the outputs, and let Wakeel optimise the prompts to fix failures."],
+  ["projects", "Records &amp; Views", "The live data the agent reads and writes — the registry as a native, searchable table."],
+  ["book", "Memory &amp; Governance", "Reference documents the agent can use, and an auto-generated policy layer with guardrails."],
+  ["integrations", "Integrations &amp; Automations", "400+ connectors incl. Microsoft 365, run through Wakeel's built-in automation engine."],
+  ["views", "Analytics &amp; Inbox", "Completion, approval and feedback scores over time — and the approval queue where officers decide."],
+];
+function openHelp() {
+  if ($("#hm")) { $("#hm").remove(); return; }
+  const d = document.createElement("div"); d.id = "hm"; d.className = "modal-back";
+  d.innerHTML = `<div class="modal fade" style="width:720px;max-width:94vw" onclick="event.stopPropagation()">
+    <div style="display:flex;align-items:center;gap:12px">${logo("")}<div style="flex:1"><h2 style="margin:0">Getting started with Wakeel</h2><div style="color:var(--muted);font-size:13px">Build, test and deploy government AI agents — in Arabic or English.</div></div><button class="x" id="hx">×</button></div>
+    <div class="help-grid">${CONCEPTS.map(([ic, t, d]) => `<div class="help-card"><div class="hc-ic">${IC[ic] || IC.spark}</div><div><b>${t}</b><p>${d}</p></div></div>`).join("")}</div>
+    <div class="help-cta"><div><b>Build your first agent</b><span>Describe the task in plain language — Wakeel designs it, you review, it deploys.</span></div><button class="btn primary" id="hcBuild">${IC.bolt} Build an agent</button></div>
+    <div style="text-align:center;margin-top:14px"><a class="linky" href="https://champions.innoventures.ae" target="_blank">Community &amp; champions ↗</a></div>
+  </div>`;
+  document.body.appendChild(d); d.onclick = () => d.remove(); $("#hx").onclick = () => d.remove();
+  $("#hcBuild").onclick = () => { d.remove(); VIEW = "home"; THREAD = []; BUILD = true; renderShell(); };
+}
+
 async function openProfile() {
   if ($("#pm")) { $("#pm").remove(); return; }
   const d = document.createElement("div"); d.id = "pm"; d.className = "modal-back";

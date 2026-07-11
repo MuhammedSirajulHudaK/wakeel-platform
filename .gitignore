@@ -273,3 +273,6 @@ docker/.env
 wakeel/*.jsonl
 wakeel/settings.json
 /wakeel ui sample/
+wakeel/automation.json
+wakeel/evaluations.json
+wakeel/records.json
