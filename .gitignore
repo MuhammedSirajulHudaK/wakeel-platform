@@ -267,3 +267,9 @@ web/.vitest-reports/
 docker/volumes/
 wakeel/activity.jsonl
 wakeel/settings.json
+
+# --- Wakeel: local secrets, runtime state, reference sample (never commit) ---
+docker/.env
+wakeel/*.jsonl
+wakeel/settings.json
+/wakeel ui sample/

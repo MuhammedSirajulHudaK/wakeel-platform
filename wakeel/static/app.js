@@ -1,977 +1,1358 @@
-/* Wakeel وكيل — Agentic Platform for UAE Government Entities */
+/* Wakeel وكيل — Beam-style front-end on a live Dify backend */
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => (s || "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-/* ---------------- professional icon set (inline SVG, stroke style) ---------------- */
-const IC_ = (path, extra) => `<svg class="icn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"${extra || ""}>${path}</svg>`;
+/* ---------- icons ---------- */
+const I = (p) => `<svg viewBox="0 0 24 24">${p}</svg>`;
 const IC = {
-  agent: IC_('<rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 8V5"/><circle cx="12" cy="3.5" r="1.2"/><path d="M9.2 13h.01M14.8 13h.01M9.5 16h5"/>'),
-  chat: IC_('<path d="M21 12a8.5 8.5 0 0 1-12.4 7.5L4 21l1.5-4.6A8.5 8.5 0 1 1 21 12z"/>'),
-  data: IC_('<ellipse cx="12" cy="5.5" rx="8" ry="2.8"/><path d="M4 5.5v13c0 1.5 3.6 2.8 8 2.8s8-1.3 8-2.8v-13"/><path d="M4 12c0 1.5 3.6 2.8 8 2.8s8-1.3 8-2.8"/>'),
-  flow: IC_('<rect x="3" y="3" width="6.5" height="6.5" rx="1.6"/><rect x="14.5" y="14.5" width="6.5" height="6.5" rx="1.6"/><path d="M9.5 6.2h6a2 2 0 0 1 2 2v6.3"/>'),
-  book: IC_('<path d="M2 4.5h6.5a3.5 3.5 0 0 1 3.5 3.5v12a3 3 0 0 0-3-3H2zM22 4.5h-6.5A3.5 3.5 0 0 0 12 8v12a3 3 0 0 1 3-3h7z"/>'),
-  chamber: IC_('<path d="M3 21h18M4 9.5h16M12 3L4 9.5h16zM6.5 9.5V18M10.2 9.5V18M13.8 9.5V18M17.5 9.5V18"/>'),
-  economy: IC_('<path d="M3 17l6-6 4 4 7-7"/><path d="M14 8h6v6"/>'),
-  digital: IC_('<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>'),
-  municipality: IC_('<path d="M6 21V7l6-4v18M12 21h6V11l-6-4"/><path d="M8.8 9h.01M8.8 12h.01M8.8 15h.01M15 13h.01M15 16h.01"/>'),
-  health: IC_('<circle cx="12" cy="12" r="8.5"/><path d="M12 8.5v7M8.5 12h7"/>'),
-  education: IC_('<path d="M22 9L12 4.5 2 9l10 4.5L22 9z"/><path d="M6 11.2V16c0 1.4 2.7 2.8 6 2.8s6-1.4 6-2.8v-4.8"/>'),
-  justice: IC_('<path d="M12 4.5v15M9 19.5h6M12 6.5l5.5 1M12 6.5l-5.5 1"/><path d="M3.5 13.5a3 3 0 0 0 6 0L6.5 7.7zM14.5 13.5a3 3 0 0 0 6 0l-3-5.8z"/>'),
-  police: IC_('<path d="M12 3l8 3v5.5c0 5-3.4 8.3-8 9.5-4.6-1.2-8-4.5-8-9.5V6z"/><path d="M9.5 12l2 2 3.5-4"/>'),
-  tax: IC_('<path d="M5.5 3h13v18l-2.2-1.4-2.1 1.4-2.2-1.4-2.1 1.4-2.2-1.4L5.5 21z"/><path d="M9 8.5h6M9 12.5h6"/>'),
-  identity: IC_('<rect x="3" y="5" width="18" height="14" rx="2.2"/><circle cx="8.8" cy="11" r="1.9"/><path d="M6.2 15.8a2.9 2.9 0 0 1 5.2 0M14 9.5h4.5M14 13h4.5"/>'),
-  uae: `<svg class="icn" viewBox="0 0 24 24" fill="none"><rect x="3" y="5.5" width="18" height="4.4" rx="0" fill="#00843D"/><rect x="3" y="9.9" width="18" height="4.2" fill="#ffffff" stroke="#d9d9de" stroke-width="0.4"/><rect x="3" y="14.1" width="18" height="4.4" fill="#101214"/><rect x="3" y="5.5" width="5" height="13" fill="#CE1126"/></svg>`,
-  api: IC_('<path d="M9 7V3.5M15 7V3.5"/><path d="M7 7h10v3.5a5 5 0 0 1-10 0z"/><path d="M12 15.5V21"/>'),
-  cloud: IC_('<path d="M17.5 19a4.5 4.5 0 0 0 .4-9A6 6 0 0 0 6.3 12 4 4 0 0 0 7 19z"/>'),
-  server: IC_('<rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/>'),
-  globe: IC_('<circle cx="12" cy="12" r="8.7"/><path d="M3.3 12h17.4M12 3.3a13.5 13.5 0 0 1 0 17.4 13.5 13.5 0 0 1 0-17.4"/>'),
-  heal: IC_('<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>'),
-  check: IC_('<path d="M20 6L9 17l-5-5"/>'),
+  home: I('<path d="M4 11l8-7 8 7M6 10v9h12v-9"/>'),
+  skills: I('<path d="M6 3h9l3 3v15H6z"/><path d="M9 8h6M9 12h6M9 16h4"/>'),
+  projects: I('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 4v5"/>'),
+  inbox: I('<path d="M4 13l2-8h12l2 8"/><path d="M4 13v6h16v-6M4 13h5l1 2h4l1-2h5"/>'),
+  tasks: I('<path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2"/>'),
+  templates: I('<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>'),
+  integrations: I('<path d="M10 3v6M14 3v6M7 9h10v3a5 5 0 0 1-10 0zM12 17v4"/>'),
+  views: I('<path d="M4 6h16M4 12h10M4 18h7"/>'),
+  agent: I('<rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 8V5"/><circle cx="12" cy="4" r="1"/><path d="M9.3 13h.01M14.7 13h.01M9.5 16h5"/>'),
+  flow: I('<rect x="8" y="3" width="8" height="5" rx="1.5"/><rect x="4" y="16" width="7" height="5" rx="1.5"/><rect x="13" y="16" width="7" height="5" rx="1.5"/><path d="M12 8v4M12 12H7.5v4M12 12h4.5v4"/>'),
+  plus: I('<path d="M12 5v14M5 12h14"/>'),
+  send: I('<path d="M5 12h14M13 6l6 6-6 6"/>'),
+  up: I('<path d="M12 19V6M6 12l6-6 6 6"/>'),
+  upload: I('<path d="M12 15V4M8 8l4-4 4 4M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2"/>'),
+  search: I('<circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/>'),
+  chat: I('<path d="M21 12a8.5 8.5 0 0 1-12.4 7.5L4 21l1.5-4.6A8.5 8.5 0 1 1 21 12z"/>'),
+  book: I('<path d="M4 5a2 2 0 0 1 2-2h12v18H6a2 2 0 0 1-2-2zM8 3v18"/>'),
+  check: I('<path d="M20 6L9 17l-5-5"/>'),
+  spark: I('<path d="M12 3l1.8 4.6L18 9l-4.2 1.6L12 15l-1.8-4.4L6 9l4.2-1.4z"/>'),
+  bolt: I('<path d="M13 3L4 14h7l-1 7 9-11h-7z"/>'),
+  play: I('<path d="M6 4l14 8-14 8z"/>'),
+  help: I('<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 4 2c0 1.5-2 2-2 3.2M12 17h.01"/>'),
 };
 
-/* ---------------- i18n ---------------- */
-const I18N = {
-  en: {
-    platform: "Agentic Platform for Government", login_title: "Wakeel", login_sub: "Sign in with your entity account",
-    email: "Email address", password: "Password", signin: "Sign in", signing: "Signing in…", bad_login: "Invalid credentials",
-    build: "Build", edit: "Edit", test: "Feedback", deploy: "Deploy", market: "Marketplace", community: "Community",
-    st_design: "Design", st_deploy: "Deploy", st_test: "Test", st_ready: "Ready",
-    smoke_ok: "Smoke test passed", smoke_fail: "Needs attention — review in Feedback",
-    build_h: "What should your agent do?", build_sub: "Describe it in plain language — Wakeel builds it for you. Or just chat, or add your documents.",
-    agent: "Build an Agent", chat_mode: "Chat", add_data: "Add data", go: "Build", hint: "↵ to build · Shift+↵ new line",
-    chat_ph: "Ask anything — research a topic, draft a letter, summarize a document…",
-    chat_hint: "↵ to send", send: "Send",
-    kb_name: "Name (e.g. Trade License Policies)", kb_text: "Paste the content — policies, procedures, FAQs…",
-    kb_save: "Add to knowledge", kb_saving: "Adding…", kb_saved: "Added. Your agents can now use this knowledge.",
-    kb_existing: "Your knowledge", kb_docs: "documents", kb_words: "words",
-    edit_h: "Edit an agent", edit_sub: "Open an agent to change how it works — chat with the Build Assistant inside, or adjust the steps visually.",
-    community_h: "Community", community_sub: "Champions and use cases from government innovators across the UAE.",
-    open_ext: "Open in a new tab ↗",
-    ph: "e.g. Review a trade license application, check required fields, and draft an approval or rejection letter…",
-    my_agents: "Your agents & workflows", open_studio: "Open in Studio",
-    planning: "Planning the steps…", built: "Workflow designed — review the steps below", name_ph: "Name this agent",
-    deploy_btn: "Deploy", deployed: "Deployed & published.", open: "Open", test_it: "Test it",
-    chips: ["Summarize a citizen complaint and route it", "Check trade license application completeness", "Draft a bilingual approval letter", "Classify service requests by priority"],
-    market_h: "Government Solutions Marketplace", market_sub: "Pre-built workflows for Abu Dhabi entities. Install to your workspace with one click.",
-    all: "All departments", install: "Install", installing: "Building…", installed: "Installed", steps: "steps",
-    test_h: "Feedback & testing", test_sub: "Give feedback as test cases with expected outcomes. Wakeel scores accuracy and self-heals failures.",
-    pick: "Choose an agent", input: "Test input", expected: "Expected outcome", status: "Status", add_case: "+ Add case",
-    run_tests: "Run tests", running: "Running…", accuracy: "Accuracy", passed: "passed", selfheal: "Self-heal & retest",
-    healing: "Self-healing the workflow…", healed: "Workflow updated — re-running tests…",
-    heal_note: "Self-healing sends failing cases back to the AI, which revises the workflow, then tests run again.",
-    idle: "Idle", pass: "Pass", fail: "Fail", output: "Output",
-    deploy_h: "Deploy & integrate", deploy_sub: "Publish your agent and take it to your channels and infrastructure.",
-    publish: "Publish latest version", published: "Published", get_key: "Create API key", export_dsl: "Export package (DSL)",
-    live: "Live", guide: "Guide", api_card: "Wakeel API", api_desc: "Call this agent from any government system via REST.",
-    azure_card: "Microsoft Azure (UAE North)", azure_desc: "Run the full platform in your Azure tenancy for data residency. Export the package and deploy with the guide.",
-    onprem_card: "On-Premises / Sovereign Cloud", onprem_desc: "Deploy inside your entity's datacenter with Docker Compose or Kubernetes.",
-    web_card: "Web & TAMM channel", web_desc: "Share as a web app or embed into portals.",
-    welcome: "Welcome", signout: "Sign out",
-    created: "Created", activity: "Activity", no_activity: "No activity yet",
-    settings: "Settings", def_model: "Default model for new agents", save: "Save", saved: "Saved",
-    providers: "Model providers", configure: "Configure", active: "Active", not_conf: "Not configured",
-    add_provider: "Add a provider", installing_p: "Installing…", act_provider: "Configured provider",
-    gen_tests: "Generate test cases", generating: "Generating…", act_gen_tests: "Generated test cases",
-    fb_label: "Your feedback for self-healing", fb_ph: "e.g. Replies must always end with a bilingual English/Arabic signature…",
-    gen_hint: "Review the generated cases — edit any of them, remove ones you disagree with, or add your own.",
-    act_login: "Signed in", act_build: "Built an agent", act_install: "Installed from marketplace",
-    act_test: "Ran a test", act_heal: "Self-healed an agent", act_data: "Added knowledge",
-    act_chat: "Chat", act_publish: "Published an agent",
-  },
-  ar: {
-    platform: "المنصة الوكيلة للجهات الحكومية", login_title: "وكيل", login_sub: "سجّل الدخول بحساب جهتك",
-    email: "البريد الإلكتروني", password: "كلمة المرور", signin: "تسجيل الدخول", signing: "جارٍ الدخول…", bad_login: "بيانات غير صحيحة",
-    build: "بناء", edit: "تعديل", test: "التقييم", deploy: "نشر", market: "السوق", community: "المجتمع",
-    st_design: "تصميم", st_deploy: "نشر", st_test: "اختبار", st_ready: "جاهز",
-    smoke_ok: "نجح الاختبار الأولي", smoke_fail: "يحتاج مراجعة — راجع التقييم",
-    build_h: "ماذا تريد أن يفعل وكيلك؟", build_sub: "صِف المطلوب بلغة بسيطة — وكيل يبنيه لك. أو تحدّث معه، أو أضف مستنداتك.",
-    agent: "بناء وكيل", chat_mode: "محادثة", add_data: "أضف بيانات", go: "ابنِ", hint: "↵ للبناء · Shift+↵ سطر جديد",
-    chat_ph: "اسأل عن أي شيء — ابحث في موضوع، اكتب خطاباً، لخّص مستنداً…",
-    chat_hint: "↵ للإرسال", send: "أرسل",
-    kb_name: "الاسم (مثال: سياسات الرخص التجارية)", kb_text: "الصق المحتوى — سياسات، إجراءات، أسئلة شائعة…",
-    kb_save: "أضف إلى المعرفة", kb_saving: "جارٍ الإضافة…", kb_saved: "تمت الإضافة. يمكن لوكلائك الآن استخدام هذه المعرفة.",
-    kb_existing: "معرفتك", kb_docs: "مستندات", kb_words: "كلمة",
-    edit_h: "عدّل وكيلاً", edit_sub: "افتح وكيلاً لتغيير طريقة عمله — تحدّث مع مساعد البناء بداخله أو عدّل الخطوات بصرياً.",
-    community_h: "المجتمع", community_sub: "روّاد وحالات استخدام من مبتكري الحكومة في الإمارات.",
-    open_ext: "افتح في تبويب جديد ↗",
-    ph: "مثال: راجع طلب رخصة تجارية وتحقق من الحقول المطلوبة وأنشئ خطاب موافقة أو رفض…",
-    my_agents: "وكلاؤك وسير أعمالك", open_studio: "افتح في الاستوديو",
-    planning: "جارٍ تخطيط الخطوات…", built: "تم تصميم سير العمل — راجع الخطوات أدناه", name_ph: "اسم الوكيل",
-    deploy_btn: "انشر", deployed: "تم النشر بنجاح.", open: "افتح", test_it: "اختبره",
-    chips: ["لخّص شكوى متعامل ووجّهها", "تحقق من اكتمال طلب رخصة تجارية", "أنشئ خطاب موافقة ثنائي اللغة", "صنّف طلبات الخدمة حسب الأولوية"],
-    market_h: "سوق الحلول الحكومية", market_sub: "سير عمل جاهزة لجهات أبوظبي — ثبّتها في مساحتك بنقرة واحدة.",
-    all: "كل الجهات", install: "تثبيت", installing: "جارٍ البناء…", installed: "تم التثبيت", steps: "خطوات",
-    test_h: "التقييم والاختبار", test_sub: "شغّل حالات اختبار بنتائج متوقعة — وكيل يقيس الدقة ويعالج الإخفاقات ذاتياً.",
-    pick: "اختر وكيلاً", input: "مدخل الاختبار", expected: "النتيجة المتوقعة", status: "الحالة", add_case: "+ أضف حالة",
-    run_tests: "شغّل الاختبارات", running: "جارٍ التشغيل…", accuracy: "الدقة", passed: "ناجحة", selfheal: "معالجة ذاتية وإعادة اختبار",
-    healing: "جارٍ المعالجة الذاتية…", healed: "تم تحديث سير العمل — إعادة الاختبار…",
-    heal_note: "المعالجة الذاتية تعيد الحالات الفاشلة إلى الذكاء الاصطناعي ليعدّل سير العمل ثم تُعاد الاختبارات.",
-    idle: "قيد الانتظار", pass: "نجاح", fail: "إخفاق", output: "الناتج",
-    deploy_h: "النشر والتكامل", deploy_sub: "انشر وكيلك وادمجه في قنواتك وبنيتك التحتية.",
-    publish: "انشر أحدث نسخة", published: "منشور", get_key: "أنشئ مفتاح API", export_dsl: "صدّر الحزمة (DSL)",
-    live: "مباشر", guide: "دليل", api_card: "واجهة وكيل البرمجية", api_desc: "استدعِ هذا الوكيل من أي نظام حكومي عبر REST.",
-    azure_card: "مايكروسوفت أزور (الإمارات الشمالية)", azure_desc: "شغّل المنصة في بيئة أزور الخاصة بجهتك لسيادة البيانات — صدّر الحزمة واتبع الدليل.",
-    onprem_card: "داخل مركز البيانات / سحابة سيادية", onprem_desc: "انشر داخل مركز بيانات جهتك عبر Docker أو Kubernetes.",
-    web_card: "الويب وقناة تم", web_desc: "شارك كتطبيق ويب أو ادمجه في البوابات.",
-    welcome: "مرحباً", signout: "تسجيل الخروج",
-    created: "أُنشئ", activity: "سجل النشاط", no_activity: "لا يوجد نشاط بعد",
-    settings: "الإعدادات", def_model: "النموذج الافتراضي للوكلاء الجدد", save: "احفظ", saved: "تم الحفظ",
-    providers: "مزوّدو النماذج", configure: "إعداد", active: "مفعّل", not_conf: "غير مُعدّ",
-    add_provider: "أضف مزوّداً", installing_p: "جارٍ التثبيت…", act_provider: "أعدّ مزوّداً",
-    gen_tests: "ولّد حالات اختبار", generating: "جارٍ التوليد…", act_gen_tests: "ولّد حالات اختبار",
-    fb_label: "ملاحظاتك للمعالجة الذاتية", fb_ph: "مثال: يجب أن تنتهي الردود دائماً بتوقيع ثنائي اللغة…",
-    gen_hint: "راجع الحالات المولّدة — عدّل أياً منها أو احذف ما لا توافق عليه أو أضف حالاتك.",
-    act_login: "تسجيل دخول", act_build: "بنى وكيلاً", act_install: "ثبّت من السوق",
-    act_test: "شغّل اختباراً", act_heal: "معالجة ذاتية لوكيل", act_data: "أضاف معرفة",
-    act_chat: "محادثة", act_publish: "نشر وكيلاً",
-  },
-};
-let LANG = localStorage.getItem("wakeel_lang") || "en";
-const t = k => (I18N[LANG][k] !== undefined ? I18N[LANG][k] : I18N.en[k] || k);
-function fmtDate(ts) {
-  if (!ts) return "";
-  const d = new Date(typeof ts === "number" ? ts * 1000 : ts);
-  if (isNaN(d)) return "";
-  return new Intl.DateTimeFormat(LANG === "ar" ? "ar-AE" : "en-GB",
-    { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(d);
-}
-function timeAgo(ts) {
-  const s = Math.max(1, Math.floor(Date.now() / 1000 - ts));
-  const units = [[31536000, "y"], [2592000, "mo"], [86400, "d"], [3600, "h"], [60, "m"]];
-  for (const [sec, u] of units) if (s >= sec) return Math.floor(s / sec) + u;
-  return s + "s";
-}
-function applyDir() { document.documentElement.dir = LANG === "ar" ? "rtl" : "ltr"; document.documentElement.lang = LANG; }
-
-/* ---------------- marketplace data: 10 Abu Dhabi entities × 5 workflows ---------------- */
+/* ---------- gov templates ---------- */
 const DEPTS = [
-  { id: "chamber", icn: "chamber", en: "Abu Dhabi Chamber", ar: "غرفة أبوظبي", ic: "🏛️" },
-  { id: "added", icn: "economy", en: "Economic Development (ADDED)", ar: "دائرة التنمية الاقتصادية", ic: "📈" },
-  { id: "tamm", icn: "digital", en: "TAMM / Digital Government", ar: "تم — الحكومة الرقمية", ic: "🖥️" },
-  { id: "dmt", icn: "municipality", en: "Municipalities & Transport", ar: "دائرة البلديات والنقل", ic: "🏗️" },
-  { id: "doh", icn: "health", en: "Department of Health", ar: "دائرة الصحة", ic: "🏥" },
-  { id: "adek", icn: "education", en: "Education & Knowledge (ADEK)", ar: "دائرة التعليم والمعرفة", ic: "🎓" },
-  { id: "adjd", icn: "justice", en: "Judicial Department", ar: "دائرة القضاء", ic: "⚖️" },
-  { id: "police", icn: "police", en: "Abu Dhabi Police", ar: "شرطة أبوظبي", ic: "🛡️" },
-  { id: "fta", icn: "tax", en: "Federal Tax Authority", ar: "الهيئة الاتحادية للضرائب", ic: "🧾" },
-  { id: "icp", icn: "identity", en: "Identity & Citizenship (ICP)", ar: "الهوية والجنسية", ic: "🪪" },
+  ["chamber", "Abu Dhabi Chamber", "غرفة أبوظبي"], ["added", "Economic Development", "التنمية الاقتصادية"],
+  ["tamm", "TAMM / Digital Gov", "تم"], ["dmt", "Municipalities & Transport", "البلديات والنقل"],
+  ["doh", "Department of Health", "الصحة"], ["adek", "Education (ADEK)", "التعليم"],
+  ["adjd", "Judicial Department", "القضاء"], ["police", "Abu Dhabi Police", "الشرطة"],
+  ["fta", "Federal Tax Authority", "الضرائب"], ["icp", "Identity & Citizenship", "الهوية"],
 ];
 const TPL = [
-  // Chamber
-  { d: "chamber", en: "Membership Renewal Assistant", ar: "مساعد تجديد العضوية", ds: "Reviews a membership renewal request, checks required details, drafts the approval letter.", i: "Take a company membership renewal request text, verify company name, license number and expiry are present, then draft a formal approval letter or a list of missing items." },
-  { d: "chamber", en: "Certificate of Origin Checker", ar: "مدقق شهادة المنشأ", ds: "Validates certificate-of-origin requests and drafts the response.", i: "Take a certificate of origin request, check exporter, goods description and destination country are present, then draft an approval note or request for missing information." },
-  { d: "chamber", en: "Trade Inquiry Responder", ar: "الرد على الاستفسارات التجارية", ds: "Answers member trade inquiries in formal bilingual tone.", i: "Take a trade inquiry from a member company, summarize the question, and draft a helpful formal reply in English and Arabic." },
-  { d: "chamber", en: "Event Registration Summarizer", ar: "ملخص تسجيل الفعاليات", ds: "Summarizes event registrations for the events team.", i: "Take a list of event registration entries and produce a summary with counts by company size and a highlights list." },
-  { d: "chamber", en: "Member Feedback Analyzer", ar: "محلل ملاحظات الأعضاء", ds: "Classifies member feedback and proposes actions.", i: "Take member feedback text, classify sentiment and topic, then propose two concrete follow-up actions." },
-  // ADDED
-  { d: "added", en: "Trade License Reviewer", ar: "مراجع الرخص التجارية", ds: "Pre-screens trade license applications for completeness.", i: "Take a trade license application summary, check activity, trade name, owner details and documents are present, output a completeness report and a draft decision." },
-  { d: "added", en: "License Renewal Reminder", ar: "تذكير تجديد الرخصة", ds: "Drafts renewal reminders from license records.", i: "Take a license record with expiry date and company details, and draft a professional renewal reminder in English and Arabic." },
-  { d: "added", en: "Inspection Report Summarizer", ar: "ملخص تقارير التفتيش", ds: "Condenses inspection reports into decisions & actions.", i: "Take a field inspection report, summarize violations found, severity, and produce a recommended action list." },
-  { d: "added", en: "Investor Query Assistant", ar: "مساعد استفسارات المستثمرين", ds: "Answers investor questions about setting up in Abu Dhabi.", i: "Take an investor question about starting a business in Abu Dhabi and draft a clear, structured answer with next steps." },
-  { d: "added", en: "Trade Name Validator", ar: "مدقق الاسم التجاري", ds: "Checks proposed trade names against naming rules.", i: "Take a proposed trade name, check it against common naming rules (no offensive words, no religious references, not misleading), and output pass/fail with reasons." },
-  // TAMM
-  { d: "tamm", en: "Service Request Triage", ar: "فرز طلبات الخدمة", ds: "Classifies incoming service requests and routes them.", i: "Take a citizen service request, classify it by category and urgency, and output the routing decision with a short justification." },
-  { d: "tamm", en: "Complaint Router", ar: "موجّه الشكاوى", ds: "Routes complaints to the right entity with a summary.", i: "Take a citizen complaint, identify the responsible government entity, summarize the complaint in two sentences, and draft an acknowledgment message." },
-  { d: "tamm", en: "Service Guide Assistant", ar: "مساعد دليل الخدمات", ds: "Explains how to complete a government service.", i: "Take a question about a government service and produce a step-by-step guide with required documents and fees placeholders." },
-  { d: "tamm", en: "Customer Sentiment Analyzer", ar: "محلل مشاعر المتعاملين", ds: "Scores feedback sentiment for the happiness index.", i: "Take customer feedback text, output sentiment score 1-10, key drivers, and one improvement suggestion." },
-  { d: "tamm", en: "Appointment Confirmation Drafter", ar: "مسودة تأكيد المواعيد", ds: "Creates bilingual appointment confirmations.", i: "Take appointment details (service, date, location) and draft a bilingual English/Arabic confirmation message." },
-  // DMT
-  { d: "dmt", en: "Building Permit Pre-Check", ar: "الفحص المسبق لرخص البناء", ds: "Pre-validates permit applications before review.", i: "Take a building permit application summary, check plot, consultant, drawings and NOC references are present, and output a pre-check report." },
-  { d: "dmt", en: "Parking Fine Appeal Reviewer", ar: "مراجع اعتراضات المواقف", ds: "Assesses appeals and drafts decisions.", i: "Take a parking fine appeal, assess the justification, and draft an accept or reject decision with reasoning." },
-  { d: "dmt", en: "Road Incident Summarizer", ar: "ملخص بلاغات الطرق", ds: "Summarizes road incident reports for dispatch.", i: "Take a road incident report, extract location, severity and required crew, and output a dispatch summary." },
-  { d: "dmt", en: "Contractor Document Verifier", ar: "مدقق مستندات المقاولين", ds: "Checks contractor submissions for completeness.", i: "Take a contractor document submission list, compare with required documents for classification, and output missing items." },
-  { d: "dmt", en: "Facility Feedback Analyzer", ar: "محلل ملاحظات المرافق", ds: "Turns public facility feedback into maintenance actions.", i: "Take public feedback about a facility, classify the issue type, and produce a prioritized maintenance action." },
-  // DoH
-  { d: "doh", en: "Medical License Screener", ar: "فاحص التراخيص الطبية", ds: "Pre-screens healthcare professional license applications.", i: "Take a medical professional license application summary, check qualifications, experience and documents, and output an eligibility pre-screen." },
-  { d: "doh", en: "Patient Complaint Classifier", ar: "مصنف شكاوى المرضى", ds: "Classifies patient complaints by severity & type.", i: "Take a patient complaint, classify severity (critical/major/minor) and type, and draft an acknowledgment with next steps." },
-  { d: "doh", en: "Facility Inspection Summarizer", ar: "ملخص تفتيش المنشآت الصحية", ds: "Summarizes clinical inspection findings.", i: "Take a health facility inspection report and produce a findings summary with compliance score and corrective actions." },
-  { d: "doh", en: "Insurance Pre-Approval Drafter", ar: "مسودة الموافقات التأمينية", ds: "Drafts insurance pre-approval assessments.", i: "Take a treatment pre-approval request, check policy criteria mentioned, and draft an approval or more-information letter." },
-  { d: "doh", en: "Health Advisory Writer", ar: "كاتب الإرشادات الصحية", ds: "Writes bilingual public health advisories.", i: "Take a health topic and key facts, and write a short public advisory in English and Arabic." },
-  // ADEK
-  { d: "adek", en: "School Registration Assistant", ar: "مساعد تسجيل المدارس", ds: "Guides parents through school registration.", i: "Take a parent's school registration question, and produce required documents, steps, and deadlines guidance." },
-  { d: "adek", en: "Scholarship Application Reviewer", ar: "مراجع طلبات البعثات", ds: "Screens scholarship applications against criteria.", i: "Take a scholarship application summary, evaluate against GPA, major and age criteria, and output an eligibility assessment." },
-  { d: "adek", en: "Parent Inquiry Responder", ar: "الرد على استفسارات أولياء الأمور", ds: "Answers parent inquiries formally.", i: "Take a parent inquiry about schooling, summarize it, and draft a warm formal reply with the relevant policy points." },
-  { d: "adek", en: "Teacher License Checker", ar: "مدقق رخص المعلمين", ds: "Verifies teacher licensing requirements.", i: "Take a teacher's profile summary, check degree, experience and training requirements, and output a licensing checklist result." },
-  { d: "adek", en: "School Report Summarizer", ar: "ملخص تقارير المدارس", ds: "Summarizes school performance reports.", i: "Take a school performance report and output strengths, weaknesses and three recommended interventions." },
-  // ADJD
-  { d: "adjd", en: "Case Filing Assistant", ar: "مساعد قيد الدعاوى", ds: "Prepares case filing summaries and checks documents.", i: "Take a case filing request, check parties, claim type and documents are present, and output a filing readiness summary." },
-  { d: "adjd", en: "Legal Document Summarizer", ar: "ملخص المستندات القانونية", ds: "Summarizes legal documents into plain language.", i: "Take a legal document text and produce a plain-language summary with key obligations and dates." },
-  { d: "adjd", en: "Hearing Schedule Notifier", ar: "إشعارات الجلسات", ds: "Drafts hearing notifications for parties.", i: "Take hearing details (case number, date, court room) and draft formal bilingual notifications for both parties." },
-  { d: "adjd", en: "Contract Clause Extractor", ar: "مستخرج بنود العقود", ds: "Extracts key clauses & risks from contracts.", i: "Take a contract text, extract parties, term, payment, termination and liability clauses, and flag unusual terms." },
-  { d: "adjd", en: "Legal Translation Drafter", ar: "مسودة الترجمة القانونية", ds: "Drafts EN↔AR legal translations for review.", i: "Take a short legal text and produce a careful Arabic translation with translator notes for ambiguous terms." },
-  // Police
-  { d: "police", en: "Incident Report Classifier", ar: "مصنف البلاغات", ds: "Classifies incident reports by type & priority.", i: "Take an incident report, classify type and priority, and output the classification with the recommended unit." },
-  { d: "police", en: "Lost & Found Matcher", ar: "مطابق المفقودات", ds: "Matches lost item reports with found items.", i: "Take a lost item description and a list of found items, and output the best matches with confidence notes." },
-  { d: "police", en: "Traffic Appeal Reviewer", ar: "مراجع التظلمات المرورية", ds: "Reviews traffic fine appeals and drafts decisions.", i: "Take a traffic fine appeal, evaluate the claim, and draft an accept/reject decision with reasoning." },
-  { d: "police", en: "Community Tip Triage", ar: "فرز بلاغات المجتمع", ds: "Triages community tips for follow-up.", i: "Take a community tip, assess credibility and urgency, and output a triage decision with next action." },
-  { d: "police", en: "Report Summary Generator", ar: "مولد ملخص التقارير", ds: "Generates executive summaries of long reports.", i: "Take a long incident report and produce a one-paragraph executive summary and a bullet timeline." },
-  // FTA
-  { d: "fta", en: "VAT Registration Screener", ar: "فاحص تسجيل ضريبة القيمة المضافة", ds: "Pre-screens VAT registration applications.", i: "Take a VAT registration application summary, check turnover threshold and documents, and output an eligibility screen." },
-  { d: "fta", en: "Tax Query Assistant", ar: "مساعد الاستفسارات الضريبية", ds: "Answers routine tax questions clearly.", i: "Take a taxpayer question, and draft a clear answer with the relevant rule summarized in plain language." },
-  { d: "fta", en: "Return Anomaly Explainer", ar: "شرح ملاحظات الإقرارات", ds: "Explains anomalies found in tax returns.", i: "Take a tax return anomaly description and draft a clear letter asking the taxpayer for clarification." },
-  { d: "fta", en: "Penalty Appeal Drafter", ar: "مسودة اعتراض الغرامات", ds: "Assesses penalty appeals and drafts outcomes.", i: "Take a penalty appeal, evaluate the stated cause against common waiver criteria, and draft a decision." },
-  { d: "fta", en: "Invoice Compliance Checker", ar: "مدقق توافق الفواتير", ds: "Checks invoices against e-invoicing rules.", i: "Take an invoice's field list, check required VAT invoice fields are present, and output a compliance report." },
-  // ICP
-  { d: "icp", en: "Visa Application Pre-Screener", ar: "الفحص المسبق للتأشيرات", ds: "Pre-screens visa applications for completeness.", i: "Take a visa application summary, check passport validity, sponsor and documents, and output a pre-screen result." },
-  { d: "icp", en: "Document Expiry Notifier", ar: "إشعار انتهاء المستندات", ds: "Drafts expiry reminders for IDs & permits.", i: "Take a resident's document record with expiry dates and draft a bilingual reminder listing renewal steps." },
-  { d: "icp", en: "Golden Visa Eligibility Checker", ar: "مدقق أهلية الإقامة الذهبية", ds: "Checks golden visa eligibility categories.", i: "Take an applicant profile, evaluate against golden visa categories (investor, talent, student), and output eligibility with the strongest category." },
-  { d: "icp", en: "Application Status Explainer", ar: "شرح حالة الطلب", ds: "Explains application statuses in simple terms.", i: "Take an application status code and history, and draft a simple explanation of where the application stands and what happens next." },
-  { d: "icp", en: "Family Sponsorship Assistant", ar: "مساعد إقامة العائلة", ds: "Guides family sponsorship requirements.", i: "Take a sponsor's situation summary and output the family sponsorship requirements, documents and steps." },
+  ["added", "Trade License Reviewer", "مراجع الرخص التجارية", "Pre-screens trade license applications for completeness and drafts a decision.", "Take a trade license application summary, check activity, trade name, owner details and documents, output a completeness report and a draft approval or rejection letter."],
+  ["added", "License Renewal Reminder", "تذكير تجديد الرخصة", "Drafts bilingual renewal reminders from license records.", "Take a license record with expiry date and company details, draft a professional renewal reminder in English and Arabic."],
+  ["tamm", "Service Request Triage", "فرز طلبات الخدمة", "Classifies incoming service requests and routes them.", "Take a citizen service request, classify by category and urgency, output the routing decision with a short justification."],
+  ["tamm", "Complaint Router", "موجّه الشكاوى", "Routes complaints to the right entity with a summary.", "Take a citizen complaint, identify the responsible entity, summarize in two sentences, draft an acknowledgment."],
+  ["chamber", "Membership Renewal Assistant", "مساعد تجديد العضوية", "Reviews renewal requests and drafts the approval letter.", "Take a company membership renewal request, verify company name, license number and expiry, draft an approval letter or a list of missing items."],
+  ["doh", "Patient Complaint Classifier", "مصنف شكاوى المرضى", "Classifies patient complaints by severity and type.", "Take a patient complaint, classify severity and type, draft an acknowledgment with next steps."],
+  ["dmt", "Building Permit Pre-Check", "الفحص المسبق لرخص البناء", "Pre-validates permit applications before review.", "Take a building permit application summary, check plot, consultant, drawings and NOC references, output a pre-check report."],
+  ["adek", "Scholarship Application Reviewer", "مراجع طلبات البعثات", "Screens scholarship applications against criteria.", "Take a scholarship application summary, evaluate against GPA, major and age criteria, output an eligibility assessment."],
+  ["adjd", "Legal Document Summarizer", "ملخص المستندات القانونية", "Summarizes legal documents into plain language.", "Take a legal document text, produce a plain-language summary with key obligations and dates."],
+  ["police", "Incident Report Classifier", "مصنف البلاغات", "Classifies incident reports by type and priority.", "Take an incident report, classify type and priority, output the classification with the recommended unit."],
+  ["fta", "VAT Registration Screener", "فاحص تسجيل ضريبة القيمة المضافة", "Pre-screens VAT registration applications.", "Take a VAT registration application summary, check turnover threshold and documents, output an eligibility screen."],
+  ["icp", "Golden Visa Eligibility Checker", "مدقق أهلية الإقامة الذهبية", "Checks golden visa eligibility categories.", "Take an applicant profile, evaluate against golden visa categories (investor, talent, student), output eligibility with the strongest category."],
 ];
 
-/* ---------------- state ---------------- */
-let ME = null, APPS = [], MODE = "workflow", LASTGRAPH = null, TAB = "build";
-let CASES = [{ input: "", expected: "", status: "idle" }];
-let TESTAPP = "", TESTBUSY = false, DEPT = "all", INSTALLED = {};
+const INTEG_CATS = [
+  ["Microsoft 365", ["Microsoft Outlook", "Microsoft SharePoint", "Excel on SharePoint", "OneDrive", "Microsoft Teams", "Microsoft Word", "Power BI", "Power Automate", "Microsoft Entra ID", "Microsoft Graph"]],
+  ["UAE Government", ["UAE Pass", "TAMM", "Abu Dhabi Gov Cloud", "MoHRE Systems", "ICP", "Federal Tax Authority", "Emirates Post"]],
+  ["Google Workspace", ["Gmail", "Google Drive", "Google Sheets", "Google Calendar", "Google Docs"]],
+  ["Communication", ["Slack", "Twilio SMS", "WhatsApp Business", "SendGrid", "Telegram"]],
+  ["CRM & Support", ["Salesforce", "HubSpot", "Zendesk", "Freshdesk", "ServiceNow", "Intercom"]],
+  ["Productivity", ["Notion", "Airtable", "Jira", "Confluence", "Asana", "ClickUp", "Trello", "Monday.com"]],
+  ["Databases", ["PostgreSQL", "MySQL", "Microsoft SQL Server", "Oracle", "MongoDB", "Redis"]],
+  ["Storage", ["Azure Blob Storage", "Amazon S3", "Dropbox", "Box"]],
+  ["ERP & Finance", ["SAP", "Oracle ERP", "DocuSign", "Adobe PDF Services", "Stripe"]],
+  ["Automation", ["Wakeel Automations", "Webhooks", "REST API", "Zapier", "Make"]],
+  ["AI Models", ["Azure OpenAI", "OpenAI", "Anthropic Claude", "Google Gemini", "Ollama (local)", "vLLM"]],
+];
+// connectors that map to a real Dify plugin (installable natively in Wakeel)
+const PLUGIN_MAP = { "Microsoft Outlook": "outlook", "OneDrive": "onedrive", "Microsoft SharePoint": "onedrive", "Excel on SharePoint": "onedrive", "Gmail": "gmail", "Google Drive": "google", "Slack": "slack", "Notion": "notion", "GitHub": "github" };
+// connector name → Dify tool-provider path (for the Configure credential form)
+const PROVIDER_MAP = { "Microsoft Outlook": "langgenius/outlook/outlook", "OneDrive": "langgenius/onedrive/microsoft_onedrive", "Microsoft SharePoint": "langgenius/onedrive/microsoft_onedrive", "Excel on SharePoint": "langgenius/onedrive/microsoft_onedrive" };
+let TOOLS_INSTALLED = [];
+function isConnected(name) { const pl = PLUGIN_MAP[name]; return pl && TOOLS_INSTALLED.some(x => x === "langgenius/" + pl); }
+
+/* ---------- real brand logos (inline SVG) — replaces generic icons/emoji ---------- */
+const L = {
+  microsoft: '<svg viewBox="0 0 24 24"><rect x="2" y="2" width="9" height="9" fill="#F25022"/><rect x="13" y="2" width="9" height="9" fill="#7FBA00"/><rect x="2" y="13" width="9" height="9" fill="#00A4EF"/><rect x="13" y="13" width="9" height="9" fill="#FFB900"/></svg>',
+  outlook: '<svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2.5" fill="#0F6CBD"/><path d="M4 8.2l8 5 8-5" fill="none" stroke="#fff" stroke-width="1.6"/><rect x="1" y="8" width="10" height="9" rx="2" fill="#0A4C86"/><text x="6" y="15" font-size="8" fill="#fff" text-anchor="middle" font-family="Arial" font-weight="700">O</text></svg>',
+  excel: '<svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="18" rx="2.5" fill="#107C41"/><rect x="2" y="3" width="9" height="18" rx="2.5" fill="#0B5C30"/><path d="M4.5 8l4 8M8.5 8l-4 8" stroke="#fff" stroke-width="1.7"/></svg>',
+  sharepoint: '<svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="5.2" fill="#036C70"/><circle cx="15" cy="13" r="5" fill="#1A9BA1"/><circle cx="12" cy="18" r="4" fill="#37C6D0"/><text x="9" y="10.6" font-size="6.4" fill="#fff" text-anchor="middle" font-family="Arial" font-weight="700">S</text></svg>',
+  onedrive: '<svg viewBox="0 0 24 24"><path d="M8 18a4 4 0 0 1-.6-8 5.5 5.5 0 0 1 10-1.5A3.6 3.6 0 0 1 20 18z" fill="#0364B8"/><path d="M8 18a4 4 0 0 1-.6-8A5.5 5.5 0 0 1 10 6.4 5.5 5.5 0 0 0 6 14a4 4 0 0 0 2 4z" fill="#0A2767" opacity=".25"/></svg>',
+  teams: '<svg viewBox="0 0 24 24"><rect x="4" y="7" width="12" height="11" rx="2.5" fill="#5059C9"/><text x="10" y="15.5" font-size="8.5" fill="#fff" text-anchor="middle" font-family="Arial" font-weight="700">T</text><circle cx="18" cy="7" r="3" fill="#7B83EB"/></svg>',
+  word: '<svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="18" rx="2.5" fill="#185ABD"/><rect x="2" y="3" width="9" height="18" rx="2.5" fill="#103F86"/><text x="12" y="16" font-size="10" fill="#fff" text-anchor="middle" font-family="Georgia" font-weight="700">W</text></svg>',
+  powerbi: '<svg viewBox="0 0 24 24"><rect x="4" y="10" width="4" height="10" rx="1" fill="#F2C811"/><rect x="10" y="6" width="4" height="14" rx="1" fill="#E8A200"/><rect x="16" y="3" width="4" height="17" rx="1" fill="#C97F00"/></svg>',
+  entra: '<svg viewBox="0 0 24 24"><path d="M12 3l8 16H4z" fill="none" stroke="#0F6CBD" stroke-width="1.8"/><path d="M12 3l8 16H12z" fill="#0F6CBD" opacity=".6"/></svg>',
+  graph: '<svg viewBox="0 0 24 24"><circle cx="6" cy="7" r="2.4" fill="#0F6CBD"/><circle cx="18" cy="7" r="2.4" fill="#00A4EF"/><circle cx="12" cy="17" r="2.6" fill="#5059C9"/><path d="M7.8 8.4L11 15M16.2 8.4L13 15M8 7h8" stroke="#7A8CA8" stroke-width="1.3"/></svg>',
+  google: '<svg viewBox="0 0 24 24"><path d="M21.6 12.2c0-.7-.06-1.2-.16-1.75H12v3.35h5.4a4.6 4.6 0 0 1-2 3v2.5h3.2c1.9-1.75 3-4.3 3-7.1z" fill="#4285F4"/><path d="M12 22c2.7 0 5-.9 6.6-2.4l-3.2-2.5c-.9.6-2 1-3.4 1-2.6 0-4.8-1.75-5.6-4.1H3.1v2.6A10 10 0 0 0 12 22z" fill="#34A853"/><path d="M6.4 14a6 6 0 0 1 0-3.9V7.5H3.1a10 10 0 0 0 0 9z" fill="#FBBC05"/><path d="M12 6c1.5 0 2.8.5 3.8 1.5l2.85-2.85A10 10 0 0 0 3.1 7.5l3.3 2.6C7.2 7.75 9.4 6 12 6z" fill="#EA4335"/></svg>',
+  gmail: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2" fill="#fff"/><path d="M4 6l8 6 8-6" fill="none" stroke="#EA4335" stroke-width="2"/><path d="M3 7v10a1.5 1.5 0 0 0 1.5 1.5H7V10z" fill="#4285F4"/><path d="M21 7v10a1.5 1.5 0 0 1-1.5 1.5H17V10z" fill="#34A853"/><path d="M7 10l5 3.5L17 10v-.2l-5 3.5L7 9.8z" fill="#C5221F"/></svg>',
+  gdrive: '<svg viewBox="0 0 24 24"><path d="M8.6 4l6.8 12h-6.8L1.8 16z" fill="#0066DA" opacity=".01"/><path d="M9 3l6 10.4H3z" fill="#00AC47"/><path d="M15 3l6 10.4h-6L9 3z" fill="#FFBA00"/><path d="M3 13.4L6 19h12l3-5.6H9z" fill="#0066DA"/><path d="M3 13.4L9 3l3 5.2-3 5.2z" fill="#00832D" opacity=".2"/></svg>',
+  gsheets: '<svg viewBox="0 0 24 24"><rect x="4" y="2" width="16" height="20" rx="2" fill="#0F9D58"/><rect x="7" y="8" width="10" height="9" rx="1" fill="#fff"/><path d="M7 11.5h10M7 14.5h10M12 8v9" stroke="#0F9D58" stroke-width="1.1"/></svg>',
+  slack: '<svg viewBox="0 0 24 24"><path d="M6 15a2 2 0 1 1-2-2h2zM7 15a2 2 0 0 1 4 0v5a2 2 0 1 1-4 0z" fill="#E01E5A"/><path d="M9 6a2 2 0 1 1 2 2H9zM9 7a2 2 0 0 1 0 4H4a2 2 0 1 1 0-4z" fill="#36C5F0"/><path d="M18 9a2 2 0 1 1 2 2h-2zM17 9a2 2 0 0 1-4 0V4a2 2 0 1 1 4 0z" fill="#2EB67D"/><path d="M15 18a2 2 0 1 1-2 2v-2zM15 17a2 2 0 0 1 0-4h5a2 2 0 1 1 0 4z" fill="#ECB22E"/></svg>',
+  notion: '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3" fill="#fff" stroke="#111" stroke-width=".5"/><path d="M8 16.5v-9l8 9V7.5" stroke="#111" stroke-width="1.7" fill="none"/></svg>',
+  wakeel: '<svg viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="5" fill="#00a862"/><rect x="2" y="2" width="4" height="20" fill="#CE1126"/><text x="13" y="16.5" font-size="12" fill="#fff" text-anchor="middle" font-family="Tahoma" font-weight="700">و</text></svg>',
+  gemini: '<svg viewBox="0 0 24 24"><path d="M12 2c.4 5.2 4.4 9.2 10 10-5.6.8-9.6 4.8-10 10-.4-5.2-4.4-9.2-10-10 5.6-.8 9.6-4.8 10-10z" fill="#3186FF"/></svg>',
+  openai: '<svg viewBox="0 0 24 24"><path d="M12 4a4 4 0 0 1 3.9 3.1A4 4 0 0 1 18 14a4 4 0 0 1-3.9 5A4 4 0 0 1 6 16.9 4 4 0 0 1 6 10a4 4 0 0 1 6-6z" fill="none" stroke="#10A37F" stroke-width="1.6"/><circle cx="12" cy="12" r="2" fill="#10A37F"/></svg>',
+  anthropic: '<svg viewBox="0 0 24 24"><path d="M8.5 5L3 19h3l1.1-3h5.4l1.1 3h3L14.1 5zm-.3 8.4L10 8.6l1.8 4.8z" fill="#D97757"/></svg>',
+  salesforce: '<svg viewBox="0 0 24 24"><path d="M6 17a4 4 0 0 1-.5-8 5 5 0 0 1 9-1.5A3.5 3.5 0 1 1 16 17z" fill="#00A1E0"/></svg>',
+  hubspot: '<svg viewBox="0 0 24 24"><circle cx="9" cy="15" r="3.4" fill="none" stroke="#FF7A59" stroke-width="1.8"/><path d="M15 9V5M15 9a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM11.4 13.5L14 11" stroke="#FF7A59" stroke-width="1.6"/></svg>',
+  zendesk: '<svg viewBox="0 0 24 24"><path d="M12 8v11L3 8z" fill="#03363D"/><path d="M12 16V5l9 11z" fill="#03363D"/></svg>',
+  jira: '<svg viewBox="0 0 24 24"><path d="M12 2l9 9-9 9-3-3 6-6-6-6z" fill="#2684FF"/><path d="M12 8l3 3-3 3-3-3z" fill="#0052CC"/></svg>',
+  sap: '<svg viewBox="0 0 24 24"><rect x="1" y="6" width="22" height="12" rx="1.5" fill="#0FAAFF"/><text x="12" y="15" font-size="7" fill="#fff" text-anchor="middle" font-family="Arial" font-weight="800">SAP</text></svg>',
+  stripe: '<svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="18" rx="3" fill="#635BFF"/><text x="12" y="16" font-size="11" fill="#fff" text-anchor="middle" font-family="Arial" font-weight="800">S</text></svg>',
+  twilio: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#F22F46"/><circle cx="9.5" cy="9.5" r="1.7" fill="#fff"/><circle cx="14.5" cy="9.5" r="1.7" fill="#fff"/><circle cx="9.5" cy="14.5" r="1.7" fill="#fff"/><circle cx="14.5" cy="14.5" r="1.7" fill="#fff"/></svg>',
+  whatsapp: '<svg viewBox="0 0 24 24"><path d="M3 21l1.6-5A9 9 0 1 1 8 19.4z" fill="#25D366"/><path d="M8.5 8c-.3 0-.6.1-.8.4-.3.4-.9 1-.9 2.2s.9 2.5 1 2.7c.1.2 1.8 3 4.5 4 .7.3 1.7.5 2.3.3.5-.1 1.3-.7 1.5-1.3.1-.4.1-.7 0-.8-.1-.1-1.3-.7-1.5-.7-.2-.1-.3-.1-.5.1s-.5.7-.6.8c-.1.1-.2.1-.4 0-.2-.1-1-.4-1.8-1.1-.7-.6-1.1-1.3-1.2-1.5-.1-.2 0-.3.1-.4l.3-.4c.1-.1.2-.2.2-.4s0-.3-.1-.4c0-.1-.5-1.4-.7-1.9-.2-.4-.4-.4-.6-.4z" fill="#fff"/></svg>',
+  postgres: '<svg viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="8" ry="9" fill="none" stroke="#336791" stroke-width="1.8"/><path d="M9 20c-1-3-1-8 0-11M15 4c1 3 1 9 0 12" stroke="#336791" stroke-width="1.4" fill="none"/></svg>',
+  mysql: '<svg viewBox="0 0 24 24"><path d="M3 16c3 0 6-1 8-4M4 12a12 12 0 0 1 10 6" fill="none" stroke="#00758F" stroke-width="1.6"/><path d="M16 15c2 2 4 2 5 3" stroke="#F29111" stroke-width="1.6" fill="none"/></svg>',
+  mongodb: '<svg viewBox="0 0 24 24"><path d="M12 2c3 4 5 7 5 11a5 5 0 0 1-5 5 5 5 0 0 1-5-5c0-4 2-7 5-11z" fill="#4DB33D"/><path d="M12 4v17" stroke="#3F9B2E" stroke-width="1"/></svg>',
+  github: '<svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 0 0-3.2 19.5c.5.1.7-.2.7-.5v-2c-2.8.6-3.4-1.2-3.4-1.2-.4-1-1-1.3-1-1.3-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.5 2.3 1.1 2.9.8.1-.6.3-1.1.6-1.3-2.2-.3-4.6-1.1-4.6-5a4 4 0 0 1 1-2.7c-.1-.3-.5-1.3.1-2.7 0 0 .8-.3 2.7 1a9.4 9.4 0 0 1 5 0c1.9-1.3 2.7-1 2.7-1 .6 1.4.2 2.4.1 2.7a4 4 0 0 1 1 2.7c0 3.9-2.4 4.7-4.6 5 .3.3.6.9.6 1.8v2.6c0 .3.2.6.7.5A10 10 0 0 0 12 2z" fill="#fff"/></svg>',
+  uaepass: '<svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2.5" fill="#000"/><rect x="2" y="4" width="5" height="16" fill="#ff0000"/><path d="M10 9h8M10 12h8M10 15h5" stroke="#fff" stroke-width="1.3"/><path d="M2 4h20v3H2z" fill="#00843D"/></svg>',
+};
+// name → logo key; plus brand color for monogram fallback
+const LOGO_MAP = {
+  "Microsoft Outlook": "outlook", "Microsoft SharePoint": "sharepoint", "Excel on SharePoint": "excel",
+  "OneDrive": "onedrive", "Microsoft Teams": "teams", "Microsoft Word": "word", "Power BI": "powerbi",
+  "Power Automate": "microsoft", "Microsoft Entra ID": "entra", "Microsoft Graph": "graph",
+  "Gmail": "gmail", "Google Drive": "gdrive", "Google Sheets": "gsheets", "Google Calendar": "google",
+  "Google Docs": "google", "Slack": "slack", "Notion": "notion", "Wakeel Automations": "wakeel", "Google Gemini": "gemini",
+  "OpenAI": "openai", "Azure OpenAI": "openai", "Anthropic Claude": "anthropic", "Salesforce": "salesforce",
+  "HubSpot": "hubspot", "Zendesk": "zendesk", "Jira": "jira", "Confluence": "jira", "SAP": "sap",
+  "Oracle ERP": "sap", "Stripe": "stripe", "Twilio SMS": "twilio", "WhatsApp Business": "whatsapp",
+  "PostgreSQL": "postgres", "MySQL": "mysql", "MongoDB": "mongodb", "GitHub": "github", "UAE Pass": "uaepass",
+};
+const BRAND_COLOR = {
+  "MoHRE Systems": "#0a7d47", "TAMM": "#1a4f8b", "Abu Dhabi Gov Cloud": "#0a7d47", "ICP": "#8a1538",
+  "Federal Tax Authority": "#0a5c8a", "Emirates Post": "#e2001a", "Microsoft SQL Server": "#a4262c",
+  "Oracle": "#c74634", "Redis": "#d82c20", "Azure Blob Storage": "#0078d4", "Amazon S3": "#e2711d",
+  "Dropbox": "#0061ff", "Box": "#0061d5", "DocuSign": "#d4341f", "Adobe PDF Services": "#fa0f00",
+  "Airtable": "#fcb400", "Asana": "#f06a6a", "ClickUp": "#7b68ee", "Trello": "#0079bf", "Monday.com": "#ff3d57",
+  "Freshdesk": "#25c16f", "ServiceNow": "#62d84e", "Intercom": "#1f8ded", "Telegram": "#2aabee",
+  "SendGrid": "#1a82e2", "Webhooks": "#3b6", "REST API": "#3b6", "Zapier": "#ff4a00", "Make": "#6d00cc",
+  "Ollama (local)": "#5a5a5a", "vLLM": "#6a3bd8", "Emirates Post": "#e2001a",
+};
+function monoColor(name) { let h = 0; for (const c of name) h = (h * 31 + c.charCodeAt(0)) & 0xffffff; const hue = h % 360; return `hsl(${hue} 42% 42%)`; }
+function brandLogo(name, size = 38) {
+  const k = LOGO_MAP[name];
+  if (k && L[k]) {
+    const bg = (k === "notion" || k === "github" || k === "openai") ? "#0d1526" : "transparent";
+    return `<span class="blogo" style="width:${size}px;height:${size}px;background:${bg}">${L[k]}</span>`;
+  }
+  const base = name.replace(/^(Microsoft |Google |Amazon |Oracle )/, "");
+  const initials = base.split(/[ .]/).filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase() || base.slice(0, 2).toUpperCase();
+  return `<span class="blogo mono" style="width:${size}px;height:${size}px;background:${BRAND_COLOR[name] || monoColor(name)}">${esc(initials)}</span>`;
+}
+/* pick a topical icon for an agent based on its name */
+function agentIcon(name) {
+  const n = (name || "").toLowerCase();
+  if (/emirat|mohre|labou?r|workforce/.test(n)) return { ic: IC.agent, cl: "ag-green" };
+  if (/complaint|citizen|route|triage/.test(n)) return { ic: IC.inbox, cl: "ag-amber" };
+  if (/licen|trade|permit|renewal|membership/.test(n)) return { ic: IC.projects, cl: "ag-blue" };
+  if (/incident|police|safety|road|emergency/.test(n)) return { ic: IC.bolt, cl: "ag-red" };
+  if (/summar|legal|document|report|letter/.test(n)) return { ic: IC.book, cl: "ag-violet" };
+  if (/health|patient|clinic|medical/.test(n)) return { ic: IC.help, cl: "ag-teal" };
+  if (/tax|vat|finance|invoice|payment/.test(n)) return { ic: IC.templates, cl: "ag-gold" };
+  return { ic: IC.spark, cl: "ag-slate" };
+}
+
+async function openToolConfig(name) {
+  const provider = PROVIDER_MAP[name];
+  const d = document.createElement("div"); d.className = "modal-back";
+  d.innerHTML = `<div class="modal fade" style="width:540px" onclick="event.stopPropagation()">
+    <div style="display:flex;align-items:center"><h2 style="flex:1">Configure ${esc(name)}</h2><button class="x" id="tcx">×</button></div>
+    <div id="tcBody"><div class="empty-mini"><span class="spin" style="display:inline-block;vertical-align:middle"></span> Loading credential fields…</div></div>
+  </div>`;
+  document.body.appendChild(d); d.onclick = () => d.remove(); $("#tcx").onclick = () => d.remove();
+  if (!provider) { $("#tcBody").innerHTML = `<div class="page-sub">No native credential form for this connector.</div>`; return; }
+  try {
+    const s = await api("GET", "tool-schema?provider=" + encodeURIComponent(provider));
+    const fields = s.fields || [];
+    $("#tcBody").innerHTML = `
+      <div style="color:var(--muted);font-size:13px;margin:-6px 0 16px">Connect your Microsoft account. Get a Microsoft Graph token from your Entra ID app (permissions: Mail.Send, Files.ReadWrite, Sites.ReadWrite) or Microsoft Graph Explorer.</div>
+      ${fields.length ? fields.map(f => `<div class="field"><label>${esc(f.label)}${f.required ? " *" : ""}</label><input class="input" data-f="${esc(f.name)}" type="${f.type === "secret-input" ? "password" : "text"}" placeholder="${esc(f.help || f.label)}"/></div>`).join("") : `<div class="field"><label>Access token</label><input class="input" data-f="access_token" type="password" placeholder="Microsoft Graph access token"/></div>`}
+      <div style="display:flex;align-items:center;gap:12px;margin-top:8px"><button class="btn primary sm" id="tcSave">Connect</button><span class="page-sub" style="margin:0" id="tcMsg"></span></div>
+      <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--line-2);font-size:12px;color:var(--faint)">Tip: for production, register an Entra ID app once — Wakeel then reuses the token. This is a government data-residency step handled by your IT.</div>`;
+    $("#tcSave").onclick = async () => {
+      const creds = {}; d.querySelectorAll("input[data-f]").forEach(i => { if (i.value.trim()) creds[i.dataset.f] = i.value.trim(); });
+      if (!Object.keys(creds).length) { $("#tcMsg").textContent = "Enter a token first"; return; }
+      $("#tcSave").disabled = true; $("#tcMsg").textContent = "Connecting…";
+      try { await api("POST", "tool-connect", { provider, credentials: creds, name: name, type: s.type }); $("#tcMsg").textContent = "✓ Connected"; setTimeout(() => d.remove(), 900); }
+      catch (e) { $("#tcMsg").textContent = "⚠️ " + e.message; $("#tcSave").disabled = false; }
+    };
+  } catch (e) { $("#tcBody").innerHTML = `<div class="empty-mini">⚠️ ${esc(e.message)}</div>`; }
+}
+const SKILLS = ["ai-product-strategy", "conducting-user-interviews", "giving-presentations", "writing-prds", "positioning-messaging", "pricing-strategy", "personas", "writing-north-star-metrics", "running-effective-1-1s", "having-difficult-conversations", "writing-job-descriptions"];
+
+/* ---------- i18n ---------- */
+const T = {
+  // shell / nav
+  "Home": "الرئيسية", "Skills": "المهارات", "Projects": "المشاريع", "Inbox": "الوارد",
+  "Tasks": "المهام", "Agent templates": "قوالب الوكلاء", "Integrations": "التكاملات",
+  "Automations": "الأتمتة", "Analytics": "التحليلات", "Your agents": "وكلاؤك",
+  "New agent": "وكيل جديد", "Chat & support": "المحادثة والدعم", "Loading…": "جارٍ التحميل…",
+  "No agents yet": "لا يوجد وكلاء بعد", "Wakeel AI": "وكيل الذكي", "Beta": "تجريبي",
+  // agent tabs
+  "Flow": "المخطط", "Triggers": "المشغّلات", "Memory": "الذاكرة",
+  "Governance": "الحوكمة", "Instructions": "التعليمات",
+  // home
+  "What do you want to work on?": "بماذا تريد أن تعمل؟",
+  "Ask Wakeel to perform tasks, build an agent, or brainstorm ideas": "اطلب من وكيل تنفيذ المهام أو بناء وكيل أو طرح الأفكار",
+  "Build agents": "بناء الوكلاء", "Recommended": "موصى به",
+  "Review a trade license application": "مراجعة طلب رخصة تجارية",
+  "Route a citizen complaint": "توجيه شكوى مواطن",
+  "Draft a bilingual approval letter": "صياغة خطاب موافقة ثنائي اللغة",
+  "Summarize a legal document": "تلخيص مستند قانوني",
+  "Reply to Wakeel…": "الرد على وكيل…",
+  "Reply with any changes, or press Build this agent…": "اكتب أي تعديلات أو اضغط «بناء هذا الوكيل»…",
+  "Describe the changes you want…": "صِف التعديلات التي تريدها…",
+  "Upload file": "رفع ملف", "Add skills": "إضافة مهارات", "Add integration": "إضافة تكامل",
+  // design proposal
+  "Flow architecture": "هيكل المخطط", "Nodes": "العقد", "Allowed statuses": "الحالات المسموحة",
+  "Key design decisions": "قرارات التصميم الرئيسية", "Guardrails": "الضوابط",
+  "Shall I go ahead and build this agent?": "هل أتابع وأبني هذا الوكيل؟",
+  "Build this agent": "بناء هذا الوكيل", "Request changes": "طلب تعديلات",
+  "Here's the full design for your": "إليك التصميم الكامل لـ",
+  ". Review it and let me know if you'd like any changes before I build it.": "، راجعه وأخبرني إن رغبت بأي تعديلات قبل أن أبنيه.",
+  // buttons / common
+  "Create agent": "إنشاء وكيل", "Configure": "إعداد", "Install & connect": "تثبيت وربط",
+  "Request": "طلب", "Installed": "مُثبّت", "Get URL": "الحصول على الرابط", "Choose": "اختيار",
+  "Save schedule": "حفظ الجدولة", "Native plugin": "إضافة أصلية", "Publish": "نشر",
+  "Connect Microsoft 365": "ربط Microsoft 365", "All": "الكل", "Active": "نشط", "Save": "حفظ",
+  // triggers
+  "How this agent starts. Multiple triggers can feed the same flow.": "كيف يبدأ هذا الوكيل. يمكن لعدة مشغّلات تغذية المخطط نفسه.",
+  "Manual run": "تشغيل يدوي",
+  "Run on demand from Test mode or the API. Always available.": "تشغيل عند الطلب من وضع الاختبار أو الواجهة البرمجية. متاح دائمًا.",
+  "Schedule": "جدولة", "Run on a timer — hourly, daily, or a cron expression.": "تشغيل على مؤقّت — كل ساعة أو يوميًا أو بتعبير cron.",
+  "Webhook / API": "Webhook / API",
+  "Trigger from any government system via a secure URL with an API key.": "التشغيل من أي نظام حكومي عبر رابط آمن مع مفتاح واجهة برمجية.",
+  "Integration event": "حدث تكامل",
+  "New email (Outlook), file updated (SharePoint), row added (Excel)…": "بريد جديد (Outlook)، تحديث ملف (SharePoint)، إضافة صف (Excel)…",
+  "Connect Outlook, SharePoint & Excel. Wakeel's built-in automation engine handles the Microsoft connectors and the schedule — the agent does the AI. One Microsoft sign-in, then it runs automatically on your timer.": "اربط Outlook وSharePoint وExcel. يتولى محرّك الأتمتة المدمج في وكيل موصّلات مايكروسوفت والجدولة — والوكيل يتولى الذكاء. تسجيل دخول واحد بمايكروسوفت، ثم يعمل تلقائيًا وفق مؤقّتك.",
+  "Sign in with Microsoft": "تسجيل الدخول بمايكروسوفت",
+  "Add automation to Wakeel": "إضافة الأتمتة إلى وكيل",
+  // integrations
+  "Choose integration": "اختر التكامل", "Search connectors by name…": "ابحث عن الموصّلات بالاسم…",
+  // automations
+  "Open Automations ↗": "فتح الأتمتة ↗", "Schedule & trigger": "الجدولة والتشغيل",
+  "400+ connectors": "أكثر من 400 موصّل", "Calls your agents": "يستدعي وكلاءك",
+  "Install & connect": "تثبيت وربط",
+  // integrations / tasks / inbox / analytics page copy
+  "Connect Wakeel agents to the systems your entity uses —": "اربط وكلاء وكيل بالأنظمة التي تستخدمها جهتك —",
+  "connectors across Microsoft 365, UAE government, databases and more.": "موصّلًا عبر Microsoft 365 والحكومة الإماراتية وقواعد البيانات وغيرها.",
+  "Every agent run — status, steps and duration. Click one to see the step-by-step log.": "كل تشغيل للوكيل — الحالة والخطوات والمدة. اضغط على أيٍّ منها لعرض السجل خطوة بخطوة.",
+  "Agents draft; officers decide. Review each output and approve, reject, or edit before it's actioned.": "الوكلاء يصيغون، والموظفون يقرّرون. راجع كل مُخرَج واعتمده أو ارفضه أو عدّله قبل تنفيذه.",
+  "How your agents are performing across all runs.": "كيف يؤدّي وكلاؤك عبر جميع عمليات التشغيل.",
+  // automations
+  "Connector & workflow engine": "محرّك الموصّلات وسير العمل",
+  "Wakeel's built-in connector & scheduling engine —": "محرّك الموصّلات والجدولة المدمج في وكيل —",
+  "bundled in this deployment": "مضمّن في هذا التثبيت",
+  ". 400+ connectors including all of Microsoft 365, Google, databases and HTTP. Automations read/write across your systems and call your Wakeel agents for the AI.": ". أكثر من 400 موصّل تشمل كامل Microsoft 365 وGoogle وقواعد البيانات وHTTP. تقرأ الأتمتة وتكتب عبر أنظمتك وتستدعي وكلاءك للذكاء الاصطناعي.",
+  "Runs in your stack for data residency · sign in:": "يعمل ضمن بنيتك لضمان سيادة البيانات · تسجيل الدخول:",
+  "Daily/cron runs, webhooks, \"new email\" or \"row added\" events — the entry points your agents react to.": "تشغيل يومي/cron وWebhooks وأحداث «بريد جديد» أو «صف مضاف» — نقاط الدخول التي يتفاعل معها وكلاؤك.",
+  "Outlook, SharePoint, Excel, Teams, Google, SAP, databases, HTTP — the connector layer Wakeel's agents act through.": "Outlook وSharePoint وExcel وTeams وGoogle وSAP وقواعد البيانات وHTTP — طبقة الموصّلات التي يعمل عبرها وكلاء وكيل.",
+  "An automation step calls a Wakeel agent's API for the reasoning, then acts on the result (send, update, escalate).": "تستدعي خطوة الأتمتة واجهة الوكيل البرمجية للتفكير، ثم تنفّذ بناءً على النتيجة (إرسال، تحديث، تصعيد).",
+  // profile
+  "Describe a task. Wakeel handles it.": "صِف مهمة، ووكيل يتولّاها.",
+  "Edit this flow by chatting — add a step, change a prompt, add a condition.": "عدّل هذا المخطط بالمحادثة — أضف خطوة أو غيّر تعليمة أو أضف شرطًا.",
+  "Ask Wakeel to edit this flow…": "اطلب من وكيل تعديل هذا المخطط…",
+  "Sign out": "تسجيل الخروج", "Activity": "النشاط", "Government of Abu Dhabi": "حكومة أبوظبي",
+};
+function t(s) { return LANG === "ar" ? (T[s] || s) : s; }
+
+/* ---------- state ---------- */
+let ME = null, LANG = localStorage.getItem("wakeel_lang") || "en";
+let VIEW = "home", BUILD = true, AGENT = null, ASUB = "flow", COPILOT = false;
+let APPS = [], THREAD = [], LASTGRAPH = null, LASTDESIGN = null, DEPT = "all", CFGNODE = null;
 
 async function api(method, path, body) {
-  const r = await fetch("api/" + path, {
-    method, headers: { "Content-Type": "application/json" },
-    body: body ? JSON.stringify(body) : undefined, credentials: "include",
-  });
+  const r = await fetch("api/" + path, { method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined, credentials: "include" });
   const d = await r.json().catch(() => ({}));
-  if (r.status === 401) { ME = null; renderLogin(); throw new Error("session expired"); }
+  if (r.status === 401 && path !== "me") { ME = null; renderLogin(); throw new Error("session expired"); }
   if (!r.ok) throw new Error(d.error || r.status);
   return d;
 }
+function applyDir() { document.documentElement.dir = LANG === "ar" ? "rtl" : "ltr"; document.documentElement.lang = LANG; }
+function logo(cls = "") { return `<div class="logo ${cls}"><span>و</span></div>`; }
 
-/* ---------------- login ---------------- */
+/* ---------- login ---------- */
 function renderLogin() {
   applyDir();
   $("#root").innerHTML = `
-  <div class="login">
-    <div class="login-card fade">
-      <div class="mark"><span>وكيل</span></div>
-      <h1>${t("login_title")} <span class="ar-name">${LANG === "ar" ? "Wakeel" : "وكيل"}</span></h1>
-      <div class="sub">${t("platform")}<br>${t("login_sub")}</div>
-      <div class="field"><label>${t("email")}</label><input id="em" type="email" autocomplete="username" /></div>
-      <div class="field"><label>${t("password")}</label><input id="pw" type="password" autocomplete="current-password" /></div>
-      <button class="btn block" id="go">${t("signin")}</button>
-      <div class="err" id="err"></div>
-      <div class="foot">${IC.uae} Government of Abu Dhabi · <a href="#" id="langsw" style="color:var(--green)">${LANG === "en" ? "العربية" : "English"}</a></div>
+  <div class="signin fade">
+    <div class="signin-hero">
+      <div class="wave"></div>
+      <div class="hero-logo"><div class="logo" style="width:40px;height:40px;border-radius:12px"><span>وكيل</span></div><div style="font-size:22px;font-weight:800">Wakeel</div></div>
+      <div class="hero-copy"><h2>The agentic platform for government.</h2><p>Any employee builds, tests and deploys AI agents — in Arabic or English. Describe the task, Wakeel does the rest.</p></div>
+      <div class="hero-foot">🇦🇪 Government of Abu Dhabi · وكيل</div>
     </div>
+    <div class="signin-form"><div class="signin-card">
+      <h1>Sign in</h1><div class="sub">Use your entity account to continue.</div>
+      <div class="field"><label>Email address</label><input class="input" id="em" type="email" autocomplete="username"/></div>
+      <div class="field"><label>Password</label><input class="input" id="pw" type="password" autocomplete="current-password"/></div>
+      <button class="btn primary block" id="go">Sign in</button>
+      <div class="err" id="err"></div>
+      <div style="margin-top:22px;color:var(--faint);font-size:12px">Government of Abu Dhabi · <span class="linky" id="lang">${LANG === "en" ? "العربية" : "English"}</span></div>
+    </div></div>
   </div>`;
-  $("#langsw").onclick = e => { e.preventDefault(); LANG = LANG === "en" ? "ar" : "en"; localStorage.setItem("wakeel_lang", LANG); renderLogin(); };
+  $("#lang").onclick = () => { LANG = LANG === "en" ? "ar" : "en"; localStorage.setItem("wakeel_lang", LANG); renderLogin(); };
   const go = async () => {
-    $("#go").disabled = true; $("#go").textContent = t("signing"); $("#err").textContent = "";
-    try {
-      await api("POST", "login", { email: $("#em").value.trim(), password: $("#pw").value });
-      await boot();
-    } catch (e) { $("#err").textContent = t("bad_login"); $("#go").disabled = false; $("#go").textContent = t("signin"); }
+    $("#go").disabled = true; $("#go").textContent = "Signing in…"; $("#err").textContent = "";
+    try { await api("POST", "login", { email: $("#em").value.trim(), password: $("#pw").value }); await boot(); }
+    catch (e) { $("#err").textContent = "Invalid credentials"; $("#go").disabled = false; $("#go").textContent = "Sign in"; }
   };
-  $("#go").onclick = go;
-  $("#pw").addEventListener("keydown", e => { if (e.key === "Enter") go(); });
+  $("#go").onclick = go; $("#pw").addEventListener("keydown", e => { if (e.key === "Enter") go(); });
 }
 
-/* ---------------- shell ---------------- */
+/* ---------- shell ---------- */
+const NAV = [["home", "Home", IC.home], ["skills", "Skills", IC.skills], ["projects", "Projects", IC.projects], ["inbox", "Inbox", IC.inbox], ["tasks", "Tasks", IC.tasks], ["templates", "Agent templates", IC.templates], ["integrations", "Integrations", IC.integrations], ["automations", "Automations", IC.flow], ["views", "Analytics", IC.views]];
+
 function renderShell() {
   applyDir();
-  const tabs = [
-    ["build", t("build"), '<svg viewBox="0 0 24 24" width="16" height="16"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/></svg>'],
-    ["edit", t("edit"), '<svg viewBox="0 0 24 24" width="16" height="16"><path d="M4 20h4L20 8l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>'],
-    ["test", t("test"), '<svg viewBox="0 0 24 24" width="16" height="16"><path d="M9 12l2 2 4-5"/><circle cx="12" cy="12" r="9"/></svg>'],
-    ["deploy", t("deploy"), '<svg viewBox="0 0 24 24" width="16" height="16"><path d="M12 19V5M5 12l7-7 7 7"/></svg>'],
-    ["market", t("market"), '<svg viewBox="0 0 24 24" width="16" height="16"><path d="M4 7h16l-1.5 12h-13z"/><path d="M8 7a4 4 0 0 1 8 0"/></svg>'],
-    ["community", t("community"), '<svg viewBox="0 0 24 24" width="16" height="16"><circle cx="9" cy="8" r="3.2"/><circle cx="16.5" cy="9.5" r="2.5"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0M13.5 18.5a4.3 4.3 0 0 1 7 -2.7"/></svg>'],
-  ];
+  const showCop = COPILOT && VIEW === "agent" && ASUB !== "flow";
   $("#root").innerHTML = `
-  <div class="shell">
-    <div class="topbar">
-      <div class="brand">
-        <div class="mark"><span>وكيل</span></div>
-        <div><div class="brand-name">Wakeel</div><div class="brand-sub">${t("platform")}</div></div>
+  <div class="app">
+    <aside class="side">
+      <div class="side-top">${logo()}<div class="nm">Wakeel</div><span class="beta">${t("Beta")}</span></div>
+      <nav class="nav">${NAV.map(([id, label, ic]) => `<a class="${VIEW === id ? "active" : ""}" data-v="${id}">${ic}<span>${t(label)}</span></a>`).join("")}</nav>
+      <div class="side-sub">${t("Your agents")}</div>
+      <div class="agent-list" id="agentList"><div class="empty-mini">${t("Loading…")}</div></div>
+      <div class="new-agent" id="newAgent">${IC.plus} ${t("New agent")}</div>
+      <div class="side-foot">
+        <div class="foot-row" id="supBtn">${IC.help}<span>${t("Chat & support")}</span></div>
+        <div class="foot-row" id="userBtn"><div class="av">${esc((ME.email || "U")[0].toUpperCase())}</div><span>${esc(ME.email.split("@")[0])}</span></div>
       </div>
-      <div class="tabs">${tabs.map(([id, label, ic]) => `<button class="tab ${TAB === id ? "active" : ""}" data-tab="${id}">${ic}${label}</button>`).join("")}</div>
-      <div class="top-right">
-        <button class="lang" id="gear" title="${t("settings")}"><svg viewBox="0 0 24 24" width="15" height="15"><circle cx="12" cy="12" r="3.2"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3 1a7 7 0 0 0-2-1.2L14.2 3h-4l-.4 2.7a7 7 0 0 0-2 1.2l-2.3-1-2 3.4 2 1.5a7 7 0 0 0 0 2.4l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 2 1.2l.4 2.7h4l.4-2.7a7 7 0 0 0 2-1.2l2.3 1 2-3.4-2-1.5c.06-.4.1-.8.1-1.2z"/></svg></button>
-        <button class="lang" id="lang">${LANG === "en" ? "العربية" : "EN"}</button>
-        <div class="avatar" id="avatar" title="${esc(ME.email)}">${esc((ME.email || "U")[0].toUpperCase())}</div>
-      </div>
-    </div>
-    <div class="main" id="view"></div>
-    <div class="bottomnav">${tabs.map(([id, label, ic]) => `<button class="bn-i ${TAB === id ? "active" : ""}" data-tab="${id}">${ic}<span>${label}</span></button>`).join("")}</div>
+    </aside>
+    <main class="main" id="mainCol"></main>
+    ${showCop ? renderCopilot() : ""}
   </div>`;
-  document.querySelectorAll(".tab, .bn-i").forEach(b => b.onclick = () => { TAB = b.dataset.tab; location.hash = TAB; renderShell(); });
-  $("#lang").onclick = () => { LANG = LANG === "en" ? "ar" : "en"; localStorage.setItem("wakeel_lang", LANG); renderShell(); };
-  $("#avatar").onclick = toggleProfile;
-  $("#gear").onclick = openSettings;
-  ({ build: renderBuild, edit: renderEdit, test: renderTest, deploy: renderDeploy, market: renderMarket, community: renderCommunity }[TAB])();
+  document.querySelectorAll(".nav a").forEach(a => a.onclick = () => { VIEW = a.dataset.v; AGENT = null; COPILOT = false; location.hash = a.dataset.v; renderShell(); });
+  $("#newAgent").onclick = () => { VIEW = "home"; THREAD = []; renderShell(); };
+  $("#userBtn").onclick = openProfile;
+  $("#supBtn").onclick = () => { VIEW = "home"; renderShell(); };
+  loadAgents();
+  ({ home: viewHome, skills: viewSkills, projects: () => viewEmpty("Projects", "Group related agents, files and notes.", IC.projects), inbox: viewInbox, tasks: viewTasks, templates: viewTemplates, integrations: viewIntegrations, automations: viewAutomations, views: viewAnalytics, agent: viewAgent }[VIEW])();
+  if (showCop) wireCopilot();
 }
 
-/* ---------------- BUILD ---------------- */
-let BMODE = "agent";           // agent | chat | data
-let CHAT = [];                 // chat history for the Chat mode
-
-function renderBuild() {
-  const pills = `
-    <div class="mode-row">
-      <button class="pill ${BMODE === "agent" ? "active" : ""}" data-m="agent">${IC.agent} ${t("agent")}</button>
-      <button class="pill ${BMODE === "chat" ? "active" : ""}" data-m="chat">${IC.chat} ${t("chat_mode")}</button>
-      <button class="pill ${BMODE === "data" ? "active" : ""}" data-m="data">${IC.data} ${t("add_data")}</button>
-    </div>`;
-  let inner = "";
-  if (BMODE === "agent") {
-    inner = `
-    <div class="composer">${pills}
-      <textarea id="ins" placeholder="${esc(t("ph"))}"></textarea>
-      <div class="composer-foot"><span class="hint">${t("hint")}</span><button class="btn" id="build">${t("go")} →</button></div>
-    </div>
-    <div class="chips">${t("chips").map(c => `<button class="chip">${esc(c)}</button>`).join("")}</div>
-    <div class="feed" id="feed"></div>
-    <div class="sect-h"><h3>${t("my_agents")}</h3></div>
-    <div class="grid" id="agents"><div class="empty">…</div></div>`;
-  } else if (BMODE === "chat") {
-    inner = `
-    <div class="composer">${pills}
-      <div class="feed" id="chatlog" style="margin:6px 0 10px;max-height:46vh;overflow:auto"></div>
-      <textarea id="cmsg" placeholder="${esc(t("chat_ph"))}"></textarea>
-      <div class="composer-foot"><span class="hint">${t("chat_hint")}</span><button class="btn" id="csend">${t("send")} →</button></div>
-    </div>`;
-  } else {
-    inner = `
-    <div class="composer">${pills}
-      <div class="field" style="margin-top:6px"><input id="kbn" placeholder="${esc(t("kb_name"))}" style="width:100%;border:1px solid var(--hairline);border-radius:12px;padding:11px 14px;font-size:14px;outline:0"/></div>
-      <textarea id="kbt" placeholder="${esc(t("kb_text"))}" style="min-height:140px"></textarea>
-      <div class="composer-foot"><span class="hint" id="kbmsg"></span><button class="btn" id="kbsave">${t("kb_save")} ↑</button></div>
-    </div>
-    <div class="sect-h"><h3>${t("kb_existing")}</h3></div>
-    <div class="grid" id="kblist"><div class="empty">…</div></div>`;
-  }
-  $("#view").innerHTML = `
-  <div class="fade">
-    <div class="build-hero">
-      <div class="halo">✦</div>
-      <h2>${t("build_h")}</h2><p>${t("build_sub")}</p>
-    </div>
-    ${inner}
-  </div>`;
-  document.querySelectorAll(".pill").forEach(p => p.onclick = () => { BMODE = p.dataset.m; renderBuild(); });
-
-  if (BMODE === "agent") {
-    document.querySelectorAll(".chip").forEach(c => c.onclick = () => { $("#ins").value = c.textContent; $("#ins").focus(); });
-    $("#build").onclick = doBuild;
-    $("#ins").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); doBuild(); } });
-    loadAgents();
-    if (window.__prefill) { $("#ins").value = window.__prefill; window.__prefill = null; doBuild(); }
-  } else if (BMODE === "chat") {
-    drawChat();
-    $("#csend").onclick = doChat;
-    $("#cmsg").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); doChat(); } });
-    $("#cmsg").focus();
-  } else {
-    $("#kbsave").onclick = doAddData;
-    loadKnowledge();
-  }
-}
-
-function drawChat() {
-  const log = $("#chatlog"); if (!log) return;
-  log.innerHTML = "";
-  CHAT.forEach(m => {
-    const d = document.createElement("div");
-    if (m.role === "user") { d.className = "bubble-me"; d.textContent = m.content; }
-    else { d.className = "evt"; d.innerHTML = `<div class="ic">و</div><div style="white-space:pre-wrap;font-size:14px">${esc(m.content)}</div>`; }
-    log.appendChild(d);
-  });
-  log.scrollTop = log.scrollHeight;
-}
-
-async function doChat() {
-  const msg = $("#cmsg").value.trim(); if (!msg) return;
-  $("#cmsg").value = "";
-  CHAT.push({ role: "user", content: msg }); drawChat();
-  const log = $("#chatlog");
-  const w = document.createElement("div"); w.className = "evt run";
-  w.innerHTML = `<div class="ic"><div class="spin"></div></div><div class="st">…</div>`;
-  log.appendChild(w); log.scrollTop = log.scrollHeight;
+const SUBTABS = [["flow", "Flow", IC.flow], ["triggers", "Triggers", IC.integrations], ["memory", "Memory", IC.book], ["governance", "Governance", IC.check], ["instructions", "Instructions", IC.skills]];
+async function loadAgents() {
   try {
-    const r = await api("POST", "chat", { message: msg, history: CHAT.slice(0, -1) });
-    CHAT.push({ role: "assistant", content: r.reply });
-  } catch (e) { CHAT.push({ role: "assistant", content: "⚠️ " + e.message }); }
-  drawChat();
-}
-
-async function doAddData() {
-  const name = $("#kbn").value.trim(), text = $("#kbt").value.trim();
-  if (!name || !text) return;
-  $("#kbsave").disabled = true; $("#kbmsg").textContent = t("kb_saving");
-  try {
-    await api("POST", "knowledge", { name, text });
-    $("#kbmsg").textContent = "✅ " + t("kb_saved");
-    $("#kbn").value = ""; $("#kbt").value = "";
-    loadKnowledge();
-  } catch (e) { $("#kbmsg").textContent = "⚠️ " + e.message; }
-  finally { $("#kbsave").disabled = false; }
-}
-
-async function loadKnowledge() {
-  try {
-    const d = await api("GET", "knowledge");
-    const el = $("#kblist"); if (!el) return;
-    el.innerHTML = (d.knowledge || []).length ? "" : `<div class="empty">—</div>`;
-    (d.knowledge || []).forEach(k => {
-      const c = document.createElement("div");
-      c.className = "acard";
-      c.innerHTML = `<div class="ic">${IC.book}</div><div class="nm">${esc(k.name)}</div><div class="md">${k.docs || 0} ${t("kb_docs")} · ${k.words || 0} ${t("kb_words")}</div>`;
-      el.appendChild(c);
+    const d = await api("GET", "apps"); APPS = d.apps || [];
+    const el = $("#agentList"); if (!el) return;
+    if (!APPS.length) { el.innerHTML = `<div class="empty-mini">${t("No agents yet")}</div>`; return; }
+    el.innerHTML = "";
+    APPS.forEach(a => {
+      const open = (a.id === AGENT && VIEW === "agent");
+      const x = document.createElement("a");
+      if (open) x.classList.add("open");
+      const ai = agentIcon(a.name);
+      x.innerHTML = `<span class="dot ${ai.cl}">${ai.ic}</span><span class="an">${esc(a.name)}</span><span class="caret">${open ? "▾" : "▸"}</span>`;
+      x.onclick = () => open ? (VIEW = "agent") && renderShell() : openAgent(a.id, "flow");
+      el.appendChild(x);
+      if (open) {
+        const tree = document.createElement("div"); tree.className = "agent-subtree";
+        SUBTABS.forEach(([id, label, ic]) => {
+          const s = document.createElement("a"); s.className = "sub-item" + ((ASUB === id || (id === "flow" && ASUB === "simple")) ? " active" : "");
+          s.innerHTML = `${ic}<span>${t(label)}</span>`;
+          s.onclick = (e) => { e.stopPropagation(); ASUB = id; CFGNODE = null; renderShell(); };
+          tree.appendChild(s);
+        });
+        el.appendChild(tree);
+      }
     });
   } catch (e) {}
 }
 
-let EDITAPP = "";
+/* ---------- HOME ---------- */
+function viewHome() {
+  $("#mainCol").innerHTML = `
+    <div class="topbar"><div class="crumbs">${logo("")}<b>${t("Wakeel AI")}</b></div>
+      <div class="top-actions"><button class="icn-btn" id="langBtn">${LANG === "en" ? "ع" : "EN"}</button></div></div>
+    <div class="home" id="homeArea"></div>`;
+  $("#langBtn").onclick = () => { LANG = LANG === "en" ? "ar" : "en"; localStorage.setItem("wakeel_lang", LANG); renderShell(); };
+  THREAD.length ? drawThread() : drawComposerHome();
+}
 
-function gotoEdit(id) { EDITAPP = id; TAB = "edit"; location.hash = "edit"; renderShell(); }
-
-function renderEdit() {
-  if (EDITAPP) {
-    const app = APPS.find(a => a.id === EDITAPP);
-    // full-bleed editor: fills everything under the topbar, edge to edge
-    $("#view").innerHTML = `
-    <div class="fade" style="position:fixed;top:61px;left:0;right:0;bottom:var(--bnav,0px);z-index:30;display:flex;flex-direction:column;background:var(--bg)">
-      <div style="display:flex;align-items:center;gap:12px;padding:8px 16px;border-bottom:1px solid var(--hairline-2);background:rgba(255,255,255,.85);backdrop-filter:blur(16px)">
-        <button class="btn quiet sm" id="edback">← ${t("edit_h")}</button>
-        <div style="font-weight:750">${esc(app ? app.name : "")}</div>
-        <button class="btn sm" id="edtest" style="margin-inline-start:auto">${t("test")} →</button>
+function drawComposerHome() {
+  $("#homeArea").innerHTML = `
+    <div class="home-inner fade">
+      <h1>${t("What do you want to work on?")}</h1>
+      <div class="composer">
+        <textarea id="ins" rows="2" placeholder="${t("Ask Wakeel to perform tasks, build an agent, or brainstorm ideas")}"></textarea>
+        <div class="composer-foot">
+          <div class="toggle-pill ${BUILD ? "on" : ""}" id="buildToggle"><span class="lm">و</span> ${t("Build agents")}</div>
+          <button class="plus-btn" id="plusBtn">${IC.plus}<div class="pop" id="plusPop" hidden>
+            <a data-a="upload">${IC.upload} ${t("Upload file")}</a>
+            <a data-a="skills">${IC.skills} ${t("Add skills")}</a>
+            <a data-a="integration">${IC.integrations} ${t("Add integration")}</a>
+          </div></button>
+          <button class="send-btn" id="sendBtn">${IC.up}</button>
+        </div>
       </div>
-      <iframe src="/app/${EDITAPP}/workflow" style="flex:1;width:100%;border:0;background:#fff" title="Editor"></iframe>
+      <div class="recommend">
+        <div class="rh">${IC.spark} ${t("Recommended")}</div>
+        <div class="chips">
+          <button class="chip">${t("Review a trade license application")}</button>
+          <button class="chip">${t("Route a citizen complaint")}</button>
+          <button class="chip">${t("Draft a bilingual approval letter")}</button>
+          <button class="chip">${t("Summarize a legal document")}</button>
+        </div>
+      </div>
     </div>`;
-    $("#edback").onclick = () => { EDITAPP = ""; renderEdit(); };
-    $("#edtest").onclick = () => { TESTAPP = EDITAPP; TAB = "test"; location.hash = "test"; renderShell(); };
-    return;
+  $("#buildToggle").onclick = () => { BUILD = !BUILD; $("#buildToggle").classList.toggle("on", BUILD); };
+  $("#plusBtn").onclick = (e) => { e.stopPropagation(); const p = $("#plusPop"); p.hidden = !p.hidden; };
+  document.querySelectorAll("#plusPop a").forEach(a => a.onclick = (e) => { e.stopPropagation(); plusAction(a.dataset.a); });
+  document.querySelectorAll(".chip").forEach(c => c.onclick = () => { $("#ins").value = c.textContent; $("#ins").focus(); });
+  $("#sendBtn").onclick = onSend;
+  $("#ins").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); } });
+  $("#ins").focus();
+}
+function plusAction(a) { if (a === "integration") { VIEW = "integrations"; renderShell(); } else { VIEW = "skills"; renderShell(); } }
+
+async function onSend() {
+  const text = $("#ins") ? $("#ins").value.trim() : "";
+  if (!text) return;
+  THREAD.push({ role: "me", text });
+  drawThread();
+  const reason = document.createElement("div"); reason.className = "reason"; reason.innerHTML = `<div class="rt">Reasoning</div>`;
+  $("#thread").insertBefore(reason, $("#thread").lastElementChild);
+  const step = (label) => { const s = document.createElement("div"); s.className = "rstep"; s.innerHTML = `<span class="ri"><div class="spin"></div></span> ${esc(label)}`; reason.appendChild(s); s.scrollIntoView({ block: "end" }); return s; };
+  const done = (s, label) => { s.className = "rstep done"; s.innerHTML = `<span class="ri">${IC.check}</span> ${esc(label)}`; };
+  if (BUILD) {
+    const refining = !!LASTDESIGN;
+    const s1 = step(refining ? "Reading your requested changes" : "Understanding what you want to build");
+    await sleep(refining ? 300 : 500);
+    done(s1, refining ? "Got it" : "Understood the goal");
+    const s2 = step(refining ? "Revising the design" : "Designing the agent architecture");
+    if (!refining) { const t2 = step("Mapping the flow, data and guardrails"); await sleep(650); done(t2, "Mapped the flow, data and guardrails"); }
+    try {
+      const body = refining
+        ? { instruction: LASTDESIGN.instruction, prior: LASTDESIGN.design, changes: text, lang: LANG }
+        : { instruction: text, lang: LANG };
+      const d = await api("POST", "design", body);
+      if (!d.flow || !d.flow.length) { done(s2, "Could not design that"); THREAD.push({ role: "ai", text: "I couldn't design that — try describing the task more concretely." }); drawThread(); return; }
+      done(s2, refining ? "Updated the design" : `Designed a ${d.flow.length}-step agent`);
+      LASTDESIGN = { instruction: LASTDESIGN ? LASTDESIGN.instruction : text, design: d };
+      THREAD.push({ role: "design", design: d });
+      drawThread();
+    } catch (e) { done(s2, "Error"); THREAD.push({ role: "ai", text: "⚠️ " + e.message }); drawThread(); }
+  } else {
+    const s1 = step("Thinking");
+    try { const r = await api("POST", "chat", { message: text, history: THREAD.filter(m => m.role === "me" || m.role === "ai").map(m => ({ role: m.role === "me" ? "user" : "assistant", content: m.text })) }); done(s1, "Answered"); THREAD.push({ role: "ai", text: r.reply }); drawThread(); }
+    catch (e) { done(s1, "Error"); THREAD.push({ role: "ai", text: "⚠️ " + e.message }); drawThread(); }
   }
-  $("#view").innerHTML = `
-  <div class="fade">
-    <h1 class="view-title">${t("edit_h")}</h1><p class="view-sub">${t("edit_sub")}</p>
-    <div class="grid" id="editlist"><div class="empty">…</div></div>
-  </div>`;
-  api("GET", "apps").then(d => {
-    APPS = d.apps || [];
-    const el = $("#editlist");
-    el.innerHTML = APPS.length ? "" : `<div class="empty">—</div>`;
-    APPS.forEach(a => {
-      const c = document.createElement("div");
-      c.className = "acard";
-      c.innerHTML = `<div class="ic">${a.mode === "workflow" ? IC.flow : IC.chat}</div><div class="nm">${esc(a.name)}</div><div class="md">${a.mode} · ${t("created")} ${fmtDate(a.created_at)}</div>`;
-      c.onclick = () => gotoEdit(a.id);
-      el.appendChild(c);
-    });
+}
+
+function drawThread() {
+  const area = $("#homeArea");
+  area.innerHTML = `<div class="thread" id="thread"></div>`;
+  const th = $("#thread");
+  THREAD.forEach(m => {
+    if (m.role === "me") { const d = document.createElement("div"); d.className = "bubble me"; d.textContent = m.text; th.appendChild(d); }
+    else if (m.role === "ai") { const d = document.createElement("div"); d.className = "bubble ai"; d.textContent = m.text; th.appendChild(d); }
+    else if (m.role === "plan") th.appendChild(planCard(m));
+    else if (m.role === "design") th.appendChild(designCard(m));
   });
+  const c = document.createElement("div"); c.className = "composer"; c.style.marginTop = "10px";
+  c.innerHTML = `<textarea id="ins" rows="1" placeholder="${t(LASTDESIGN ? "Reply with any changes, or press Build this agent…" : "Reply to Wakeel…")}"></textarea>
+    <div class="composer-foot"><div class="toggle-pill ${BUILD ? "on" : ""}" id="buildToggle"><span class="lm">و</span> ${t("Build agents")}</div><button class="send-btn" id="sendBtn">${IC.up}</button></div>`;
+  th.appendChild(c);
+  $("#buildToggle").onclick = () => { BUILD = !BUILD; $("#buildToggle").classList.toggle("on", BUILD); };
+  $("#sendBtn").onclick = onSend;
+  $("#ins").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); } });
+  area.scrollTop = area.scrollHeight; th.scrollTop = th.scrollHeight;
 }
 
-function renderCommunity() {
-  const src = `http://${location.hostname}:8081/`;
-  // full-bleed: fills everything under the topbar, edge to edge
-  $("#view").innerHTML = `
-  <div class="fade" style="position:fixed;top:61px;left:0;right:0;bottom:var(--bnav,0px);z-index:30;display:flex;flex-direction:column;background:var(--bg)">
-    <div style="display:flex;align-items:center;gap:12px;padding:8px 16px;border-bottom:1px solid var(--hairline-2);background:rgba(255,255,255,.85);backdrop-filter:blur(16px)">
-      <div style="font-weight:750">${t("community_h")}</div>
-      <div style="font-size:12.5px;color:var(--muted)">${t("community_sub")}</div>
-      <a class="btn quiet sm" style="margin-inline-start:auto" href="https://champions.innoventures.ae" target="_blank">${t("open_ext")}</a>
-    </div>
-    <iframe src="${src}" style="flex:1;width:100%;border:0;background:#fff" title="Community"></iframe>
-  </div>`;
-}
-
-function makeStepper() {
-  const stages = [t("st_design"), t("st_deploy"), t("st_test"), t("st_ready")];
-  const w = document.createElement("div");
-  w.className = "stepper";
-  w.innerHTML = stages.map((n, i) =>
-    `<div class="step-i" data-s="${i}"><div class="dot">${i + 1}</div>${esc(n)}</div>${i < stages.length - 1 ? '<div class="step-line"></div>' : ""}`
-  ).join("");
-  $("#feed").appendChild(w); w.scrollIntoView({ behavior: "smooth", block: "end" });
-  return {
-    set(i, state) {
-      const el = w.querySelector(`[data-s="${i}"]`); if (!el) return;
-      el.className = "step-i " + state;
-      const dot = el.querySelector(".dot");
-      dot.innerHTML = state === "done" ? "✓" : state === "run" ? '<div class="spin"></div>' : state === "fail" ? "✕" : String(i + 1);
-    },
-  };
-}
-
-function evt(cls, icon, title, sub, right) {
-  const d = document.createElement("div");
-  d.className = "evt " + cls;
-  d.innerHTML = `<div class="ic">${icon}</div><div><div class="tt">${esc(title)}</div>${sub ? `<div class="st">${esc(sub)}</div>` : ""}</div><div class="right">${right || ""}</div>`;
-  $("#feed").appendChild(d); d.scrollIntoView({ behavior: "smooth", block: "end" });
+function planCard(m) {
+  const d = document.createElement("div"); d.className = "result-card";
+  d.innerHTML = `<div class="rc-h">${IC.flow} <span>Here's the workflow for “${esc(m.name)}”</span></div>
+    <div class="rc-b">${m.nodes.map((n, i) => `<div class="mini-step"><span class="n">${i + 1}</span> ${esc(n.title || n.type)} <span class="k">${esc(n.type)}</span></div>`).join("")}</div>
+    <div class="rc-actions"><input class="input" id="planName" style="flex:1" value="${esc(m.name)}"/><button class="btn primary sm" id="createAgent">${IC.bolt} Create agent</button></div>`;
+  setTimeout(() => {
+    $("#createAgent").onclick = async () => {
+      const name = $("#planName").value.trim() || "Wakeel Agent";
+      $("#createAgent").disabled = true; $("#createAgent").textContent = "Creating…";
+      try { const r = await api("POST", "deploy", { mode: "agent", name, graph: LASTGRAPH }); THREAD = []; loadAgents(); openAgent(r.id, "flow"); }
+      catch (e) { alert(e.message); $("#createAgent").disabled = false; }
+    };
+  }, 0);
   return d;
 }
 
-async function doBuild() {
-  const ins = $("#ins").value.trim(); if (!ins) return;
-  $("#feed").innerHTML = "";
-  const me = document.createElement("div"); me.className = "bubble-me"; me.textContent = ins;
-  $("#feed").appendChild(me);
-  const plan = evt("run", '<div class="spin"></div>', t("planning"), "", "");
-  $("#build").disabled = true;
+/* ---------- design proposal (Beam-style: propose → review → build) ---------- */
+const KIND_ICON = { entry: IC.play, llm: IC.spark, cond: IC.flow, tool: IC.integrations, end: IC.check };
+const KIND_CLS = { entry: "entry", cond: "cond", tool: "tool", end: "end" };
+function designDiagram(flow) {
+  // top-to-bottom flow; show branch labels on outgoing edges
+  const byId = {}; flow.forEach(n => byId[n.id] = n);
+  return `<div class="dg">${flow.map(n => {
+    const outs = (n.next || []).filter(e => byId[e.to]);
+    const branches = outs.length > 1;
+    return `<div class="dg-node ${KIND_CLS[n.kind] || ""}">
+        <span class="dg-ic">${KIND_ICON[n.kind] || IC.spark}</span>
+        <div class="dg-txt"><b>${esc(n.title || "")}</b>${(n.model || n.integration) ? `<span>${esc([n.integration, n.model].filter(Boolean).join(" · "))}</span>` : ""}</div>
+      </div>
+      ${outs.length ? `<div class="dg-edges ${branches ? "branch" : ""}">${outs.map(e => `<div class="dg-edge">${e.label ? `<span class="dg-lbl">${esc(e.label)}</span>` : ""}<span class="dg-arr">↓</span></div>`).join("")}</div>` : ""}`;
+  }).join("")}</div>`;
+}
+function designCard(m) {
+  const d = m.design;
+  const el = document.createElement("div"); el.className = "design-card";
+  const table = (d.schema && d.schema.columns && d.schema.columns.length) ? `
+    <div class="ds-sec"><div class="ds-h">${IC.projects} ${esc(d.schema.title || "Data record")}</div>
+      <table class="ds-tbl"><tbody>${d.schema.columns.map(c => `<tr><td>${esc(c.name)}</td><td class="mut">${esc(c.type || "")}</td></tr>`).join("")}</tbody></table></div>` : "";
+  const nodeTbl = `<div class="ds-sec"><div class="ds-h">${IC.flow} ${t("Nodes")}</div>
+    <table class="ds-tbl"><thead><tr><th>#</th><th>Node</th><th>Model</th><th>Integration</th></tr></thead>
+    <tbody>${d.flow.map((n, i) => `<tr><td class="mut">${i + 1}</td><td>${esc(n.title || "")}</td><td class="mut">${esc(n.model || "—")}</td><td class="mut">${esc(n.integration || "—")}</td></tr>`).join("")}</tbody></table></div>`;
+  const chips = (arr) => arr.map(s => `<span class="ds-chip">${esc(s)}</span>`).join("");
+  const list = (title, ic, arr) => (arr && arr.length) ? `<div class="ds-sec"><div class="ds-h">${ic} ${title}</div><ul class="ds-list">${arr.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>` : "";
+  el.innerHTML = `
+    <div class="ds-intro">${t("Here's the full design for your")} <b>${esc(d.name)}</b>${t(". Review it and let me know if you'd like any changes before I build it.")}</div>
+    <div class="ds-summary">${esc(d.summary || "")}</div>
+    <div class="ds-sec"><div class="ds-h">${IC.flow} ${t("Flow architecture")}</div>${designDiagram(d.flow)}</div>
+    ${nodeTbl}
+    ${table}
+    ${(d.statuses && d.statuses.length) ? `<div class="ds-sec"><div class="ds-h">${IC.tasks} ${t("Allowed statuses")}</div><div class="ds-chips">${chips(d.statuses)}</div></div>` : ""}
+    ${list(t("Triggers"), IC.play, d.triggers)}
+    ${list(t("Key design decisions"), IC.spark, d.decisions)}
+    ${list(t("Guardrails"), IC.help, d.guardrails)}
+    <div class="ds-foot">
+      <div class="ds-ask">${t("Shall I go ahead and build this agent?")}</div>
+      <div class="ds-actions"><button class="btn primary" id="dsBuild">${IC.bolt} ${t("Build this agent")}</button>
+        <button class="btn" id="dsTweak">${t("Request changes")}</button></div>
+    </div>`;
+  setTimeout(() => {
+    $("#dsBuild").onclick = () => buildFromDesign(d, $("#dsBuild"));
+    $("#dsTweak").onclick = () => { const i = $("#ins"); if (i) { i.placeholder = t("Describe the changes you want…"); i.focus(); } };
+  }, 0);
+  return el;
+}
+async function buildFromDesign(d, btn) {
+  btn.disabled = true; btn.innerHTML = `<div class="spin"></div> Building…`;
+  const area = $("#homeArea"); const t = $("#thread");
+  const reason = document.createElement("div"); reason.className = "reason"; reason.innerHTML = `<div class="rt">Building</div>`;
+  t.insertBefore(reason, t.lastElementChild);
+  const step = (l) => { const s = document.createElement("div"); s.className = "rstep"; s.innerHTML = `<span class="ri"><div class="spin"></div></span> ${esc(l)}`; reason.appendChild(s); s.scrollIntoView({ block: "end" }); return s; };
+  const done = (s, l) => { s.className = "rstep done"; s.innerHTML = `<span class="ri">${IC.check}</span> ${esc(l)}`; };
+  const s1 = step("Assembling the workflow from the approved design");
   try {
-    const g = await api("POST", "generate", { mode: "workflow", instruction: ins });
-    plan.remove();
-    if (!g.nodes.length) { evt("err", "⚠️", g.error || "Failed", ""); return; }
-    LASTGRAPH = g.graph;
-    evt("ok", "✓", t("built"), g.message || "");
-    // steps pop one by one — live feel
-    for (let i = 0; i < g.nodes.length; i++) {
-      await new Promise(r => setTimeout(r, 260));
-      evt("ok", String(i + 1), g.nodes[i].title || g.nodes[i].type, g.nodes[i].type, "");
-    }
-    const row = document.createElement("div");
-    row.className = "deploy-row";
-    row.innerHTML = `<input id="nm" value="${esc((g.message || ins).split(/[.\n]/)[0].slice(0, 40))}" placeholder="${esc(t("name_ph"))}"/><button class="btn" id="dep">${t("deploy_btn")} ↑</button>`;
-    $("#feed").appendChild(row);
-    $("#dep").onclick = async () => {
-      $("#dep").disabled = true;
-      const st = makeStepper();                 // Design ✓ → Deploy … → Test → Ready
-      st.set(0, "done"); st.set(1, "run");
-      try {
-        const d = await api("POST", "deploy", { mode: "workflow", name: $("#nm").value.trim() || "Wakeel Agent", graph: LASTGRAPH });
-        st.set(1, "done"); st.set(2, "run");
-        TESTAPP = d.id;
-        // automatic smoke test — run the agent once and judge the output
-        let smokeOk = false, smokeNote = "";
-        try {
-          const r = await api("POST", "test-case", {
-            app_id: d.id, input: ins.slice(0, 500),
-            expected: "a coherent, professional output that correctly performs the described task",
-          });
-          smokeOk = !!r.pass; smokeNote = r.reason || "";
-        } catch (e) { smokeNote = e.message; }
-        st.set(2, smokeOk ? "done" : "fail"); st.set(3, smokeOk ? "done" : "idle");
-        const s = document.createElement("div");
-        s.className = "success-card";
-        s.innerHTML = `${smokeOk ? "✅ " + t("smoke_ok") + ". " : "⚠️ " + t("smoke_fail") + ". "}` +
-          `${t("deployed")} <a href="#" id="goEdit">${t("edit")} →</a> · <a href="#" id="goTest">${t("test")} →</a>` +
-          (smokeNote ? `<div style="font-size:12px;color:#4c7a5e;margin-top:6px">${esc(smokeNote)}</div>` : "");
-        $("#feed").appendChild(s); s.scrollIntoView({ behavior: "smooth", block: "end" });
-        $("#goEdit").onclick = e => { e.preventDefault(); gotoEdit(d.id); };
-        $("#goTest").onclick = e => { e.preventDefault(); TAB = "test"; location.hash = "test"; renderShell(); };
-        loadAgents();
-      } catch (e) { st.set(1, "fail"); evt("err", "⚠️", e.message, ""); $("#dep").disabled = false; }
-    };
-  } catch (e) { plan.remove(); evt("err", "⚠️", e.message, ""); }
-  finally { $("#build").disabled = false; }
+    const g = await api("POST", "generate", { mode: "agent", design: d });
+    if (!g.nodes || !g.nodes.length) throw new Error(g.error || "generation failed");
+    done(s1, `Assembled ${g.nodes.length} steps`);
+    const s2 = step("Generating governance & guardrails"); await sleep(500); done(s2, "Governance ready");
+    const s3 = step("Deploying to your workspace");
+    const r = await api("POST", "deploy", { mode: "agent", name: d.name, graph: g.graph });
+    done(s3, "Deployed");
+    LASTDESIGN = null; THREAD = []; loadAgents(); openAgent(r.id, "flow");
+  } catch (e) { const s = step("Error"); done(s, "Error"); btn.disabled = false; btn.innerHTML = `${IC.bolt} Build this agent`; alert(e.message); }
 }
 
-async function loadAgents() {
+/* ---------- AGENT / FLOW ---------- */
+function openAgent(id, sub) { LASTDESIGN = null; AGENT = id; ASUB = sub || "flow"; VIEW = "agent"; COPILOT = true; CFGNODE = null; location.hash = "agent/" + id; renderShell(); }
+
+const ATABS = [["flow", "Flow"], ["triggers", "Triggers"], ["memory", "Memory"], ["governance", "Governance"], ["instructions", "Instructions"]];
+async function viewAgent() {
+  const app = APPS.find(a => a.id === AGENT) || { name: "Agent" };
+  const cur = ASUB === "config" ? "flow" : ASUB;
+  $("#mainCol").innerHTML = `
+    <div class="topbar"><div class="crumbs"><b>${esc(app.name)}</b></div>
+      <div class="agent-tabs">${ATABS.map(([id, l]) => `<button class="${cur === id ? "active" : ""}" data-s="${id}">${t(l)}</button>`).join("")}</div>
+      <div class="top-actions"><button class="icn-btn" id="copToggle" title="Copilot">${IC.chat}</button></div></div>
+    <div class="flow-wrap" id="flowWrap"><div class="empty-state"><div class="spin" style="margin:0 auto"></div></div></div>`;
+  document.querySelectorAll(".agent-tabs button").forEach(b => b.onclick = () => { ASUB = b.dataset.s; CFGNODE = null; viewAgent(); });
+  $("#copToggle").onclick = () => { COPILOT = !COPILOT; renderShell(); };
   try {
-    const d = await api("GET", "apps");
-    APPS = d.apps || [];
-    const el = $("#agents"); if (!el) return;
-    el.innerHTML = APPS.length ? "" : `<div class="empty">—</div>`;
-    APPS.forEach(a => {
-      const c = document.createElement("div");
-      c.className = "acard";
-      c.innerHTML = `<div class="ic">${a.mode === "workflow" ? IC.flow : IC.chat}</div><div class="nm">${esc(a.name)}</div><div class="md">${a.mode} · ${t("created")} ${fmtDate(a.created_at)}</div>`;
-      c.onclick = () => gotoEdit(a.id);
+    const info = await api("GET", "app-info?id=" + AGENT);
+    window.__agentInfo = info;
+    if (ASUB === "triggers") renderTriggers(info);
+    else if (ASUB === "memory") renderMemory(info);
+    else if (ASUB === "governance") renderGovernance(info);
+    else if (ASUB === "instructions") renderInstructions(info);
+    else if (ASUB === "simple") renderFlow(info);
+    else renderFlowStudio(info);
+  } catch (e) { $("#flowWrap").innerHTML = `<div class="empty-state">⚠️ ${esc(e.message)}</div>`; }
+}
+
+function renderTriggers(info) {
+  $("#flowWrap").innerHTML = `<div class="content"><div class="pad">
+    <h1 class="page-h">${t("Triggers")}</h1><p class="page-sub">${t("How this agent starts. Multiple triggers can feed the same flow.")}</p>
+    <div class="grid">
+      <div class="gcard" style="cursor:default"><div class="ic">${IC.play}</div><h3>${t("Manual run")} <span class="st-pill ok">${t("Active")}</span></h3><p>${t("Run on demand from Test mode or the API. Always available.")}</p></div>
+      <div class="gcard" id="trSchedule"><div class="ic">${IC.tasks}</div><h3>${t("Schedule")}</h3><p>${t("Run on a timer — hourly, daily, or a cron expression.")}</p><div class="foot"><span></span><button class="btn sm">${t("Configure")}</button></div></div>
+      <div class="gcard" id="trWebhook"><div class="ic">${IC.integrations}</div><h3>${t("Webhook / API")}</h3><p>${t("Trigger from any government system via a secure URL with an API key.")}</p><div class="foot"><span></span><button class="btn sm">${t("Get URL")}</button></div></div>
+      <div class="gcard" id="trIntegration"><div class="ic">${IC.inbox}</div><h3>${t("Integration event")}</h3><p>${t("New email (Outlook), file updated (SharePoint), row added (Excel)…")}</p><div class="foot"><span></span><button class="btn sm">${t("Choose")}</button></div></div>
+      <div class="gcard" id="trM365" style="grid-column:span 2"><div style="display:flex;align-items:center;gap:12px;margin-bottom:2px">${brandLogo("Power Automate", 40)}<h3 style="margin:0">Microsoft 365 <span class="st-pill ok">${t("Recommended")}</span></h3></div><p>${t("Connect Outlook, SharePoint & Excel. Wakeel's built-in automation engine handles the Microsoft connectors and the schedule — the agent does the AI. One Microsoft sign-in, then it runs automatically on your timer.")}</p><div class="foot"><span></span><button class="btn primary sm">${t("Connect Microsoft 365")}</button></div></div>
+    </div>
+    <div id="trPanel" style="margin-top:20px"></div>
+  </div></div>`;
+  $("#trSchedule").querySelector("button").onclick = () => {
+    $("#trPanel").innerHTML = `<div class="gcard" style="cursor:default;max-width:520px"><h3>Schedule</h3><div class="field" style="margin-top:12px"><label>Frequency</label><select class="input"><option>Every hour</option><option selected>Every day at 08:00</option><option>Every Monday 09:00</option><option>Custom cron…</option></select></div><button class="btn primary sm">Save schedule</button></div>`;
+  };
+  $("#trWebhook").querySelector("button").onclick = async () => {
+    $("#trPanel").innerHTML = `<div class="gcard" style="cursor:default"><div class="spin"></div></div>`;
+    try { const r = await api("POST", "apikey", { app_id: AGENT }); $("#trPanel").innerHTML = `<div class="gcard" style="cursor:default"><h3>Webhook endpoint</h3><div class="rl-out" style="background:var(--panel-2);color:var(--text);border-color:var(--line);margin-top:10px">POST ${location.origin}/v1/workflows/run
+Authorization: Bearer ${esc(r.token)}
+Content-Type: application/json
+
+{"inputs": {...}, "response_mode": "blocking", "user": "gov"}</div></div>`; }
+    catch (e) { $("#trPanel").innerHTML = `<div class="empty-mini">⚠️ ${esc(e.message)}</div>`; }
+  };
+  $("#trIntegration").querySelector("button").onclick = () => { VIEW = "integrations"; renderShell(); };
+  $("#trM365").querySelector("button").onclick = async () => {
+    const app = APPS.find(a => a.id === AGENT) || {};
+    $("#trPanel").innerHTML = `<div class="gcard" style="cursor:default;max-width:760px"><div style="display:flex;align-items:center;gap:10px"><div class="spin"></div><span style="color:var(--muted)">Connecting Microsoft 365…</span></div></div>`;
+    let key = "";
+    try { const r = await api("POST", "apikey", { app_id: AGENT }); key = r.token || ""; } catch (e) {}
+    await sleep(650);
+    $("#trPanel").innerHTML = `<div class="gcard" style="cursor:default;max-width:760px">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px">${brandLogo("Power Automate", 34)}<h3 style="margin:0">Microsoft 365 connection</h3></div>
+      <p style="margin:0 0 18px">Wakeel's automation engine is already running in your workspace — no install needed. Two steps left, both one-time.</p>
+      <div class="n8n-step done"><span class="n8n-n">${IC.check}</span><div><b>Automation engine ready</b><div style="color:var(--muted);font-size:13px;margin-top:3px">Running inside Wakeel — handles Microsoft connectors and the schedule for you.</div></div></div>
+      <div class="n8n-step done"><span class="n8n-n">${IC.check}</span><div><b>Agent endpoint provisioned</b><div class="code" style="margin-top:8px">POST ${location.origin}/v1/workflows/run
+Authorization: Bearer ${esc(key || "created for this agent")}</div></div></div>
+      <div class="n8n-step"><span class="n8n-n">3</span><div><b>Add the Microsoft 365 automation</b><div style="color:var(--muted);font-size:13px;margin:4px 0 9px">Schedule → read Excel (SharePoint) → for each business → ask the agent → Outlook send / Excel update / escalate → daily summary.</div><div style="display:flex;gap:9px;flex-wrap:wrap"><button class="btn primary sm" id="dlM365">${IC.upload} Add automation to Wakeel</button><a class="btn sm" href="http://${location.hostname}:5679/" target="_blank">Open Automations ↗</a></div></div></div>
+      <div class="n8n-step"><span class="n8n-n">4</span><div><b>Sign in with Microsoft</b><div style="color:var(--muted);font-size:13px;margin:4px 0 9px">Authorize Outlook &amp; Excel once with your MoHRE Microsoft 365 account, pick the registry workbook, and activate. Data stays in your tenant — deploy on Azure UAE North for residency.</div><button class="btn sm" id="msSignin">${brandLogo("Power Automate", 18)} Sign in with Microsoft</button></div></div>
+    </div>`;
+    $("#dlM365").onclick = () => downloadJSON("wakeel-" + (app.name || "agent").toLowerCase().replace(/\s+/g, "-") + "-microsoft365.json", buildN8n(key, app.name));
+    $("#msSignin").onclick = () => { window.__autoconfig = "Microsoft Outlook"; VIEW = "integrations"; renderShell(); };
+  };
+  if (window.__autom365) { window.__autom365 = null; setTimeout(() => { const b = $("#trM365") && $("#trM365").querySelector("button"); if (b) b.click(); }, 250); }
+}
+
+function downloadJSON(name, obj) { const b = new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" }); const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = name; a.click(); }
+function buildN8n(key, agentName) {
+  const origin = location.origin, K = key || "YOUR_WAKEEL_API_KEY";
+  const nodes = [
+    { parameters: { rule: { interval: [{ field: "days", triggerAtHour: 8 }] } }, id: "n1", name: "Daily 08:00", type: "n8n-nodes-base.scheduleTrigger", typeVersion: 1.2, position: [240, 320] },
+    { parameters: { resource: "worksheet", operation: "getRows", comment: "Read the registry sheet from SharePoint" }, id: "n2", name: "Read Excel Registry (SharePoint)", type: "n8n-nodes-base.microsoftExcel", typeVersion: 2, position: [460, 320] },
+    { parameters: { batchSize: 1 }, id: "n3", name: "Loop Businesses", type: "n8n-nodes-base.splitInBatches", typeVersion: 3, position: [680, 320] },
+    { parameters: { method: "POST", url: origin + "/v1/workflows/run", sendHeaders: true, headerParameters: { parameters: [{ name: "Authorization", value: "Bearer " + K }, { name: "Content-Type", value: "application/json" }] }, sendBody: true, specifyBody: "json", jsonBody: '={\n  "inputs": { "registry_json": {{ JSON.stringify($json) }} },\n  "response_mode": "blocking",\n  "user": "n8n-mohre"\n}' }, id: "n4", name: "Wakeel Agent — AI review & draft", type: "n8n-nodes-base.httpRequest", typeVersion: 4.2, position: [900, 320] },
+    { parameters: { conditions: { conditions: [{ leftValue: "={{ $json.data.outputs.escalate }}", rightValue: "true", operator: { type: "string", operation: "equals" } }] } }, id: "n5", name: "Escalation required?", type: "n8n-nodes-base.if", typeVersion: 2, position: [1120, 320] },
+    { parameters: { resource: "message", operation: "send", comment: "Escalation notice to assigned MoHRE officer" }, id: "n6", name: "Outlook — Escalate to officer", type: "n8n-nodes-base.microsoftOutlook", typeVersion: 2, position: [1340, 220] },
+    { parameters: { resource: "message", operation: "send", comment: "Approved report-request / reminder email" }, id: "n7", name: "Outlook — Send outreach", type: "n8n-nodes-base.microsoftOutlook", typeVersion: 2, position: [1340, 440] },
+    { parameters: { resource: "worksheet", operation: "updateRow", comment: "Write Compliance Status, dates, notes, next action" }, id: "n8", name: "Update Excel row", type: "n8n-nodes-base.microsoftExcel", typeVersion: 2, position: [1560, 320] },
+    { parameters: { resource: "message", operation: "send", comment: "End-of-run summary to MoHRE officers" }, id: "n9", name: "Outlook — Daily summary", type: "n8n-nodes-base.microsoftOutlook", typeVersion: 2, position: [900, 560] },
+  ];
+  const C = (n) => ({ node: n, type: "main", index: 0 });
+  const connections = {
+    "Daily 08:00": { main: [[C("Read Excel Registry (SharePoint)")]] },
+    "Read Excel Registry (SharePoint)": { main: [[C("Loop Businesses")]] },
+    "Loop Businesses": { main: [[C("Wakeel Agent — AI review & draft")], [C("Outlook — Daily summary")]] },
+    "Wakeel Agent — AI review & draft": { main: [[C("Escalation required?")]] },
+    "Escalation required?": { main: [[C("Outlook — Escalate to officer")], [C("Outlook — Send outreach")]] },
+    "Outlook — Escalate to officer": { main: [[C("Update Excel row")]] },
+    "Outlook — Send outreach": { main: [[C("Update Excel row")]] },
+    "Update Excel row": { main: [[C("Loop Businesses")]] },
+  };
+  return { name: "Wakeel · " + (agentName || "Agent") + " (Microsoft 365)", nodes, connections, active: false, settings: { executionOrder: "v1" }, meta: {}, tags: [] };
+}
+
+function renderMemory(info) {
+  $("#flowWrap").innerHTML = `<div class="content"><div class="pad">
+    <h1 class="page-h">Memory</h1><p class="page-sub">Documents the agent can read — policies, SOPs, templates, guidelines.</p>
+    <div class="gcard" style="cursor:default;max-width:640px;margin-bottom:20px">
+      <div class="field"><label>Name</label><input class="input" id="kbn" placeholder="e.g. Trade License Policies"/></div>
+      <div class="field"><label>Content</label><textarea class="input" id="kbt" rows="5" placeholder="Paste policies, procedures, FAQs…"></textarea></div>
+      <div style="display:flex;align-items:center;gap:12px"><button class="btn primary sm" id="kbAdd">${IC.upload} Add to memory</button><span class="page-sub" style="margin:0" id="kbMsg"></span></div>
+    </div>
+    <div class="side-sub" style="padding-inline:0">Existing memory</div>
+    <div class="rowlist" id="kbList"><div class="empty-mini" style="padding:14px">Loading…</div></div>
+  </div></div>`;
+  $("#kbAdd").onclick = async () => {
+    const name = $("#kbn").value.trim(), text = $("#kbt").value.trim(); if (!name || !text) return;
+    $("#kbAdd").disabled = true; $("#kbMsg").textContent = "Adding…";
+    try { await api("POST", "knowledge", { name, text }); $("#kbMsg").textContent = "✓ Added"; $("#kbn").value = ""; $("#kbt").value = ""; loadKb(); }
+    catch (e) { $("#kbMsg").textContent = "⚠️ " + e.message; } finally { $("#kbAdd").disabled = false; }
+  };
+  const loadKb = async () => { try { const d = await api("GET", "knowledge"); const el = $("#kbList"); el.innerHTML = (d.knowledge || []).length ? "" : `<div class="lrow"><div class="info"><div class="d">No documents yet.</div></div></div>`; (d.knowledge || []).forEach(k => { const r = document.createElement("div"); r.className = "lrow"; r.innerHTML = `<div class="ic">${IC.book}</div><div class="info"><div class="t">${esc(k.name)}</div><div class="d">${k.docs || 0} documents · ${k.words || 0} words</div></div>`; el.appendChild(r); }); } catch (e) {} };
+  loadKb();
+}
+
+function renderGovernance(info) {
+  $("#flowWrap").innerHTML = `<div class="content"><div class="pad">
+    <div style="display:flex;align-items:center;gap:12px"><h1 class="page-h" style="margin:0">Governance &amp; guardrails</h1><span class="st-pill ok">Government-grade</span><button class="btn sm" id="govRegen" style="margin-inline-start:auto">↻ Regenerate</button></div>
+    <p class="page-sub">Auto-generated policy layer for this agent — reviewed and enforced by Wakeel.</p>
+    <div id="govBody"><div class="empty-mini">Generating governance package…</div></div>
+  </div></div>`;
+  const load = (force) => {
+    $("#govBody").innerHTML = `<div class="empty-mini"><span class="spin" style="display:inline-block;vertical-align:middle"></span> Generating governance package…</div>`;
+    api("GET", "governance?id=" + AGENT + (force ? "&force=1" : "")).then(g => renderGovBody(g)).catch(e => { $("#govBody").innerHTML = `<div class="empty-mini">⚠️ ${esc(e.message)}</div>`; });
+  };
+  $("#govRegen").onclick = () => load(true);
+  load(false);
+}
+function govList(title, ic, items, tone) {
+  return `<div class="gov-card"><div class="gov-h">${ic} ${title}</div><ul class="gov-ul ${tone || ""}">${(items || []).map(x => `<li>${esc(typeof x === "string" ? x : (x.role ? x.role + " — " + x.can : JSON.stringify(x)))}</li>`).join("")}</ul></div>`;
+}
+function govText(title, ic, text, tone) {
+  return `<div class="gov-card ${tone || ""}"><div class="gov-h">${ic} ${title}</div><div class="gov-text">${esc(text || "—")}</div></div>`;
+}
+function renderGovBody(g) {
+  $("#govBody").innerHTML = `
+    <div class="gov-boundary">${IC.check} <div><div class="gb-h">Decision boundary</div><div>${esc(g.decision_boundary || "Reviews and recommends only; the officer decides.")}</div></div></div>
+    <div class="gov-grid">
+      ${govList("Guardrails", IC.check, g.guardrails, "warn")}
+      ${govList("Human-in-the-loop", IC.inbox, g.human_in_loop)}
+      ${govList("Allowed statuses", IC.tasks, g.allowed_statuses)}
+      ${govText("Escalation policy", IC.agent, g.escalation_policy)}
+      ${govList("Integration scope", IC.integrations, g.integration_scope)}
+      ${govList("Audit — logged every run", IC.book, g.audit)}
+      ${govList("Access control (RBAC)", IC.skills, g.rbac)}
+      ${govList("Run modes", IC.play, g.run_modes)}
+      ${govText("Data classification", IC.book, g.data_classification)}
+      ${govText("Data residency", IC.home, g.data_residency)}
+      ${govText("PII handling", IC.check, g.pii_handling)}
+      ${govText("Model policy", IC.spark, g.model_policy)}
+      ${govList("Compliance alignment", IC.check, g.compliance)}
+    </div>`;
+}
+
+function renderInstructions(info) {
+  $("#flowWrap").innerHTML = `<div class="content"><div class="pad cfg">
+    <h1 class="page-h">Instructions</h1><p class="page-sub">The agent's goals, constraints and tone.</p>
+    <div class="field"><label>Goals</label><textarea class="input" rows="3" placeholder="What should this agent achieve…">Review and act on ${esc(info.name || "requests")}, keeping officer decision authority.</textarea></div>
+    <div class="field"><label>Constraints (guardrails)</label><textarea class="input" rows="3" placeholder="What it must not do…">Must not make final legal or enforcement decisions. Reviews, recommends, and escalates to an officer.</textarea></div>
+    <div class="field"><label>Tone</label><select class="input"><option>Professional</option><option>Formal</option><option>Empathetic</option><option>Concise &amp; direct</option></select></div>
+    <button class="btn primary sm">Save instructions</button>
+  </div></div>`;
+}
+
+function nodeClass(t) { return t === "start" ? "entry" : t === "end" ? "end" : (t === "if-else" || t === "question-classifier") ? "cond" : ""; }
+function nodeChip(n) {
+  const map = { start: "Trigger — manual run", llm: "AI reasoning", "if-else": "Condition", end: "Output", tool: "Tool", "knowledge-retrieval": "Knowledge", "question-classifier": "Classifier", answer: "Answer", code: "Code", "http-request": "HTTP request", "template-transform": "Template", "parameter-extractor": "Extract" };
+  return map[n.type] || (n.type || "Step");
+}
+
+/* ---------- graph editing ---------- */
+const MODEL_ID = { provider: "langgenius/openai/openai", name: "gpt-5.1", mode: "chat", completion_params: {} };
+function nid() { return "n" + Math.random().toString(36).slice(2, 9); }
+function edge(s, t) { return { id: s + "-" + t + "-" + Math.random().toString(36).slice(2, 5), source: s, target: t, sourceHandle: "source", targetHandle: "target", type: "custom", data: { sourceType: "", targetType: "" } }; }
+function newLLM(title, prompt) {
+  const id = nid();
+  return { id, type: "custom", position: { x: 0, y: 0 }, positionAbsolute: { x: 0, y: 0 }, width: 244, height: 98,
+    data: { type: "llm", title: title || "New step", model: MODEL_ID,
+      prompt_template: [{ role: "user", text: prompt || title || "", edition_type: "basic", id: id + "-m" }],
+      context: { enabled: false, variable_selector: [] }, vision: { enabled: false }, memory: null, selected: false } };
+}
+function graphFind(g, id) { return (g.nodes || []).find(n => n.id === id); }
+function graphInsertAfter(g, afterId, node) {
+  g.edges = g.edges || [];
+  const outs = g.edges.filter(e => e.source === afterId);
+  outs.forEach(e => { e.source = node.id; });
+  g.edges.push(edge(afterId, node.id));
+  g.nodes.push(node);
+}
+function graphRemove(g, id) {
+  const ins = (g.edges || []).filter(e => e.target === id).map(e => e.source);
+  const outs = (g.edges || []).filter(e => e.source === id).map(e => e.target);
+  g.edges = (g.edges || []).filter(e => e.source !== id && e.target !== id);
+  ins.forEach(s => outs.forEach(t => g.edges.push(edge(s, t))));
+  g.nodes = (g.nodes || []).filter(n => n.id !== id);
+}
+async function saveGraph() { await api("POST", "save-draft", { app_id: AGENT, graph: window.__graph }); }
+
+function renderFlowStudio(info) {
+  window.__flowInfo = info;
+  window.__graph = info.graph || { nodes: [], edges: [] };
+  $("#flowWrap").innerHTML = `
+    <div class="flow-head">
+      <div><h1>Flow</h1><p>Build customised workflows that run from chat or triggers</p></div>
+      <div class="ctrls">
+        <button class="draft-btn" id="simpleBtn">${IC.views} Overview</button>
+      </div>
+    </div>
+    <div class="studio-embed"><iframe id="studioFrame" src="/app/${AGENT}/workflow?embed=wakeel" title="Flow"></iframe></div>`;
+  $("#simpleBtn").onclick = () => { ASUB = "simple"; viewAgent(); };
+}
+function orderedNodes(info) {
+  const g = info.graph || {}; const edges = g.edges || [];
+  const byId = {}; (info.nodes || []).forEach(n => { byId[n.id] = n; });
+  const start = (info.nodes || []).find(n => n.type === "start") || (info.nodes || [])[0];
+  if (!start || !start.id) return info.nodes || [];
+  const seen = new Set(); const order = [];
+  const visit = (id) => { if (seen.has(id) || !byId[id]) return; seen.add(id); order.push(byId[id]); edges.filter(e => e.source === id).forEach(e => visit(e.target)); };
+  visit(start.id);
+  (info.nodes || []).forEach(n => { if (!seen.has(n.id)) { order.push(n); seen.add(n.id); } });
+  return order;
+}
+function renderFlow(info) {
+  window.__flowInfo = info;
+  window.__graph = info.graph || { nodes: [], edges: [] };
+  const nodes = orderedNodes(info);
+  $("#flowWrap").innerHTML = `
+    <div class="flow-head">
+      <div><h1>Flow</h1><p>Build customised workflows that run from chat or triggers</p></div>
+      <div class="ctrls">
+        <button class="draft-btn" id="studioBtn">${IC.flow} Studio diagram</button>
+        <button class="draft-btn run" id="runBtn">${IC.play} Run</button>
+        <div class="tmode"><div class="switch" id="tmode"></div> Test mode</div>
+      </div>
+    </div>
+    <div class="flow-split">
+      <div class="canvas" id="canvas">
+        <div class="publish-bar"><span>ⓘ This flow has not yet been published</span><button class="btn primary sm" id="pubBtn">Publish</button></div>
+        <div class="vflow" id="vflow"></div>
+        <div class="zoom"><button id="zi">+</button><button id="zo">−</button></div>
+        <div class="runlog" id="runlog" hidden></div>
+      </div>
+      <div class="node-panel" id="nodePanel" hidden></div>
+    </div>`;
+  const vf = $("#vflow");
+  const addBtn = (afterId) => {
+    const w = document.createElement("div"); w.className = "insert-wrap";
+    w.innerHTML = `<div class="connector"></div><button class="insert-btn" title="Add">${IC.plus}<div class="ins-pop" hidden><a data-a="step">${IC.bolt} Insert step</a><a data-a="branch">${IC.flow} Add branch</a></div></button><div class="connector"></div>`;
+    const pop = w.querySelector(".ins-pop");
+    w.querySelector(".insert-btn").onclick = (e) => { e.stopPropagation(); document.querySelectorAll(".ins-pop").forEach(p => { if (p !== pop) p.hidden = true; }); pop.hidden = !pop.hidden; };
+    w.querySelectorAll(".ins-pop a").forEach(a => a.onclick = (e) => { e.stopPropagation(); pop.hidden = true; a.dataset.a === "branch" ? openAddBranch(afterId) : openAddStep(afterId); });
+    return w;
+  };
+  nodes.forEach((n, i) => {
+    const card = document.createElement("div");
+    card.className = "cnode " + nodeClass(n.type);
+    card.id = "node-" + i;
+    card.dataset.title = (n.title || n.type);
+    card.dataset.nid = n.id || "";
+    card.innerHTML = `<div class="top"><span class="idx">${i + 1}</span><span class="ttl">${esc(n.title || n.type)}</span><span class="dots">⋯</span><span class="tick"></span></div>
+      <div class="chip2"><span class="sq">${IC.bolt}</span> ${esc(nodeChip(n))}</div>`;
+    card.onclick = () => openNodePanel(info, n, card);
+    vf.appendChild(card);
+    if (i < nodes.length - 1) vf.appendChild(addBtn(n.id));
+  });
+  let scale = 1;
+  $("#zi").onclick = () => { scale = Math.min(1.3, scale + .1); vf.style.transform = `scale(${scale})`; };
+  $("#zo").onclick = () => { scale = Math.max(.6, scale - .1); vf.style.transform = `scale(${scale})`; };
+  $("#tmode").onclick = () => $("#tmode").classList.toggle("on");
+  $("#pubBtn").onclick = async () => { $("#pubBtn").textContent = "Publishing…"; try { await api("POST", "publish", { app_id: AGENT }); $("#pubBtn").textContent = "✓ Published"; } catch (e) { alert(e.message); $("#pubBtn").textContent = "Publish"; } };
+  $("#runBtn").onclick = () => openRunModal(info);
+  if ($("#studioBtn")) $("#studioBtn").onclick = () => { ASUB = "flow"; viewAgent(); };
+  if (window.__autorun) { const tx = window.__autorun; window.__autorun = null; $("#tmode").classList.add("on"); setTimeout(() => runFlow(tx), 700); }
+  if (window.__autonode != null) { const idx = window.__autonode; window.__autonode = null; const c = $("#node-" + idx); if (c && nodes[idx]) openNodePanel(info, nodes[idx], c); }
+  if (window.__autotool != null) { const idx = window.__autotool; window.__autotool = null; if (nodes[idx]) openConfigTool(info, nodes[idx]); }
+}
+
+/* ---------- live run (task execution over the flow) ---------- */
+function openRunModal(info) {
+  const v = (info.vars || [])[0];
+  const d = document.createElement("div"); d.className = "modal-back";
+  d.innerHTML = `<div class="modal fade" style="width:520px" onclick="event.stopPropagation()">
+    <h2>${IC.play} Run this agent <button class="x" id="rx">×</button></h2>
+    <div style="color:var(--muted);font-size:13px;margin:-8px 0 16px">Provide a test input. Watch each step light up as it runs.</div>
+    <div class="field"><label>${v ? esc(v.label || v.name) : "Input"}</label><textarea class="input" id="runIn" rows="4" placeholder="e.g. a citizen complaint, an application summary, an email…"></textarea></div>
+    <button class="btn primary block" id="runGo">${IC.play} Execute flow</button>
+  </div>`;
+  document.body.appendChild(d);
+  d.onclick = () => d.remove(); $("#rx").onclick = () => d.remove();
+  $("#runIn").focus();
+  $("#runGo").onclick = () => { const input = $("#runIn").value.trim(); if (!input) return; d.remove(); runFlow(input); };
+}
+
+async function runFlow(input) {
+  // reset node states
+  document.querySelectorAll(".cnode").forEach(c => c.classList.remove("running", "done", "failed"));
+  const log = $("#runlog"); log.hidden = false;
+  log.innerHTML = `<div class="rl-h"><span>${IC.play} Live run</span><button class="x" id="rlx" style="font-size:18px">×</button></div><div class="rl-body" id="rlBody"></div>`;
+  $("#rlx").onclick = () => { log.hidden = true; };
+  const body = $("#rlBody");
+  const used = new Set();
+  const findCard = (title) => {
+    const cards = [...document.querySelectorAll(".cnode")];
+    let c = cards.find(x => x.dataset.title === title && !used.has(x.id));
+    if (!c) c = cards.find(x => x.dataset.title === title);
+    return c;
+  };
+  const rlRow = (title) => { const r = document.createElement("div"); r.className = "rl-row running"; r.innerHTML = `<span class="rl-ic"><div class="spin"></div></span><span class="rl-t">${esc(title)}</span><span class="rl-k"></span>`; body.appendChild(r); body.scrollTop = body.scrollHeight; return r; };
+  const rowByTitle = {};
+  try {
+    const resp = await fetch("api/run", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ app_id: AGENT, input }) });
+    const reader = resp.body.getReader(); const dec = new TextDecoder(); let buf = "";
+    let answer = "";
+    while (true) {
+      const { value, done } = await reader.read(); if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const parts = buf.split("\n\n"); buf = parts.pop();
+      for (const part of parts) {
+        const line = part.trim(); if (!line.startsWith("data:")) continue;
+        let ev; try { ev = JSON.parse(line.slice(5).trim()); } catch (e) { continue; }
+        const d = ev.data || {};
+        if (ev.event === "node_started") {
+          const card = findCard(d.title); if (card) { used.add(card.id); card.classList.add("running"); card.scrollIntoView({ behavior: "smooth", block: "center" }); }
+          rowByTitle[d.title] = rlRow(d.title || "step");
+        } else if (ev.event === "node_finished") {
+          const card = findCard(d.title); if (card) { card.classList.remove("running"); card.classList.add(d.status === "failed" ? "failed" : "done"); }
+          const r = rowByTitle[d.title]; if (r) { r.className = "rl-row " + (d.status === "failed" ? "failed" : "done"); r.querySelector(".rl-ic").innerHTML = d.status === "failed" ? "✕" : "✓"; r.querySelector(".rl-k").textContent = d.elapsed_time ? (d.elapsed_time).toFixed(1) + "s" : ""; }
+        } else if (ev.event === "message" || ev.event === "agent_message") {
+          answer += ev.answer || "";
+        } else if (ev.event === "workflow_finished") {
+          const outs = d.outputs || {}; answer = Object.values(outs).map(v => typeof v === "string" ? v : JSON.stringify(v)).join("\n");
+        } else if (ev.event === "error") {
+          const r = document.createElement("div"); r.className = "rl-row failed"; r.innerHTML = `<span class="rl-ic">✕</span><span class="rl-t">${esc(ev.message || "error")}</span>`; body.appendChild(r);
+        }
+      }
+    }
+    if (answer) { const o = document.createElement("div"); o.className = "rl-out"; o.innerHTML = `<div class="rl-out-h">Output</div>${esc(answer).slice(0, 4000)}`; body.appendChild(o); body.scrollTop = body.scrollHeight; }
+  } catch (e) { const r = document.createElement("div"); r.className = "rl-row failed"; r.innerHTML = `<span class="rl-ic">✕</span><span class="rl-t">${esc(e.message)}</span>`; body.appendChild(r); }
+}
+
+function openNodePanel(info, n, card) {
+  document.querySelectorAll(".cnode.selected").forEach(c => c.classList.remove("selected"));
+  if (card) card.classList.add("selected");
+  const isLLM = n.type === "llm";
+  const canDelete = n.type !== "start" && n.type !== "end";
+  const p = $("#nodePanel"); if (!p) return; p.hidden = false;
+  p.innerHTML = `
+    <div class="np-head"><input class="np-title" id="npTitle" value="${esc(n.title || n.type)}"/><button class="x" id="npClose">×</button></div>
+    <div class="np-body">
+      <div class="np-sec">
+        <div class="np-label">Tool</div>
+        <div class="np-tool"><span class="np-tool-ic">${IC.bolt}</span> ${esc(nodeChip(n))}</div>
+        ${isLLM ? `<div class="np-btns"><button class="btn sm" id="npEdit">Edit prompt</button><button class="btn sm" id="npGen">Generate new</button></div>` : ""}
+      </div>
+      ${isLLM ? `<div class="np-sec" id="npPromptSec" hidden><div class="np-label">Instruction / prompt</div><textarea class="input" id="npPrompt" rows="6">${esc(n.prompt || "")}</textarea></div>` : ""}
+      <div class="np-sec">
+        <div class="np-label collapse">Tool mode <span>⌄</span></div>
+        <div class="consent" style="margin:0"><div class="np-consent-ic">${IC.check}</div><div class="info"><div class="t">Consent required</div><div class="d">Task pauses at this step and waits for officer approval before proceeding.</div></div><div class="switch" id="npConsent"></div></div>
+        <div class="consent" style="margin:12px 0 0"><div class="np-consent-ic">${IC.check}</div><div class="info"><div class="t">Output evaluation</div><div class="d">Automatically assess this step's output against expected standards.</div></div><div class="switch" id="npEval"></div></div>
+      </div>
+      <div class="np-sec">
+        <div class="np-label collapse">Variables <span>⌄</span></div>
+        <div class="np-var"><div class="np-var-row"><span class="np-var-name">Input</span><span class="np-fill">${info.mode === "workflow" ? "Linked fill" : "Prompt fill"} ⌄</span></div><div class="np-var-sel">${IC.bolt} ${esc((info.vars[0] && info.vars[0].name) || "task_query")}</div></div>
+      </div>
+    </div>
+    <div class="np-foot">${canDelete ? `<button class="btn sm" id="npDel" style="border-color:#5a1e26;color:#ff9ba3">Delete</button>` : "<span></span>"}<button class="btn primary sm" id="npSave">Save</button><span class="np-msg" id="npMsg"></span></div>`;
+  $("#npClose").onclick = () => { p.hidden = true; document.querySelectorAll(".cnode.selected").forEach(c => c.classList.remove("selected")); };
+  document.querySelectorAll(".np-label.collapse").forEach(l => l.onclick = () => l.nextElementSibling && l.classList.toggle("closed"));
+  if ($("#npEdit")) $("#npEdit").onclick = () => openConfigTool(info, n);
+  if ($("#npGen")) $("#npGen").onclick = () => openConfigTool(info, n);
+  if ($("#npConsent")) $("#npConsent").onclick = () => $("#npConsent").classList.toggle("on");
+  if ($("#npEval")) $("#npEval").onclick = () => $("#npEval").classList.toggle("on");
+  $("#npSave").onclick = async () => {
+    const node = graphFind(window.__graph, n.id); if (!node) return;
+    node.data.title = $("#npTitle").value.trim() || node.data.title;
+    if (isLLM && $("#npPrompt")) {
+      const txt = $("#npPrompt").value;
+      if (Array.isArray(node.data.prompt_template) && node.data.prompt_template.length) node.data.prompt_template[0].text = txt;
+      else node.data.prompt_template = [{ role: "user", text: txt, edition_type: "basic", id: n.id + "-m" }];
+    }
+    $("#npSave").disabled = true; $("#npMsg").textContent = "Saving…";
+    try { await saveGraph(); $("#npMsg").textContent = "✓ Saved"; viewAgent(); } catch (e) { $("#npMsg").textContent = "⚠️ " + e.message; $("#npSave").disabled = false; }
+  };
+  if ($("#npDel")) $("#npDel").onclick = async () => {
+    graphRemove(window.__graph, n.id); $("#npDel").disabled = true;
+    try { await saveGraph(); viewAgent(); } catch (e) { alert(e.message); }
+  };
+}
+
+function newIfElse(title, varNodeId, keyword, caseId) {
+  const id = nid();
+  return { id, type: "custom", position: { x: 0, y: 0 }, positionAbsolute: { x: 0, y: 0 }, width: 244, height: 130,
+    data: { type: "if-else", title, logical_operator: "and", selected: false,
+      cases: [{ case_id: caseId, logical_operator: "and", conditions: [{ id: "c" + Math.random().toString(36).slice(2, 5), variable_selector: [varNodeId, "text"], comparison_operator: "contains", value: keyword }] }] } };
+}
+function nearestLLM(g, afterId) {
+  const n = graphFind(g, afterId);
+  if (n && n.data.type === "llm") return afterId;
+  const llm = (g.nodes || []).find(x => x.data.type === "llm");
+  return llm ? llm.id : afterId;
+}
+function openAddBranch(afterId) {
+  const d = document.createElement("div"); d.className = "modal-back";
+  d.innerHTML = `<div class="modal fade" style="width:520px" onclick="event.stopPropagation()">
+    <h2>${IC.flow} Add a branch <button class="x" id="bx">×</button></h2>
+    <div style="color:var(--muted);font-size:13px;margin:-8px 0 16px">Split the flow on a condition. If it matches, continue; otherwise an exception step handles it, then rejoins.</div>
+    <div class="field"><label>Branch name</label><input class="input" id="brName" placeholder="e.g. Urgent complaints"/></div>
+    <div class="field"><label>Condition — when the previous step's result <b>contains</b></label><input class="input" id="brKey" placeholder="e.g. urgent"/></div>
+    <div class="field"><label>Exception step (runs when it does NOT match)</label><input class="input" id="brExc" placeholder="e.g. Route to standard queue"/></div>
+    <button class="btn primary block" id="brGo">Add branch</button>
+  </div>`;
+  document.body.appendChild(d); d.onclick = () => d.remove(); $("#bx").onclick = () => d.remove();
+  $("#brName").focus();
+  $("#brGo").onclick = async () => {
+    const name = $("#brName").value.trim(), key = $("#brKey").value.trim(); if (!name || !key) return;
+    const g = window.__graph;
+    const caseId = "match" + Math.random().toString(36).slice(2, 5);
+    const ie = newIfElse("Branch: " + name, nearestLLM(g, afterId), key, caseId);
+    const exc = newLLM("Exception: " + ($("#brExc").value.trim() || name), $("#brExc").value.trim() || ("Handle the case where it does not match " + key));
+    const targets = (g.edges || []).filter(e => e.source === afterId).map(e => e.target);
+    g.edges = (g.edges || []).filter(e => e.source !== afterId);
+    g.edges.push(edge(afterId, ie.id));
+    targets.forEach(t => { const e1 = edge(ie.id, t); e1.sourceHandle = caseId; g.edges.push(e1); });          // true → continue
+    const efalse = edge(ie.id, exc.id); efalse.sourceHandle = "false"; g.edges.push(efalse);                    // false → exception
+    targets.forEach(t => g.edges.push(edge(exc.id, t)));                                                        // exception → rejoin (merge)
+    g.nodes.push(ie); g.nodes.push(exc);
+    $("#brGo").disabled = true; $("#brGo").textContent = "Adding…";
+    try { await saveGraph(); d.remove(); viewAgent(); } catch (e) { alert(e.message); $("#brGo").disabled = false; $("#brGo").textContent = "Add branch"; }
+  };
+}
+
+async function openConfigTool(info, n) {
+  const node = graphFind(window.__graph, n.id);
+  const prompt = n.prompt || "";
+  $("#flowWrap").innerHTML = `
+    <div class="ct-head">
+      <button class="btn sm" id="ctBack">← Flow</button>
+      <div class="ct-title"><span class="np-tool-ic">${IC.bolt}</span> Configure tool</div>
+      <div style="margin-inline-start:auto;display:flex;gap:10px;align-items:center"><span class="ct-msg" id="ctMsg"></span><button class="btn sm" id="ctOpt">${IC.spark} Optimise</button><button class="btn primary sm" id="ctSave">Save</button></div>
+    </div>
+    <div class="ct-body">
+      <div class="ct-left">
+        <div class="ct-block"><div class="ct-block-h">Step goal</div><input class="input" id="ctGoal" value="${esc(n.title || "")}"/></div>
+        <div class="ct-block"><div class="ct-block-h">Model &amp; prompt <span class="ct-badge">Used by AI</span></div>
+          <div class="ct-lbl">LLM</div><select class="input" id="ctModel"><option>${esc((node && node.data.model && node.data.model.name) || "gpt-5.1")}</option></select>
+          <div class="ct-lbl" style="margin-top:14px">Prompt <span style="color:var(--faint);font-weight:400">— reference inputs with {{#node.field#}}</span></div>
+          <textarea class="input ct-prompt" id="ctPrompt" rows="16">${esc(prompt)}</textarea></div>
+        <div class="ct-block"><div class="ct-block-h">Input variables <span class="ct-badge">Used by AI</span></div><div id="ctInputs" class="ct-vars"></div></div>
+        <div class="ct-block"><div class="ct-block-h">Output variables <span class="ct-badge">Used by AI</span></div><div class="ct-var-row"><span class="np-var-sel" style="flex:1">${IC.bolt} text</span><span class="np-fill">String</span></div></div>
+      </div>
+      <div class="ct-right">
+        <div class="ct-block-h">Test output</div>
+        <div class="page-sub" style="font-size:12px;margin:0 0 12px">Run this tool with a sample input to see the result.</div>
+        <div class="ct-lbl">Sample input</div>
+        <textarea class="input" id="ctSample" rows="5" placeholder="e.g. a citizen complaint, an application summary…"></textarea>
+        <button class="btn primary sm" id="ctRun" style="margin-top:12px">${IC.play} Execute tool</button>
+        <div id="ctOut" class="ct-out" hidden></div>
+      </div>
+    </div>`;
+  $("#ctBack").onclick = () => { CFGNODE = null; viewAgent(); };
+  // populate model selector
+  try { const m = await api("GET", "models"); const sel = $("#ctModel"); sel.innerHTML = ""; const cur = (node && node.data.model && node.data.model.name); (m.providers || []).forEach(pr => { const g = document.createElement("optgroup"); g.label = pr.label; (pr.models || []).forEach(md => { const o = document.createElement("option"); o.value = pr.provider + "|" + md; o.textContent = md; if (md === cur) o.selected = true; g.appendChild(o); }); sel.appendChild(g); }); } catch (e) {}
+  // parse input variables from prompt
+  const vars = [...new Set((prompt.match(/{{#([^#}]+)#}}/g) || []).map(s => s.replace(/[{}#]/g, "")))];
+  $("#ctInputs").innerHTML = vars.length ? vars.map(v => `<div class="ct-var-row"><span class="ct-var-nm">${esc(v.split(".").pop())}</span><span class="np-fill">Linked fill · ${esc(v)}</span></div>`).join("") : `<div class="page-sub" style="font-size:12px;margin:0">This tool reads the task input directly.</div>`;
+  $("#ctSave").onclick = async () => {
+    if (!node) return;
+    node.data.title = $("#ctGoal").value.trim() || node.data.title;
+    const txt = $("#ctPrompt").value;
+    if (Array.isArray(node.data.prompt_template) && node.data.prompt_template.length) node.data.prompt_template[0].text = txt;
+    else node.data.prompt_template = [{ role: "user", text: txt, edition_type: "basic", id: n.id + "-m" }];
+    const mv = $("#ctModel").value; if (mv && mv.includes("|")) { const [pv, md] = mv.split("|"); node.data.model = { provider: pv, name: md, mode: "chat", completion_params: {} }; }
+    $("#ctSave").disabled = true; $("#ctMsg").textContent = "Saving…";
+    try { await saveGraph(); $("#ctMsg").textContent = "✓ Saved"; setTimeout(() => { $("#ctSave").disabled = false; $("#ctMsg").textContent = ""; }, 1500); } catch (e) { $("#ctMsg").textContent = "⚠️ " + e.message; $("#ctSave").disabled = false; }
+  };
+  $("#ctOpt").onclick = async () => {
+    $("#ctOpt").disabled = true; $("#ctOpt").innerHTML = `<span class="spin"></span> Optimising…`;
+    try { const r = await api("POST", "chat", { message: "Rewrite and improve this AI step prompt to be clearer and more reliable for a government workflow. Return ONLY the improved prompt, no preamble:\n\n" + $("#ctPrompt").value, history: [] }); $("#ctPrompt").value = r.reply.trim(); } catch (e) { alert(e.message); }
+    finally { $("#ctOpt").disabled = false; $("#ctOpt").innerHTML = `${IC.spark} Optimise`; }
+  };
+  $("#ctRun").onclick = async () => {
+    const sample = $("#ctSample").value.trim(); if (!sample) return;
+    $("#ctRun").disabled = true; $("#ctRun").innerHTML = `<span class="spin"></span> Running…`;
+    const o = $("#ctOut"); o.hidden = false; o.innerHTML = `<div class="page-sub" style="margin:0">Executing…</div>`;
+    try { const r = await api("POST", "test-tool", { prompt: $("#ctPrompt").value, input: sample }); o.innerHTML = `<div class="ct-out-h">Output</div>${esc(r.output).slice(0, 4000)}`; } catch (e) { o.innerHTML = `<div class="ct-out-h">Error</div>${esc(e.message)}`; }
+    finally { $("#ctRun").disabled = false; $("#ctRun").innerHTML = `${IC.play} Execute tool`; }
+  };
+}
+
+function openAddStep(afterId) {
+  const d = document.createElement("div"); d.className = "modal-back";
+  d.innerHTML = `<div class="modal fade" style="width:520px" onclick="event.stopPropagation()">
+    <h2>${IC.plus} Add a step <button class="x" id="ax">×</button></h2>
+    <div style="color:var(--muted);font-size:13px;margin:-8px 0 16px">Insert an AI step after the selected one.</div>
+    <div class="field"><label>Objective (title)</label><input class="input" id="asTitle" placeholder="e.g. Translate the reply to Arabic"/></div>
+    <div class="field"><label>Instruction / prompt</label><textarea class="input" id="asPrompt" rows="4" placeholder="What should this step do…"></textarea></div>
+    <button class="btn primary block" id="asGo">Add step</button>
+  </div>`;
+  document.body.appendChild(d); d.onclick = () => d.remove(); $("#ax").onclick = () => d.remove();
+  $("#asTitle").focus();
+  $("#asGo").onclick = async () => {
+    const title = $("#asTitle").value.trim(); if (!title) return;
+    graphInsertAfter(window.__graph, afterId, newLLM(title, $("#asPrompt").value.trim() || title));
+    $("#asGo").disabled = true; $("#asGo").textContent = "Adding…";
+    try { await saveGraph(); d.remove(); viewAgent(); } catch (e) { alert(e.message); $("#asGo").disabled = false; $("#asGo").textContent = "Add step"; }
+  };
+}
+
+/* ---------- copilot ---------- */
+function renderCopilot() {
+  return `<aside class="copilot">
+    <div class="cop-h">${logo("")}<div class="nm">${t("Wakeel AI")}</div><span class="beta">${t("Beta")}</span></div>
+    <div class="cop-body" id="copBody"><div class="cop-hero">${logo("")}<h3>${t("Describe a task. Wakeel handles it.")}</h3><p>${t("Edit this flow by chatting — add a step, change a prompt, add a condition.")}</p></div></div>
+    <div class="cop-foot"><input id="copIn" placeholder="${t("Ask Wakeel to edit this flow…")}"/><button id="copSend">${IC.send}</button></div>
+  </aside>`;
+}
+function wireCopilot() {
+  const send = async () => {
+    const t = $("#copIn").value.trim(); if (!t) return; $("#copIn").value = "";
+    const body = $("#copBody");
+    const hero = body.querySelector(".cop-hero"); if (hero) hero.remove();
+    const m = document.createElement("div"); m.className = "cop-msg me"; m.textContent = t; body.appendChild(m);
+    const w = document.createElement("div"); w.className = "cop-msg ai"; w.innerHTML = `<span class="spin"></span> Editing the flow…`; body.appendChild(w); body.scrollTop = body.scrollHeight;
+    $("#copSend").disabled = true; $("#copIn").disabled = true;
+    try {
+      // 1. current graph  2. refine with AI  3. save to draft  4. refresh canvas
+      const info = await api("GET", "app-info?id=" + AGENT);
+      const genMode = info.mode === "workflow" ? "workflow" : "agent";
+      const res = await api("POST", "generate", { mode: genMode, instruction: t, current_graph: info.graph });
+      if (!res.graph || !(res.graph.nodes || []).length) { w.innerHTML = "⚠️ " + esc(res.error || "Couldn't apply that edit."); return; }
+      window.__graph = res.graph;
+      await api("POST", "save-draft", { app_id: AGENT, graph: res.graph });
+      w.innerHTML = `✓ Done — ${(res.graph.nodes || []).length} steps. ${res.message ? esc(res.message.slice(0, 120)) : "Flow updated."}`;
+      ASUB = "flow"; CFGNODE = null;
+      viewAgent();
+    } catch (e) { w.innerHTML = "⚠️ " + esc(e.message); }
+    finally { $("#copSend").disabled = false; $("#copIn").disabled = false; $("#copIn").focus(); }
+  };
+  $("#copSend").onclick = send;
+  $("#copIn").addEventListener("keydown", e => { if (e.key === "Enter") send(); });
+}
+
+/* ---------- templates ---------- */
+function viewTemplates() {
+  $("#mainCol").innerHTML = `<div class="topbar"><div class="crumbs"><b>Agent templates</b></div></div>
+    <div class="content"><div class="pad">
+      <h1 class="page-h">Agent templates</h1><p class="page-sub">Government-ready agents. Pick one, create it, and it opens as an editable flow.</p>
+      <div class="dept-row" id="deptRow"></div><div class="grid" id="tplGrid"></div>
+    </div></div>`;
+  const depts = [["all", "All departments", "الكل"], ...DEPTS];
+  $("#deptRow").innerHTML = depts.map(([id, en, ar]) => `<div class="dept ${DEPT === id ? "active" : ""}" data-d="${id}">${IC.templates} ${LANG === "ar" ? ar : en}</div>`).join("");
+  document.querySelectorAll(".dept").forEach(b => b.onclick = () => { DEPT = b.dataset.d; viewTemplates(); });
+  const grid = $("#tplGrid"); grid.innerHTML = "";
+  TPL.filter(t => DEPT === "all" || t[0] === DEPT).forEach(t => {
+    const dept = DEPTS.find(d => d[0] === t[0]);
+    const c = document.createElement("div"); c.className = "gcard";
+    c.innerHTML = `<div class="ic">${IC.agent}</div><h3>${esc(LANG === "ar" ? t[2] : t[1])}</h3><div class="ar">${esc(LANG === "ar" ? t[1] : t[2])}</div><p>${esc(t[3])}</p><div class="foot"><span class="pill-tag">${esc(dept[1])}</span><button class="btn primary sm">${IC.bolt} Create agent</button></div>`;
+    c.querySelector("button").onclick = async (e) => {
+      e.stopPropagation(); const btn = e.currentTarget; btn.disabled = true; btn.textContent = "Creating…";
+      try { const g = await api("POST", "generate", { mode: "workflow", instruction: t[4] }); if (!g.nodes.length) throw new Error(g.error || "failed"); LASTGRAPH = g.graph; const r = await api("POST", "deploy", { mode: "workflow", name: t[1], graph: g.graph }); loadAgents(); openAgent(r.id, "flow"); }
+      catch (err) { alert(err.message); btn.disabled = false; btn.textContent = "Create agent"; }
+    };
+    grid.appendChild(c);
+  });
+}
+
+/* ---------- integrations ---------- */
+let INTCAT = "all";
+function viewIntegrations() {
+  const total = INTEG_CATS.reduce((s, c) => s + c[1].length, 0);
+  $("#mainCol").innerHTML = `<div class="topbar"><div class="crumbs"><b>${t("Integrations")}</b></div></div>
+    <div class="content"><div class="pad">
+      <h1 class="page-h">${t("Choose integration")}</h1><p class="page-sub">${t("Connect Wakeel agents to the systems your entity uses —")} ${total}+ ${t("connectors across Microsoft 365, UAE government, databases and more.")}</p>
+      <div class="searchbar">${IC.search}<input id="isearch" placeholder="${t("Search connectors by name…")}"/></div>
+      <div class="dept-row" id="catRow"></div>
+      <div id="intBody"></div>
+    </div></div>`;
+  const cats = [["all", "All"], ...INTEG_CATS.map(c => [c[0], c[0]])];
+  $("#catRow").innerHTML = cats.map(([id, l]) => `<div class="dept ${INTCAT === id ? "active" : ""}" data-c="${esc(id)}">${esc(l)}</div>`).join("");
+  document.querySelectorAll(".dept").forEach(b => b.onclick = () => { INTCAT = b.dataset.c; viewIntegrations(); });
+  const draw = (q = "") => {
+    const body = $("#intBody"); body.innerHTML = "";
+    INTEG_CATS.filter(c => INTCAT === "all" || c[0] === INTCAT).forEach(([cat, items]) => {
+      const matched = items.filter(n => n.toLowerCase().includes(q.toLowerCase()));
+      if (!matched.length) return;
+      const h = document.createElement("div"); h.className = "side-sub"; h.style.paddingInline = "0"; h.textContent = cat; body.appendChild(h);
+      const grid = document.createElement("div"); grid.className = "grid"; body.appendChild(grid);
+      matched.forEach(n => {
+        const on = isConnected(n);
+        const native = !!PLUGIN_MAP[n];
+        const c = document.createElement("div"); c.className = "gcard"; c.style.cursor = "default";
+        c.innerHTML = `<div style="display:flex;align-items:center;gap:12px">${brandLogo(n)}<div style="flex:1;min-width:0"><h3 style="font-size:14px">${esc(n)}</h3>${native && !on ? `<div style="font-size:11px;color:var(--wakeel)">Native plugin</div>` : ""}</div>${on ? `<span class="st-pill ok">Installed</span>` : ""}</div>
+          <div class="foot" style="margin-top:14px"><span></span><button class="btn sm ${on ? "" : "primary"}">${on ? t("Configure") : native ? t("Install & connect") : t("Request")}</button></div>`;
+        const btn = c.querySelector("button");
+        btn.onclick = async (e) => {
+          e.stopPropagation();
+          if (on) { openToolConfig(n); return; }
+          if (!native) { btn.textContent = "Requested"; return; }
+          btn.disabled = true; btn.innerHTML = `<span class="spin"></span> Installing…`;
+          try { await api("POST", "provider/install", { name: PLUGIN_MAP[n] }); const t = await api("GET", "tools"); TOOLS_INSTALLED = t.installed || []; draw($("#isearch").value); }
+          catch (err) { btn.disabled = false; btn.textContent = "Not available yet"; }
+        };
+        grid.appendChild(c);
+      });
+    });
+    if (!body.children.length) body.innerHTML = `<div class="empty-mini">No connectors match “${esc(q)}”.</div>`;
+  };
+  api("GET", "tools").then(t => { TOOLS_INSTALLED = t.installed || []; draw($("#isearch") ? $("#isearch").value : ""); if (window.__autoconfig) { const c = window.__autoconfig; window.__autoconfig = null; setTimeout(() => openToolConfig(c), 200); } }).catch(() => draw());
+  $("#isearch").addEventListener("input", e => draw(e.target.value));
+}
+
+/* ---------- skills ---------- */
+function viewSkills() {
+  $("#mainCol").innerHTML = `<div class="topbar"><div class="crumbs"><b>Skills</b></div></div>
+    <div class="content"><div class="pad">
+      <h1 class="page-h">Skills</h1><p class="page-sub">Reusable capabilities Wakeel uses to get work done.</p>
+      <div class="tabs"><button class="active">All skills</button><button>Active</button></div>
+      <div class="searchbar">${IC.search}<input id="ssearch" placeholder="Search skills by name…"/></div>
+      <div class="rowlist" id="skillList"></div>
+    </div></div>`;
+  const draw = (q = "") => {
+    const el = $("#skillList"); el.innerHTML = "";
+    SKILLS.filter(s => s.includes(q.toLowerCase())).forEach(s => {
+      const r = document.createElement("div"); r.className = "lrow";
+      r.innerHTML = `<div class="ic">${IC.book}</div><div class="info"><div class="t">${esc(s)} <span class="sys-tag">System skill</span></div><div class="d">Capability available to your agents and chat.</div></div><button class="btn sm">Try in chat</button>`;
+      r.querySelector("button").onclick = () => { VIEW = "home"; THREAD = []; BUILD = false; renderShell(); setTimeout(() => { const i = $("#ins"); if (i) { i.value = "Use the " + s + " skill to help me with "; i.focus(); } }, 50); };
+      el.appendChild(r);
+    });
+  };
+  draw(); $("#ssearch").addEventListener("input", e => draw(e.target.value));
+}
+
+/* ---------- Tasks (run history) ---------- */
+function statusPill(s) { const m = { succeeded: "ok", completed: "ok", running: "run", failed: "bad", planned: "idle" }; return `<span class="st-pill ${m[s] || "idle"}">${esc(s || "—")}</span>`; }
+function viewTasks() {
+  $("#mainCol").innerHTML = `<div class="topbar"><div class="crumbs"><b>${t("Tasks")}</b></div></div>
+    <div class="content"><div class="pad">
+      <h1 class="page-h">${t("Tasks")}</h1><p class="page-sub">${t("Every agent run — status, steps and duration. Click one to see the step-by-step log.")}</p>
+      <div class="tabs"><button class="active">All</button><button>Completed</button><button>Failed</button></div>
+      <div class="rowlist" id="taskList"><div class="empty-mini" style="padding:16px">Loading…</div></div>
+    </div></div>`;
+  api("GET", "tasks").then(d => {
+    const el = $("#taskList"); const tasks = d.tasks || [];
+    if (!tasks.length) { el.innerHTML = `<div class="lrow"><div class="info"><div class="d">No runs yet. Open an agent, turn on Test mode, and Run it.</div></div></div>`; return; }
+    el.innerHTML = "";
+    tasks.forEach(t => {
+      const dur = t.ended && t.started ? (t.ended - t.started) + "s" : "";
+      const r = document.createElement("div"); r.className = "lrow";
+      r.innerHTML = `<div class="ic">${IC.play}</div><div class="info"><div class="t">${esc(t.app_name || "Agent")} ${statusPill(t.status)}</div><div class="d">${esc(t.input || "")}</div></div>
+        <div style="text-align:right;flex:none"><div style="font-size:12px;color:var(--muted)">${t.steps} steps${dur ? " · " + dur : ""}</div><div style="font-size:11px;color:var(--faint)">${timeAgo(t.started)}</div></div>`;
+      r.style.cursor = "pointer";
+      r.onclick = () => openTask(t.id);
+      el.appendChild(r);
+    });
+  }).catch(e => { const el = $("#taskList"); if (el) el.innerHTML = `<div class="lrow"><div class="info"><div class="d">⚠️ ${esc(e.message)}</div></div></div>`; });
+}
+
+async function openTask(id) {
+  const d = document.createElement("div"); d.className = "modal-back";
+  d.innerHTML = `<div class="modal fade" onclick="event.stopPropagation()"><div style="display:flex"><h2 style="flex:1">Task run</h2><button class="x" id="tx">×</button></div><div id="tBody"><div class="empty-mini">…</div></div></div>`;
+  document.body.appendChild(d); d.onclick = () => d.remove(); $("#tx").onclick = () => d.remove();
+  try {
+    const t = await api("GET", "task?id=" + id);
+    const dur = t.ended && t.started ? (t.ended - t.started) + "s" : "";
+    $("#tBody").innerHTML = `
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:6px">${statusPill(t.status)}<b>${esc(t.app_name || "Agent")}</b><span style="margin-inline-start:auto;color:var(--muted);font-size:12px">${dur}</span></div>
+      <div style="color:var(--muted);font-size:13px;margin-bottom:16px">${esc(t.input || "")}</div>
+      <div class="side-sub" style="padding-inline:0">Steps</div>
+      <div class="rowlist" style="border-radius:12px">${(t.nodes || []).map((n, i) => `<div class="lrow" style="padding:11px 14px"><div class="ic" style="width:26px;height:26px">${i + 1}</div><div class="info"><div class="t" style="font-size:13.5px">${esc(n.title || "step")}</div></div>${statusPill(n.status)}<span style="font-size:11px;color:var(--faint);margin-inline-start:10px">${n.ms ? (n.ms / 1000).toFixed(1) + "s" : ""}</span></div>`).join("")}</div>
+      ${t.output ? `<div class="side-sub" style="padding-inline:0">Output</div><div class="rl-out" style="background:var(--panel-2);color:var(--text);border-color:var(--line)">${esc(t.output).slice(0, 3000)}</div>` : ""}`;
+  } catch (e) { $("#tBody").innerHTML = `<div class="empty-mini">⚠️ ${esc(e.message)}</div>`; }
+}
+
+/* ---------- Inbox (approval queue §11) ---------- */
+function viewInbox() {
+  $("#mainCol").innerHTML = `<div class="topbar"><div class="crumbs"><b>${t("Inbox")}</b></div></div>
+    <div class="content"><div class="pad">
+      <h1 class="page-h">${t("Inbox")}</h1><p class="page-sub">${t("Agents draft; officers decide. Review each output and approve, reject, or edit before it's actioned.")}</p>
+      <div id="inboxList"><div class="empty-mini">Loading…</div></div>
+    </div></div>`;
+  api("GET", "inbox").then(d => {
+    const el = $("#inboxList"); const items = d.items || [];
+    if (!items.length) { el.innerHTML = `<div class="empty-state"><div class="big">${IC.inbox}</div><h3>All clear</h3><div>Nothing awaiting your decision. Run an agent and its output arrives here for approval.</div></div>`; return; }
+    el.innerHTML = "";
+    items.forEach(it => {
+      const c = document.createElement("div"); c.className = "gcard"; c.style.cursor = "default"; c.style.marginBottom = "12px";
+      c.innerHTML = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><div class="ic" style="width:34px;height:34px;margin:0">${IC.agent}</div><div><div style="font-weight:700;font-size:14px">${esc(it.app_name || "Agent")} <span class="st-pill idle">Awaiting approval</span></div><div style="font-size:12px;color:var(--muted)">${esc(it.input || "")}</div></div><span style="margin-inline-start:auto;font-size:11px;color:var(--faint)">${timeAgo(it.started)}</span></div>
+        <div class="rl-out" style="background:var(--panel-2);color:var(--text);border-color:var(--line)" id="out-${it.id}">${esc(it.output).slice(0, 1600)}</div>
+        <div class="foot" style="margin-top:12px;gap:8px"><button class="btn sm" data-a="edit">Edit</button><button class="btn sm" data-a="reject" style="border-color:#5a1e26;color:#ff9ba3">Reject</button><button class="btn primary sm" data-a="approve">${IC.check} Approve</button></div>`;
+      const decide = async (decision, note) => { try { await api("POST", "decide", { task_id: it.id, decision, note: note || "" }); c.style.transition = ".25s"; c.style.opacity = ".4"; setTimeout(() => { c.remove(); if (!$("#inboxList").querySelector(".gcard")) viewInbox(); }, 250); } catch (e) { alert(e.message); } };
+      c.querySelector('[data-a="approve"]').onclick = () => decide("approved", $("#out-" + it.id).isContentEditable ? $("#out-" + it.id).textContent : "");
+      c.querySelector('[data-a="reject"]').onclick = () => decide("rejected");
+      c.querySelector('[data-a="edit"]').onclick = (e) => { const o = $("#out-" + it.id); o.contentEditable = "true"; o.style.outline = "2px solid var(--wakeel)"; o.focus(); e.currentTarget.textContent = "Editing…"; };
       el.appendChild(c);
     });
-  } catch (e) {}
+  }).catch(e => { $("#inboxList").innerHTML = `<div class="empty-mini">⚠️ ${esc(e.message)}</div>`; });
 }
 
-/* ---------------- MARKETPLACE ---------------- */
-function renderMarket() {
-  const depts = [{ id: "all", en: t("all"), ar: t("all"), icn: "uae" }, ...DEPTS];
-  $("#view").innerHTML = `
-  <div class="fade">
-    <h1 class="view-title">${t("market_h")}</h1><p class="view-sub">${t("market_sub")}</p>
-    <div class="dept-row">${depts.map(d => `<button class="dept ${DEPT === d.id ? "active" : ""}" data-d="${d.id}">${IC[d.icn] || ""} ${LANG === "ar" ? d.ar : d.en}</button>`).join("")}</div>
-    <div class="grid" id="tpls"></div>
-  </div>`;
-  document.querySelectorAll(".dept").forEach(b => b.onclick = () => { DEPT = b.dataset.d; renderMarket(); });
-  const list = TPL.filter(x => DEPT === "all" || x.d === DEPT);
-  const wrap = $("#tpls");
-  list.forEach((x, idx) => {
-    const dept = DEPTS.find(d => d.id === x.d);
-    const key = x.d + "/" + x.en;
-    const c = document.createElement("div");
-    c.className = "tcard";
-    c.innerHTML = `
-      <span class="dept-tag">${IC[dept.icn] || ""} ${LANG === "ar" ? dept.ar : dept.en}</span>
-      <div class="nm">${esc(LANG === "ar" ? x.ar : x.en)}<span class="ar">${esc(LANG === "ar" ? x.en : x.ar)}</span></div>
-      <div class="ds">${esc(x.ds)}</div>
-      <div class="foot"><span class="steps">3–5 ${t("steps")}</span>
-      <button class="btn sm" data-k="${esc(key)}">${INSTALLED[key] ? "✓ " + t("installed") : t("install")}</button></div>`;
-    const btn = c.querySelector("button");
-    btn.onclick = async () => {
-      if (INSTALLED[key]) { gotoEdit(INSTALLED[key].split("/app/")[1].split("/")[0]); return; }
-      btn.disabled = true; btn.textContent = t("installing");
-      try {
-        const d = await api("POST", "install", { name: x.en, instruction: x.i, mode: "workflow", icon: dept.ic });
-        INSTALLED[key] = d.url;
-        btn.disabled = false; btn.textContent = "✓ " + t("installed");
-      } catch (e) { btn.disabled = false; btn.textContent = t("install"); alert(e.message); }
-    };
-    wrap.appendChild(c);
-  });
-}
-
-/* ---------------- TEST ---------------- */
-function renderTest() {
-  $("#view").innerHTML = `
-  <div class="fade">
-    <h1 class="view-title">${t("test_h")}</h1><p class="view-sub">${t("test_sub")}</p>
-    <div class="split">
-      <div class="panel">
-        <select id="pick"><option value="">${t("pick")}</option></select>
-        <div class="cases-wrap"><table class="cases"><thead><tr><th style="width:38%">${t("input")}</th><th style="width:34%">${t("expected")}</th><th>${t("status")}</th><th></th></tr></thead>
-        <tbody id="rows"></tbody></table></div>
-        <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
-          <button class="btn quiet sm" id="genT">✨ ${t("gen_tests")}</button>
-          <button class="btn quiet sm" id="addCase">${t("add_case")}</button>
-          <button class="btn sm" id="runT">${t("run_tests")} ▶</button>
-        </div>
-        <div class="hint" id="genHint" style="margin-top:8px"></div>
-        <div id="tfeed" class="feed" style="margin-top:18px"></div>
+/* ---------- Analytics (§9) ---------- */
+function viewAnalytics() {
+  $("#mainCol").innerHTML = `<div class="topbar"><div class="crumbs"><b>${t("Analytics")}</b></div></div>
+    <div class="content"><div class="pad">
+      <h1 class="page-h">${t("Analytics")}</h1><p class="page-sub">${t("How your agents are performing across all runs.")}</p>
+      <div id="anBody"><div class="empty-mini">${t("Loading…")}</div></div>
+    </div></div>`;
+  api("GET", "analytics").then(a => {
+    const maxDay = Math.max(1, ...(a.days || [1]));
+    $("#anBody").innerHTML = `
+      <div class="metric-row">
+        ${metric("Total runs", a.total)}
+        ${metric("Success rate", a.success_rate + "%", a.success_rate >= 80 ? "ok" : a.success_rate >= 50 ? "warn" : "bad")}
+        ${metric("Avg duration", a.avg + "s")}
+        ${metric("Failed", a.failed, a.failed ? "bad" : "")}
       </div>
-      <div class="panel ring-wrap">
-        <div class="ring">
-          <svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" stroke="#ececf0" stroke-width="10"/>
-          <circle id="arc" cx="60" cy="60" r="52" stroke="#00843D" stroke-width="10" stroke-dasharray="326.7" stroke-dashoffset="326.7" style="transition:stroke-dashoffset .8s cubic-bezier(.2,.8,.3,1)"/></svg>
-          <div class="val"><div><span id="acc">—</span><small>${t("accuracy")}</small></div></div>
+      <div class="an-grid">
+        <div class="gcard" style="cursor:default"><h3 style="margin-bottom:14px">Runs · last 7 days</h3>
+          <div class="bars">${(a.days || []).map(v => `<div class="bar-col"><div class="bar" style="height:${Math.round(v / maxDay * 100)}%"></div></div>`).join("")}</div>
+          <div class="bar-x">${["6d", "5d", "4d", "3d", "2d", "1d", "today"].map(l => `<span>${l}</span>`).join("")}</div>
         </div>
-        <div id="passline" style="font-size:13px;color:var(--muted);margin-top:8px">—</div>
-        <div style="text-align:start;margin-top:14px">
-          <div class="pp-sub" style="margin:0 0 6px">${t("fb_label")}</div>
-          <textarea id="fbtext" placeholder="${esc(t("fb_ph"))}" style="width:100%;border:1px solid var(--hairline);border-radius:11px;padding:9px 11px;font-family:inherit;font-size:13px;min-height:64px;resize:vertical;outline:0"></textarea>
+        <div class="gcard" style="cursor:default"><h3 style="margin-bottom:14px">Approvals</h3>
+          <div class="kv"><span>Approved</span><b style="color:var(--green)">${a.approvals.approved}</b></div>
+          <div class="kv"><span>Rejected</span><b style="color:#ff8b8b">${a.approvals.rejected}</b></div>
+          <div class="kv"><span>Pending</span><b>${a.approvals.pending}</b></div>
         </div>
-        <div id="healbox"></div>
-        <div class="heal-note">${IC.heal} ${t("heal_note")}</div>
       </div>
-    </div>
+      <div class="side-sub" style="padding-inline:0">Per agent</div>
+      <div class="rowlist">${(a.agents || []).map(g => { const rate = g.runs ? Math.round(g.ok * 100 / g.runs) : 0; return `<div class="lrow"><div class="ic">${IC.agent}</div><div class="info"><div class="t">${esc(g.name)}</div><div class="d">${g.runs} runs</div></div><div style="width:120px;flex:none"><div class="prog"><div class="prog-in" style="width:${rate}%"></div></div></div><span class="st-pill ${rate >= 80 ? "ok" : "idle"}" style="margin-inline-start:12px">${rate}%</span></div>`; }).join("") || `<div class="lrow"><div class="info"><div class="d">No runs yet.</div></div></div>`}</div>`;
+  }).catch(e => { $("#anBody").innerHTML = `<div class="empty-mini">⚠️ ${esc(e.message)}</div>`; });
+}
+function metric(label, val, tone) { return `<div class="metric ${tone || ""}"><div class="mv">${val}</div><div class="ml">${label}</div></div>`; }
+
+/* ---------- Automations (Wakeel's bundled connector & scheduling engine) ---------- */
+function viewAutomations() {
+  const url = `http://${location.hostname}:5679/`;
+  $("#mainCol").innerHTML = `
+    <div class="topbar"><div class="crumbs"><b>${t("Automations")}</b><span class="sep">·</span><span style="color:var(--muted)">${t("Connector & workflow engine")}</span></div></div>
+    <div class="content"><div class="pad" style="max-width:900px">
+      <div class="auto-hero">
+        <div class="auto-mark">${IC.integrations}</div>
+        <h1 class="page-h" style="margin-top:14px">${t("Automations")}</h1>
+        <p class="page-sub" style="max-width:620px;margin-inline:auto">${t("Wakeel's built-in connector & scheduling engine —")} <b>${t("bundled in this deployment")}</b>${t(". 400+ connectors including all of Microsoft 365, Google, databases and HTTP. Automations read/write across your systems and call your Wakeel agents for the AI.")}</p>
+        <div style="display:flex;gap:10px;justify-content:center;margin-top:8px"><a class="btn primary" href="${url}" target="_blank">${IC.integrations} ${t("Open Automations ↗")}</a></div>
+        <div style="color:var(--faint);font-size:12px;margin-top:12px">${t("Runs in your stack for data residency · sign in:")} admin@wakeel.local</div>
+      </div>
+      <div class="grid" style="margin-top:34px">
+        <div class="gcard" style="cursor:default"><div class="ic">${IC.tasks}</div><h3>${t("Schedule & trigger")}</h3><p>${t("Daily/cron runs, webhooks, \"new email\" or \"row added\" events — the entry points your agents react to.")}</p></div>
+        <div class="gcard" style="cursor:default"><div class="ic">${IC.integrations}</div><h3>${t("400+ connectors")}</h3><p>${t("Outlook, SharePoint, Excel, Teams, Google, SAP, databases, HTTP — the connector layer Wakeel's agents act through.")}</p></div>
+        <div class="gcard" style="cursor:default"><div class="ic">${IC.agent}</div><h3>${t("Calls your agents")}</h3><p>${t("An automation step calls a Wakeel agent's API for the reasoning, then acts on the result (send, update, escalate).")}</p></div>
+      </div>
+      <div class="gcard" style="cursor:default;margin-top:18px;max-width:100%"><h3>How it fits the MoHRE agent</h3><p style="margin-top:6px">Open an agent → <b>Triggers → Connect Microsoft 365</b> to get its endpoint, key, and a ready-made automation. That automation (Schedule → read Excel → call the agent → Outlook send / Excel update / escalate → summary) runs here. Automations = the hands, Wakeel = the brain.</p></div>
+    </div></div>`;
+}
+
+function viewEmpty(title, sub, ic) {
+  $("#mainCol").innerHTML = `<div class="topbar"><div class="crumbs"><b>${title}</b></div></div>
+    <div class="content"><div class="pad"><h1 class="page-h">${title}</h1><p class="page-sub">${sub}</p>
+    <div class="empty-state"><div class="big">${ic}</div><h3>Nothing here yet</h3><div>${sub}</div></div></div></div>`;
+}
+
+/* ---------- profile ---------- */
+async function openProfile() {
+  if ($("#pm")) { $("#pm").remove(); return; }
+  const d = document.createElement("div"); d.id = "pm"; d.className = "modal-back";
+  d.innerHTML = `<div class="modal fade" style="width:380px" onclick="event.stopPropagation()">
+    <h2>${esc(ME.email.split("@")[0])} <button class="x" id="pmx">×</button></h2>
+    <div style="color:var(--muted);font-size:13px;margin:-8px 0 16px">${esc(ME.email)}</div>
+    <div class="side-sub" style="padding-inline:0">Activity</div>
+    <div id="pmActs" style="max-height:280px;overflow:auto"><div class="empty-mini">…</div></div>
+    <button class="btn block" style="margin-top:14px;border-color:#5a1e26;color:#ff9ba3" id="pmOut">Sign out</button>
   </div>`;
-  api("GET", "apps").then(d => {
-    APPS = d.apps || [];
-    const sel = $("#pick");
-    APPS.forEach(a => {
-      const o = document.createElement("option");
-      o.value = a.id; o.textContent = a.name;
-      if (a.id === TESTAPP) o.selected = true;
-      sel.appendChild(o);
-    });
-  });
-  $("#pick").onchange = () => { TESTAPP = $("#pick").value; };
-  $("#addCase").onclick = () => { CASES.push({ input: "", expected: "", status: "idle" }); drawCases(); };
-  $("#runT").onclick = runTests;
-  $("#genT").onclick = genTests;
-  drawCases();
-}
-
-function drawCases() {
-  const tb = $("#rows"); if (!tb) return;
-  tb.innerHTML = "";
-  CASES.forEach((c, i) => {
-    const tr = document.createElement("tr");
-    const st = c.status === "pass" ? `<span class="case-status pass">✓ ${t("pass")}</span>` :
-               c.status === "fail" ? `<span class="case-status fail">✕ ${t("fail")}</span>` :
-               c.status === "run" ? `<span class="case-status run">● ${t("running")}</span>` :
-               `<span class="case-status idle">${t("idle")}</span>`;
-    tr.innerHTML = `<td><textarea data-i="${i}" data-f="input">${esc(c.input)}</textarea></td>
-      <td><textarea data-i="${i}" data-f="expected">${esc(c.expected)}</textarea></td>
-      <td>${st}${c.reason && c.status === "fail" ? `<div class="outbox">${esc(c.reason)}\n${esc((c.output || "").slice(0, 300))}</div>` : ""}</td>
-      <td><button class="xbtn" data-x="${i}">×</button></td>`;
-    tb.appendChild(tr);
-  });
-  tb.querySelectorAll("textarea").forEach(a => a.oninput = () => { CASES[+a.dataset.i][a.dataset.f] = a.value; });
-  tb.querySelectorAll(".xbtn").forEach(b => b.onclick = () => { CASES.splice(+b.dataset.x, 1); if (!CASES.length) CASES.push({ input: "", expected: "", status: "idle" }); drawCases(); });
-}
-
-function setRing(pct) {
-  const C = 326.7;
-  $("#arc").style.strokeDashoffset = String(C - (C * pct / 100));
-  $("#arc").style.stroke = pct >= 80 ? "#00843D" : pct >= 50 ? "#b06f00" : "#CE1126";
-  $("#acc").textContent = pct + "%";
-}
-
-async function genTests() {
-  if (!TESTAPP) { alert(t("pick")); return; }
-  const b = $("#genT");
-  b.disabled = true; b.textContent = t("generating");
-  try {
-    const r = await api("POST", "gen-tests", { app_id: TESTAPP, count: 6 });
-    const fresh = (r.cases || []).map(c => ({ input: c.input, expected: c.expected, status: "idle" }));
-    CASES = CASES.filter(c => c.input.trim() || c.expected.trim()).concat(fresh);
-    if (!CASES.length) CASES = [{ input: "", expected: "", status: "idle" }];
-    drawCases();
-    $("#genHint").textContent = "✨ " + t("gen_hint");
-  } catch (e) { alert(e.message); }
-  finally { b.disabled = false; b.textContent = "✨ " + t("gen_tests"); }
-}
-
-async function runTests(afterHeal) {
-  if (!TESTAPP) { alert(t("pick")); return; }
-  if (TESTBUSY) return;
-  const active = CASES.filter(c => c.input.trim());
-  if (!active.length) return;
-  TESTBUSY = true; $("#runT").disabled = true; $("#runT").textContent = t("running");
-  $("#tfeed").innerHTML = "";
-  let passed = 0;
-  for (const c of active) {
-    c.status = "run"; drawCases();
-    const feed = $("#tfeed");
-    const d = document.createElement("div");
-    d.className = "evt run";
-    d.innerHTML = `<div class="ic"><div class="spin"></div></div><div><div class="tt">${esc(c.input.slice(0, 60))}</div><div class="st">${t("running")}</div></div>`;
-    feed.appendChild(d);
-    try {
-      const r = await api("POST", "test-case", { app_id: TESTAPP, input: c.input, expected: c.expected });
-      c.status = r.pass ? "pass" : "fail"; c.output = r.output; c.reason = r.reason;
-      if (r.pass) passed++;
-      d.className = "evt " + (r.pass ? "ok" : "err");
-      d.innerHTML = `<div class="ic">${r.pass ? "✓" : "✕"}</div><div><div class="tt">${esc(c.input.slice(0, 60))}</div>
-        <div class="st">${(r.events || []).map(e => esc(e.title)).join(" → ")}</div></div>
-        <div class="right">${r.ms ? (r.ms / 1000).toFixed(1) + "s" : ""}</div>`;
-    } catch (e) {
-      c.status = "fail"; c.reason = e.message;
-      d.className = "evt err"; d.innerHTML = `<div class="ic">✕</div><div><div class="tt">${esc(e.message)}</div></div>`;
-    }
-    drawCases();
-  }
-  const pct = Math.round(passed * 100 / active.length);
-  setRing(pct);
-  $("#passline").textContent = `${passed}/${active.length} ${t("passed")}`;
-  const hb = $("#healbox"); hb.innerHTML = "";
-  if (pct < 100 && !afterHeal) {
-    const b = document.createElement("button");
-    b.className = "btn danger sm"; b.style.marginTop = "12px"; b.innerHTML = IC.heal + " " + t("selfheal");
-    b.onclick = () => doSelfHeal();
-    hb.appendChild(b);
-  }
-  TESTBUSY = false; $("#runT").disabled = false; $("#runT").textContent = t("run_tests") + " ▶";
-}
-
-async function doSelfHeal() {
-  const failures = CASES.filter(c => c.status === "fail").map(c => ({ input: c.input, expected: c.expected, output: c.output || "" }));
-  if (!failures.length) return;
-  const hb = $("#healbox");
-  hb.innerHTML = `<div class="evt run" style="margin-top:12px"><div class="ic"><div class="spin"></div></div><div><div class="tt">${t("healing")}</div></div></div>`;
-  try {
-    await api("POST", "selfheal", { app_id: TESTAPP, failures, feedback: ($("#fbtext") ? $("#fbtext").value : "") });
-    hb.innerHTML = `<div class="evt ok" style="margin-top:12px"><div class="ic">${IC.check}</div><div><div class="tt">${t("healed")}</div></div></div>`;
-    await runTests(true);
-  } catch (e) {
-    hb.innerHTML = `<div class="evt err" style="margin-top:12px"><div class="ic">✕</div><div><div class="tt">${esc(e.message)}</div></div></div>`;
-  }
-}
-
-/* ---------------- DEPLOY ---------------- */
-function renderDeploy() {
-  $("#view").innerHTML = `
-  <div class="fade">
-    <h1 class="view-title">${t("deploy_h")}</h1><p class="view-sub">${t("deploy_sub")}</p>
-    <div class="panel" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
-      <select id="dpick"><option value="">${t("pick")}</option></select>
-      <button class="btn sm" id="pub">${t("publish")}</button>
-      <button class="btn quiet sm" id="key">${t("get_key")}</button>
-      <button class="btn quiet sm" id="exp">${t("export_dsl")}</button>
-      <span id="dstat" style="font-size:13px;color:var(--green);font-weight:650"></span>
-    </div>
-    <div id="keybox"></div>
-    <div class="dep-grid" id="targets"></div>
-  </div>`;
-  api("GET", "apps").then(d => {
-    APPS = d.apps || [];
-    const sel = $("#dpick");
-    APPS.forEach(a => { const o = document.createElement("option"); o.value = a.id; o.textContent = a.name; if (a.id === TESTAPP) o.selected = true; sel.appendChild(o); });
-    drawTargets();
-  });
-  $("#pub").onclick = async () => {
-    const id = $("#dpick").value; if (!id) return;
-    $("#pub").disabled = true;
-    try { await api("POST", "publish", { app_id: id }); $("#dstat").textContent = "✓ " + t("published"); }
-    catch (e) { $("#dstat").textContent = e.message; } finally { $("#pub").disabled = false; }
-  };
-  $("#key").onclick = async () => {
-    const id = $("#dpick").value; if (!id) return;
-    try {
-      const r = await api("POST", "apikey", { app_id: id });
-      $("#keybox").innerHTML = `<div class="code">curl -X POST '${location.origin}/v1/workflows/run' \\
-  -H 'Authorization: Bearer ${esc(r.token)}' \\
-  -H 'Content-Type: application/json' \\
-  -d '{"inputs": {"input": "..."}, "response_mode": "blocking", "user": "wakeel"}'</div>`;
-    } catch (e) { $("#keybox").innerHTML = `<div class="err">${esc(e.message)}</div>`; }
-  };
-  $("#exp").onclick = async () => {
-    const id = $("#dpick").value; if (!id) return;
-    try {
-      const r = await api("GET", "export?id=" + id);
-      const blob = new Blob([r.data || JSON.stringify(r)], { type: "text/yaml" });
-      const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "wakeel-package.yml"; a.click();
-    } catch (e) { alert(e.message); }
-  };
-  function drawTargets() {
-    $("#targets").innerHTML = `
-    <div class="dep-card"><div class="hd"><div class="ic">${IC.api}</div><div class="nm">${t("api_card")}</div><span class="st live">${t("live")}</span></div>
-      <p>${t("api_desc")}</p><div class="kv"><span>Endpoint</span><b>${location.origin}/v1</b></div><div class="kv"><span>Auth</span><b>Bearer key</b></div></div>
-    <div class="dep-card"><div class="hd"><div class="ic">${IC.cloud}</div><div class="nm">${t("azure_card")}</div><span class="st guide">${t("guide")}</span></div>
-      <p>${t("azure_desc")}</p>
-      <div class="code">az group create -n wakeel -l uaenorth
-az containerapp env create -n wakeel-env -g wakeel
-# deploy the platform containers + import
-# the exported wakeel-package.yml</div></div>
-    <div class="dep-card"><div class="hd"><div class="ic">${IC.server}</div><div class="nm">${t("onprem_card")}</div><span class="st guide">${t("guide")}</span></div>
-      <p>${t("onprem_desc")}</p><div class="code">docker compose up -d
-# import wakeel-package.yml
-# via the Studio → Import</div></div>
-    <div class="dep-card"><div class="hd"><div class="ic">${IC.globe}</div><div class="nm">${t("web_card")}</div><span class="st live">${t("live")}</span></div>
-      <p>${t("web_desc")}</p><div class="kv"><span>Web app</span><b>${location.origin}/app/…</b></div><div class="kv"><span>Embed</span><b>&lt;script&gt; widget</b></div></div>`;
-  }
-}
-
-
-
-/* ---------------- settings: own API keys / providers / default model ---------------- */
-async function openSettings() {
-  if ($("#setModal")) return;
-  const wrap = document.createElement("div");
-  wrap.id = "setModal"; wrap.className = "modal-back";
-  wrap.innerHTML = `<div class="modal fade">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-      <div style="font-weight:800;font-size:18px">${t("settings")}</div><button class="xbtn" id="setX" style="font-size:22px">×</button></div>
-    <div class="pp-sub" style="margin-top:0">${t("def_model")}</div>
-    <div style="display:flex;gap:8px"><select id="defSel" style="flex:1;min-width:0"></select><button class="btn sm" id="defSave">${t("save")}</button></div>
-    <div class="pp-sub">${t("providers")}</div>
-    <div id="provList" class="prov-list"><div class="empty" style="padding:10px 0">…</div></div>
-    <div class="pp-sub">${t("add_provider")}</div>
-    <div class="chips" style="margin:0;justify-content:flex-start" id="provAdd"></div>
-  </div>`;
-  document.body.appendChild(wrap);
-  wrap.onclick = e => { if (e.target === wrap) wrap.remove(); };
-  $("#setX").onclick = () => wrap.remove();
-
-  try {
-    const [models, cur] = await Promise.all([api("GET", "models"), api("GET", "settings")]);
-    const sel = $("#defSel");
-    (models.providers || []).forEach(pr => {
-      const g = document.createElement("optgroup"); g.label = pr.label;
-      (pr.models || []).forEach(m => {
-        const o = document.createElement("option");
-        o.value = pr.provider + "|" + m; o.textContent = m;
-        if (pr.provider === cur.provider && m === cur.model) o.selected = true;
-        g.appendChild(o);
-      });
-      sel.appendChild(g);
-    });
-    $("#defSave").onclick = async () => {
-      const [pv, md] = sel.value.split("|");
-      $("#defSave").disabled = true;
-      try { await api("POST", "settings", { provider: pv, model: md }); $("#defSave").textContent = "✓ " + t("saved"); }
-      catch (e) { alert(e.message); }
-      finally { setTimeout(() => { $("#defSave").disabled = false; $("#defSave").textContent = t("save"); }, 1500); }
-    };
-  } catch (e) {}
-  loadProviders();
-
-  const CURATED = [["Anthropic Claude", "anthropic"], ["Google Gemini", "gemini"], ["DeepSeek", "deepseek"], ["Groq", "groq"], ["Azure OpenAI", "azure_openai"]];
-  const addBox = $("#provAdd");
-  CURATED.forEach(([label, name]) => {
-    const b = document.createElement("button");
-    b.className = "chip"; b.textContent = "+ " + label;
-    b.onclick = async () => {
-      b.disabled = true; b.textContent = t("installing_p");
-      try { await api("POST", "provider/install", { name }); b.textContent = "✓ " + label; loadProviders(); }
-      catch (e) { b.textContent = "+ " + label; b.disabled = false; alert(e.message); }
-    };
-    addBox.appendChild(b);
-  });
-}
-
-async function loadProviders() {
-  const box = $("#provList"); if (!box) return;
-  try {
-    const d = await api("GET", "providers");
-    box.innerHTML = (d.providers || []).length ? "" : `<div class="empty" style="padding:10px 0">—</div>`;
-    (d.providers || []).forEach(pr => {
-      const row = document.createElement("div");
-      row.className = "prov-row";
-      const ok = pr.status === "active";
-      row.innerHTML = `<div style="font-weight:650;font-size:13.5px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis">${esc(pr.label)}</div>
-        <span class="case-status ${ok ? "pass" : "idle"}">${ok ? "✓ " + t("active") : t("not_conf")}</span>
-        <button class="btn quiet sm" style="flex:none">${t("configure")}</button>`;
-      const btn = row.querySelector("button");
-      btn.onclick = () => {
-        const ex = row.nextElementSibling;
-        if (ex && ex.className === "prov-form") { ex.remove(); return; }
-        const f = document.createElement("div");
-        f.className = "prov-form";
-        f.innerHTML = pr.schemas.map(sc =>
-          `<input data-v="${esc(sc.variable)}" type="${sc.secret ? "password" : "text"}" placeholder="${esc(sc.label)}${sc.required ? " *" : ""}"/>`
-        ).join("") + `<button class="btn sm">${t("save")}</button>`;
-        f.querySelector(".btn").onclick = async () => {
-          const creds = {};
-          f.querySelectorAll("input").forEach(i => { if (i.value.trim()) creds[i.dataset.v] = i.value.trim(); });
-          f.querySelector(".btn").disabled = true;
-          try { await api("POST", "provider/credentials", { provider: pr.provider, credentials: creds }); f.remove(); loadProviders(); }
-          catch (e) { alert(e.message); f.querySelector(".btn").disabled = false; }
-        };
-        row.after(f);
-      };
-      box.appendChild(row);
-    });
-  } catch (e) { box.innerHTML = `<div class="empty">⚠️ ${esc(e.message)}</div>`; }
-}
-
-/* ---------------- profile menu: details + activity history + logout ---------------- */
-async function toggleProfile() {
-  const ex = $("#profilePanel");
-  if (ex) { ex.remove(); return; }
-  const d = document.createElement("div");
-  d.id = "profilePanel";
-  d.className = "profile-panel fade";
-  d.innerHTML = `
-    <div class="pp-head">
-      <div class="avatar">${esc((ME.email || "U")[0].toUpperCase())}</div>
-      <div style="min-width:0"><div style="font-weight:750;font-size:14px">${esc(ME.email.split("@")[0])}</div>
-      <div style="font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis">${esc(ME.email)}</div></div>
-    </div>
-    <div class="pp-sub">${t("activity")}</div>
-    <div class="pp-acts" id="ppacts"><div class="empty" style="padding:14px 0">…</div></div>
-    <button class="btn danger sm block" id="ppout" style="margin-top:10px;width:100%">${t("signout")}</button>`;
   document.body.appendChild(d);
-  $("#ppout").onclick = async () => {
-    try { await api("POST", "logout"); } catch (e) {}
-    ME = null; d.remove(); renderLogin();
-  };
-  document.addEventListener("click", function close(e) {
-    if (!d.contains(e.target) && e.target.id !== "avatar") { d.remove(); document.removeEventListener("click", close); }
-  });
+  d.onclick = () => d.remove(); $("#pmx").onclick = () => d.remove();
+  $("#pmOut").onclick = async () => { try { await api("POST", "logout"); } catch (e) {} ME = null; d.remove(); renderLogin(); };
   try {
     const r = await api("GET", "activity");
-    const box = $("#ppacts");
-    if (!box) return;
-    const acts = r.activity || [];
-    box.innerHTML = acts.length ? "" : `<div class="empty" style="padding:14px 0">${t("no_activity")}</div>`;
-    acts.forEach(a => {
-      const row = document.createElement("div");
-      row.className = "pp-row";
-      row.innerHTML = `<span class="pp-dot"></span>
-        <div style="min-width:0"><div class="pp-a">${esc(t("act_" + a.action))}</div>
-        ${a.detail ? `<div class="pp-d">${esc(a.detail)}</div>` : ""}</div>
-        <span class="pp-t">${timeAgo(a.ts)}</span>`;
-      box.appendChild(row);
-    });
+    const map = { login: "Signed in", build: "Built an agent", install: "Installed a template", test: "Ran a test", heal: "Self-healed an agent", data: "Added knowledge", chat: "Chat", publish: "Published", provider: "Configured a provider", gen_tests: "Generated test cases" };
+    $("#pmActs").innerHTML = (r.activity || []).map(a => `<div class="lrow" style="border-radius:0;padding:10px 2px;background:transparent"><div class="info"><div class="t" style="font-size:13px">${esc(map[a.action] || a.action)}</div>${a.detail ? `<div class="d">${esc(a.detail)}</div>` : ""}</div><span class="sys-tag" style="border:0">${timeAgo(a.ts)}</span></div>`).join("") || `<div class="empty-mini">No activity yet</div>`;
   } catch (e) {}
 }
+function timeAgo(ts) { const s = Math.max(1, Math.floor(Date.now() / 1000 - ts)); const u = [[86400, "d"], [3600, "h"], [60, "m"]]; for (const [k, l] of u) if (s >= k) return Math.floor(s / k) + l; return s + "s"; }
 
-/* ---------------- boot ---------------- */
+/* ---------- boot ---------- */
 async function boot() {
-  // demo/automation: allow ?t=<token> to set the session cookie
   const q = location.search;
-  const lm = q.match(/[?&]lang=(en|ar)/);
-  if (lm) { LANG = lm[1]; localStorage.setItem("wakeel_lang", LANG); }
+  const lm = q.match(/[?&]lang=(en|ar)/); if (lm) { LANG = lm[1]; localStorage.setItem("wakeel_lang", LANG); }
   const m = q.match(/[?&]t=([a-f0-9]{40})/);
-  if (m) { document.cookie = `wakeel_t=${m[1]}; Path=/; Max-Age=86400; SameSite=Lax`; history.replaceState(null, "", location.pathname + location.hash); }
+  if (m) { document.cookie = `wakeel_t=${m[1]}; Path=/; Max-Age=86400; SameSite=Lax`; }
+  const rn = q.match(/[?&]run=([^&]+)/); if (rn) window.__autorun = decodeURIComponent(rn[1]);
+  const nd = q.match(/[?&]node=(\d+)/); if (nd) window.__autonode = parseInt(nd[1]);
+  const tl = q.match(/[?&]tool=(\d+)/); if (tl) window.__autotool = parseInt(tl[1]);
+  const sb = q.match(/[?&]sub=(triggers|memory|governance|instructions|simple)/); if (sb) window.__autosub = sb[1];
+  if (q.match(/[?&]m365=1/)) { window.__autom365 = true; window.__autosub = "triggers"; }
+  const cf = q.match(/[?&]config=([^&]+)/); if (cf) { window.__autoconfig = decodeURIComponent(cf[1]); VIEW = "integrations"; }
+  if (m) history.replaceState(null, "", location.pathname + location.hash);
   const h = location.hash.replace("#", "");
-  if (h.startsWith("build=")) { TAB = "build"; window.__prefill = decodeURIComponent(h.slice(6)); }
-  else if (h.startsWith("edit=")) { TAB = "edit"; EDITAPP = h.slice(5); }
-  else if (h === "profile") { TAB = "build"; window.__openProfile = true; }
-  else if (h === "settings") { TAB = "build"; window.__openSettings = true; }
-  else if (["build", "edit", "test", "deploy", "market", "community"].includes(h)) TAB = h;
+  if (h.startsWith("agent/")) { AGENT = h.split("/")[1]; VIEW = "agent"; COPILOT = true; if (window.__autosub) { ASUB = window.__autosub; window.__autosub = null; } }
+  else if (["home", "skills", "projects", "inbox", "tasks", "templates", "integrations", "automations", "views"].includes(h)) VIEW = h;
   try { ME = await api("GET", "me"); } catch (e) { ME = null; }
   if (!ME) return renderLogin();
   try { await api("GET", "sso"); } catch (e) {}
   renderShell();
-  if (window.__openProfile) { window.__openProfile = false; toggleProfile(); }
-  if (window.__openSettings) { window.__openSettings = false; openSettings(); }
 }
 boot();

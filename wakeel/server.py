@@ -150,6 +150,90 @@ def generate(sess, mode, instruction, current_graph=None):
     return {"graph": graph, "message": res.get("message", ""), "nodes": nodes, "error": res.get("error") or ""}
 
 
+def _extract_json(text):
+    """Pull the first JSON object out of an LLM response (handles ```json fences)."""
+    t = (text or "").strip()
+    if t.startswith("```"):
+        t = t.split("```", 2)[1]
+        if t.startswith("json"):
+            t = t[4:]
+    a, b = t.find("{"), t.rfind("}")
+    if a >= 0 and b > a:
+        t = t[a:b + 1]
+    return json.loads(t)
+
+
+def design(sess, instruction, prior=None, changes="", lang="en"):
+    """Produce a reviewable design proposal (flow, schema, statuses, triggers, decisions)
+    BEFORE any agent is built — the storytelling step, like Beam's agent builder."""
+    sys_p = (
+        "You are Wakeel's agent architect for UAE government entities. A government officer "
+        "describes an agent they want. Do NOT build anything yet — instead produce a clear DESIGN "
+        "PROPOSAL for them to review, exactly like a senior solution architect would.\n\n"
+        "Return ONLY a JSON object (no prose, no markdown fences) with this shape:\n"
+        "{\n"
+        '  "name": "<concise agent name>",\n'
+        '  "summary": "<2-3 sentence plain-language description of what the agent does>",\n'
+        '  "flow": [ {"id":"n1","title":"Read Excel Registry","kind":"entry|llm|cond|tool|end",'
+        '"model":"<model or empty>","integration":"<system used or empty>",'
+        '"next":[{"to":"n2","label":"<branch label or empty>"}]} ],\n'
+        '  "schema": {"title":"<e.g. Excel Registry Columns>","columns":[{"name":"...","type":"string|date|number"}]},\n'
+        '  "statuses": ["<lifecycle status>", ...],\n'
+        '  "triggers": ["<e.g. Daily schedule: every weekday 8:00 AM Dubai time>", "<Manual: officer-triggered>"],\n'
+        '  "decisions": ["<key design decision the reviewer should know>", ...],\n'
+        '  "guardrails": ["<what the agent must NOT do / where it escalates>", ...]\n'
+        "}\n\n"
+        "Rules: 6-16 flow nodes with a single 'entry' and one or more 'end' nodes. Use 'cond' for "
+        "routing/branching nodes and give each outgoing edge a short 'label'. Pick concrete, "
+        "reasonable model names (e.g. 'GPT 4.1 Mini' for actions, 'Gemini 3 Flash' for document "
+        "evaluation). Respect any integrations, statuses, columns, triggers and constraints the "
+        "officer named — do not invent extra ones. Omit 'schema' or 'statuses' if the request has no "
+        "data records. Keep every string short. If a required detail is genuinely ambiguous, still "
+        "produce your best design and note the assumption in 'decisions'."
+    )
+    if lang == "ar":
+        sys_p += ("\n\nIMPORTANT: Write ALL human-readable values (name, summary, node titles, edge "
+                  "labels, status names, triggers, decisions, guardrails, schema column names) in "
+                  "ARABIC. Keep the JSON keys and the 'kind' values in English, and keep product/"
+                  "connector names (Outlook, SharePoint, Excel, Microsoft 365) as-is.")
+    parts = ["OFFICER'S REQUEST:\n" + instruction]
+    if prior:
+        parts.append("YOUR PREVIOUS DESIGN (JSON):\n" + json.dumps(prior, ensure_ascii=False)[:6000])
+    if changes:
+        parts.append("REQUESTED CHANGES — revise the design accordingly:\n" + changes)
+    out = _openai_chat([{"role": "system", "content": sys_p},
+                        {"role": "user", "content": "\n\n".join(parts)[:9000]}])
+    d = _extract_json(out)
+    d.setdefault("flow", [])
+    d.setdefault("name", "Wakeel Agent")
+    for i, n in enumerate(d["flow"]):
+        n.setdefault("id", f"n{i+1}")
+        n.setdefault("kind", "llm")
+        nx = n.get("next") or []
+        n["next"] = [({"to": x} if isinstance(x, str) else x) for x in nx]
+    return d
+
+
+def design_to_instruction(d):
+    """Flatten an approved design into a rich instruction for Dify's graph generator."""
+    lines = [d.get("summary", ""), ""]
+    if d.get("flow"):
+        lines.append("Steps:")
+        for i, n in enumerate(d["flow"]):
+            extra = " ".join(x for x in [n.get("integration", ""), ("via " + n["model"]) if n.get("model") else ""] if x)
+            lines.append(f"{i+1}. {n.get('title','')}{(' — ' + extra) if extra.strip() else ''}")
+    if d.get("statuses"):
+        lines.append("\nAllowed statuses: " + ", ".join(d["statuses"]))
+    if d.get("schema", {}).get("columns"):
+        cols = ", ".join(c.get("name", "") for c in d["schema"]["columns"])
+        lines.append(f"\n{d['schema'].get('title','Data record')} columns: {cols}")
+    if d.get("triggers"):
+        lines.append("\nTriggers: " + "; ".join(d["triggers"]))
+    if d.get("guardrails"):
+        lines.append("\nGuardrails: " + "; ".join(d["guardrails"]))
+    return "\n".join(lines).strip()
+
+
 def deploy(sess, mode, name, graph, icon="🏛️"):
     app_mode = "advanced-chat" if mode == "agent" else "workflow"
     app = dify(sess, "POST", "/apps", {
@@ -165,16 +249,29 @@ def deploy(sess, mode, name, graph, icon="🏛️"):
     return {"id": app_id, "url": f"/app/{app_id}/workflow", "mode": app_mode}
 
 
+def _node_prompt(d):
+    """Extract editable prompt text from an llm node's prompt_template."""
+    pt = d.get("prompt_template")
+    if isinstance(pt, list) and pt:
+        return pt[0].get("text", "")
+    if isinstance(pt, dict):
+        return pt.get("text", "")
+    return ""
+
+
 def app_info(sess, app_id):
     app = dify(sess, "GET", f"/apps/{app_id}")
     out = {"id": app_id, "name": app.get("name"), "mode": app.get("mode"),
-           "icon": app.get("icon"), "vars": [], "nodes": []}
+           "icon": app.get("icon"), "vars": [], "nodes": [], "graph": {}, "hash": ""}
     try:
         draft = dify(sess, "GET", f"/apps/{app_id}/workflows/draft")
         g = draft.get("graph") or {}
+        out["graph"] = g
+        out["hash"] = draft.get("hash", "")
         for n in g.get("nodes", []):
             d = n.get("data") or {}
-            out["nodes"].append({"type": d.get("type"), "title": d.get("title")})
+            out["nodes"].append({"id": n.get("id"), "type": d.get("type"),
+                                 "title": d.get("title"), "prompt": _node_prompt(d)})
             if d.get("type") == "start":
                 for v in d.get("variables", []):
                     out["vars"].append({"name": v.get("variable"), "label": v.get("label"),
@@ -182,6 +279,26 @@ def app_info(sess, app_id):
     except Exception:
         pass
     return out
+
+
+def test_tool(sess, prompt, sample, model_name=""):
+    """Run a single tool/prompt with a sample input and return the output (sandbox)."""
+    sys_p = ("You are executing one step of a government workflow tool. "
+             "Follow the instruction and produce the step's output only.")
+    user = prompt.strip() + "\n\n--- INPUT ---\n" + (sample or "")
+    out = _openai_chat([{"role": "system", "content": sys_p}, {"role": "user", "content": user}])
+    return {"output": out}
+
+
+def save_draft(sess, app_id, graph):
+    d = dify(sess, "GET", f"/apps/{app_id}/workflows/draft")
+    dify(sess, "POST", f"/apps/{app_id}/workflows/draft", {
+        "graph": graph, "features": d.get("features") or {},
+        "environment_variables": d.get("environment_variables") or [],
+        "conversation_variables": d.get("conversation_variables") or [],
+        "hash": d.get("hash") or "",
+    })
+    return {"ok": True}
 
 
 def _judge(inp, expected, output):
@@ -299,6 +416,35 @@ def provider_install(sess, name):
     return {"ok": True}
 
 
+def tools_list(sess):
+    try:
+        res = dify(sess, "GET", "/workspaces/current/plugin/list?page=1&page_size=100")
+        return {"installed": [p.get("plugin_id") for p in res.get("plugins", [])]}
+    except Exception:
+        return {"installed": []}
+
+
+def tool_schema(sess, provider):
+    for ct in ("oauth2", "api-key"):
+        try:
+            s = dify(sess, "GET", f"/workspaces/current/tool-provider/builtin/{provider}/credential/schema/{ct}")
+            if isinstance(s, list) and s:
+                return {"type": ct, "fields": [{"name": f.get("name"),
+                        "label": (f.get("label") or {}).get("en_US", f.get("name")),
+                        "type": f.get("type"), "required": bool(f.get("required")),
+                        "help": (f.get("help") or {}).get("en_US", "")} for f in s]}
+        except Exception:
+            continue
+    return {"type": "api-key", "fields": []}
+
+
+def tool_connect(sess, provider, credentials, name, ctype):
+    dify(sess, "POST", f"/workspaces/current/tool-provider/builtin/{provider}/add",
+         {"credentials": credentials, "name": name or "Wakeel", "type": ctype or "oauth2"})
+    log_act(sess, "connect", provider.split("/")[-1])
+    return {"ok": True}
+
+
 def models_list(sess):
     res = dify(sess, "GET", "/workspaces/current/models/model-types/llm")
     out = []
@@ -325,6 +471,207 @@ def settings_set(provider, model):
 
 
 ACT_FILE = os.path.join(HERE, "activity.jsonl")
+TASKS_FILE = os.path.join(HERE, "tasks.jsonl")
+
+
+def save_task(task):
+    try:
+        with open(TASKS_FILE, "a") as f:
+            f.write(json.dumps(task) + "\n")
+    except OSError:
+        pass
+
+
+def tasks_list(sess, limit=60):
+    items = []
+    try:
+        with open(TASKS_FILE) as f:
+            for line in f:
+                try:
+                    items.append(json.loads(line))
+                except ValueError:
+                    pass
+    except OSError:
+        pass
+    items = [t for t in items if t.get("email") == sess["email"]][-limit:]
+    items.reverse()
+    # trim node/output for the list view
+    return {"tasks": [{"id": t["id"], "app_id": t.get("app_id"), "app_name": t.get("app_name"),
+                       "input": t.get("input"), "status": t.get("status"), "started": t.get("started"),
+                       "ended": t.get("ended"), "steps": len(t.get("nodes", []))} for t in items]}
+
+
+def task_get(sess, tid):
+    try:
+        with open(TASKS_FILE) as f:
+            for line in f:
+                try:
+                    t = json.loads(line)
+                except ValueError:
+                    continue
+                if t.get("id") == tid and t.get("email") == sess["email"]:
+                    return t
+    except OSError:
+        pass
+    return {"error": "not found"}
+
+
+def _read_tasks(sess):
+    out = []
+    try:
+        with open(TASKS_FILE) as f:
+            for line in f:
+                try:
+                    t = json.loads(line)
+                except ValueError:
+                    continue
+                if t.get("email") == sess["email"]:
+                    out.append(t)
+    except OSError:
+        pass
+    return out
+
+
+DECISIONS_FILE = os.path.join(HERE, "decisions.jsonl")
+
+
+def _decided(sess):
+    ids = {}
+    try:
+        with open(DECISIONS_FILE) as f:
+            for line in f:
+                try:
+                    d = json.loads(line)
+                except ValueError:
+                    continue
+                if d.get("email") == sess["email"]:
+                    ids[d.get("task_id")] = d
+    except OSError:
+        pass
+    return ids
+
+
+def inbox_list(sess, limit=40):
+    decided = _decided(sess)
+    items = [t for t in _read_tasks(sess)
+             if t.get("status") in ("succeeded", "completed") and t.get("output") and t["id"] not in decided]
+    items = items[-limit:]
+    items.reverse()
+    return {"items": [{"id": t["id"], "app_name": t.get("app_name"), "input": t.get("input"),
+                       "output": t.get("output"), "started": t.get("started")} for t in items]}
+
+
+def decide(sess, task_id, decision, note=""):
+    with open(DECISIONS_FILE, "a") as f:
+        f.write(json.dumps({"task_id": task_id, "email": sess["email"], "decision": decision,
+                            "note": note[:400], "ts": int(time.time())}) + "\n")
+    log_act(sess, "approve" if decision == "approved" else "reject", task_id)
+    return {"ok": True}
+
+
+GOV_FILE = os.path.join(HERE, "governance.jsonl")
+
+
+def _gov_cached(sess, app_id):
+    try:
+        with open(GOV_FILE) as f:
+            for line in f:
+                try:
+                    d = json.loads(line)
+                except ValueError:
+                    continue
+                if d.get("app_id") == app_id and d.get("email") == sess["email"]:
+                    latest = d
+        return latest.get("spec") if "latest" in dir() else None
+    except Exception:
+        return None
+
+
+def governance(sess, app_id, force=False):
+    if not force:
+        cached = None
+        try:
+            with open(GOV_FILE) as f:
+                for line in f:
+                    try:
+                        d = json.loads(line)
+                    except ValueError:
+                        continue
+                    if d.get("app_id") == app_id and d.get("email") == sess["email"]:
+                        cached = d.get("spec")
+        except OSError:
+            pass
+        if cached:
+            return cached
+    info = app_info(sess, app_id)
+    steps = ", ".join((n.get("title") or n.get("type")) for n in info.get("nodes", []))
+    prompt = (
+        "You are a government AI governance officer for the Government of Abu Dhabi (UAE). "
+        f"Produce a governance & guardrails package for this AI agent.\n"
+        f"Agent name: {info.get('name')}\nWorkflow steps: {steps}\n\n"
+        "Return ONLY strict JSON with these keys:\n"
+        "{\n"
+        '"decision_boundary": "one sentence: what the agent may and may NOT decide",\n'
+        '"guardrails": ["5-7 concrete guardrail rules"],\n'
+        '"allowed_statuses": ["the CASE/RECORD lifecycle status values this agent tracks — e.g. Pending Outreach, Report Requested, Response Received, Incomplete Submission, Under Review, Follow-up Sent, Escalation Required, Completed. These are RECORD statuses, NOT the workflow step names."],\n'
+        '"human_in_loop": ["which steps require officer approval before action"],\n'
+        '"escalation_policy": "when and how cases escalate to a human officer",\n'
+        '"integration_scope": ["only the systems this agent may touch"],\n'
+        '"data_classification": "e.g. Confidential — Government",\n'
+        '"data_residency": "where data must stay (UAE)",\n'
+        '"pii_handling": "how personal data is handled/masked",\n'
+        '"audit": ["what is logged for every run"],\n'
+        '"rbac": [{"role": "role name", "can": "what they can do"}],\n'
+        '"run_modes": ["how it can be triggered"],\n'
+        '"model_policy": "model/data-boundary policy (e.g. Azure OpenAI UAE North; no data used for training)",\n'
+        '"compliance": ["relevant standards, e.g. UAE IA Standards, ISO 27001"]\n'
+        "}"
+    )
+    raw = _openai_chat([{"role": "user", "content": prompt}])
+    start, end = raw.find("{"), raw.rfind("}") + 1
+    try:
+        spec = json.loads(raw[start:end])
+    except Exception:
+        spec = {"decision_boundary": "Reviews and recommends only; the officer decides.",
+                "guardrails": ["Does not make final legal or enforcement decisions."]}
+    try:
+        with open(GOV_FILE, "a") as f:
+            f.write(json.dumps({"app_id": app_id, "email": sess["email"], "spec": spec}) + "\n")
+    except OSError:
+        pass
+    log_act(sess, "governance", info.get("name", ""))
+    return spec
+
+
+def analytics(sess):
+    tasks = _read_tasks(sess)
+    decided = _decided(sess)
+    total = len(tasks)
+    ok = sum(1 for t in tasks if t.get("status") in ("succeeded", "completed"))
+    failed = sum(1 for t in tasks if t.get("status") == "failed")
+    durs = [(t.get("ended", 0) - t.get("started", 0)) for t in tasks if t.get("ended") and t.get("started")]
+    avg = round(sum(durs) / len(durs), 1) if durs else 0
+    per = {}
+    for t in tasks:
+        k = t.get("app_name") or "Agent"
+        per.setdefault(k, {"name": k, "runs": 0, "ok": 0})
+        per[k]["runs"] += 1
+        if t.get("status") in ("succeeded", "completed"):
+            per[k]["ok"] += 1
+    approvals = {"approved": sum(1 for d in decided.values() if d.get("decision") == "approved"),
+                 "rejected": sum(1 for d in decided.values() if d.get("decision") == "rejected"),
+                 "pending": len(inbox_list(sess, 999)["items"])}
+    # 7-day buckets (by day offset from now)
+    now = int(time.time())
+    days = [0] * 7
+    for t in tasks:
+        off = (now - t.get("started", now)) // 86400
+        if 0 <= off < 7:
+            days[6 - off] += 1
+    return {"total": total, "success_rate": round(ok * 100 / total) if total else 0,
+            "failed": failed, "avg": avg,
+            "agents": sorted(per.values(), key=lambda x: -x["runs"])[:12],
+            "approvals": approvals, "days": days}
 
 
 def log_act(sess, action, detail=""):
@@ -499,6 +846,81 @@ class H(BaseHTTPRequestHandler):
                 return SESSIONS.get(part.split("=", 1)[1])
         return None
 
+    def _stream_run(self, sess, b):
+        """Live-execute an agent and stream Dify's node events to the browser (SSE)."""
+        app_id = b.get("app_id", "")
+        inp = b.get("input", "")
+        try:
+            info = app_info(sess, app_id)
+        except Exception as e:
+            return self._send(500, {"error": str(e)})
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "close")
+        self.end_headers()
+
+        def emit(obj):
+            try:
+                self.wfile.write(b"data: " + json.dumps(obj).encode() + b"\n\n")
+                self.wfile.flush()
+            except Exception:
+                pass
+
+        headers = {"Content-Type": "application/json"}
+        csrf = _csrf(sess)
+        if csrf:
+            headers["X-CSRF-Token"] = csrf
+        task = {"id": secrets.token_hex(8), "email": sess["email"], "app_id": app_id,
+                "app_name": info.get("name"), "input": inp[:400], "started": int(time.time()),
+                "nodes": [], "output": "", "status": "running"}
+        answer = ""
+        try:
+            if info.get("mode") == "workflow":
+                inputs = {}
+                for i, v in enumerate(info.get("vars", [])):
+                    inputs[v["name"]] = inp if i == 0 else ""
+                data = json.dumps({"inputs": inputs, "response_mode": "streaming"}).encode()
+                path = DIFY + f"/apps/{app_id}/workflows/draft/run"
+            else:
+                data = json.dumps({"inputs": {}, "query": inp, "response_mode": "streaming",
+                                   "conversation_id": "",
+                                   "model_config": {"model": get_model(), "pre_prompt": "",
+                                                    "user_input_form": [], "agent_mode": {"enabled": False, "tools": []}}}).encode()
+                path = DIFY + f"/apps/{app_id}/chat-messages"
+            req = urllib.request.Request(path, data=data, headers=headers, method="POST")
+            resp = sess["opener"].open(req, timeout=300)
+            for raw in resp:
+                line = raw.decode("utf-8", "replace").strip()
+                if not line.startswith("data:"):
+                    continue
+                try:
+                    ev = json.loads(line[5:].strip())
+                except ValueError:
+                    continue
+                emit(ev)
+                e, d = ev.get("event"), ev.get("data", {}) or {}
+                if e == "node_finished":
+                    task["nodes"].append({"title": d.get("title"), "status": d.get("status"),
+                                          "ms": int((d.get("elapsed_time") or 0) * 1000)})
+                elif e in ("message", "agent_message"):
+                    answer += ev.get("answer", "")
+                elif e == "workflow_finished":
+                    outs = d.get("outputs") or {}
+                    answer = "\n".join(str(v) for v in outs.values()) if isinstance(outs, dict) else str(outs)
+                    task["status"] = d.get("status", "succeeded")
+            if task["status"] == "running":
+                task["status"] = "succeeded"
+            task["output"] = answer[:4000]
+            emit({"event": "__done__", "task_id": task["id"]})
+            log_act(sess, "run", inp[:60])
+        except Exception as e:
+            task["status"] = "failed"
+            task["output"] = str(e)[:400]
+            emit({"event": "error", "message": str(e)})
+        task["ended"] = int(time.time())
+        save_task(task)
+
     def do_GET(self):
         p = self.path.split("?")[0]
         if p in ("/", "/index.html"):
@@ -537,10 +959,28 @@ class H(BaseHTTPRequestHandler):
                 return self._send(200, knowledge_list(sess))
             if p == "/api/activity":
                 return self._send(200, activity(sess))
+            if p == "/api/tasks":
+                return self._send(200, tasks_list(sess))
+            if p == "/api/task":
+                q = dict(x.split("=", 1) for x in (self.path.split("?", 1) + [""])[1].split("&") if "=" in x)
+                return self._send(200, task_get(sess, q.get("id", "")))
+            if p == "/api/inbox":
+                return self._send(200, inbox_list(sess))
+            if p == "/api/analytics":
+                return self._send(200, analytics(sess))
+            if p == "/api/governance":
+                q = dict(x.split("=", 1) for x in (self.path.split("?", 1) + [""])[1].split("&") if "=" in x)
+                return self._send(200, governance(sess, q.get("id", ""), q.get("force") == "1"))
             if p == "/api/providers":
                 return self._send(200, providers_list(sess))
             if p == "/api/models":
                 return self._send(200, models_list(sess))
+            if p == "/api/tools":
+                return self._send(200, tools_list(sess))
+            if p == "/api/tool-schema":
+                q = dict(x.split("=", 1) for x in (self.path.split("?", 1) + [""])[1].split("&") if "=" in x)
+                import urllib.parse as _up
+                return self._send(200, tool_schema(sess, _up.unquote(q.get("provider", ""))))
             if p == "/api/settings":
                 return self._send(200, settings_get())
         except Exception as e:
@@ -564,6 +1004,8 @@ class H(BaseHTTPRequestHandler):
             sess = self._sess()
             if not sess:
                 return self._send(401, {"error": "login required"})
+            if p == "/api/run":
+                return self._stream_run(sess, b)
             if p == "/api/logout":
                 ck = self.headers.get("Cookie", "")
                 for part in ck.split(";"):
@@ -574,8 +1016,15 @@ class H(BaseHTTPRequestHandler):
                 return self._send(200, {"ok": True}, cookies=[
                     "wakeel_t=" + gone, "access_token=" + gone,
                     "refresh_token=" + gone, "csrf_token=" + gone])
+            if p == "/api/design":
+                d = design(sess, b.get("instruction", ""), b.get("prior"), b.get("changes", ""), b.get("lang", "en"))
+                log_act(sess, "design", d.get("name", ""))
+                return self._send(200, d)
             if p == "/api/generate":
-                return self._send(200, generate(sess, b.get("mode", "workflow"), b.get("instruction", ""),
+                instruction = b.get("instruction", "")
+                if b.get("design"):
+                    instruction = design_to_instruction(b["design"])
+                return self._send(200, generate(sess, b.get("mode", "workflow"), instruction,
                                                 b.get("current_graph")))
             if p == "/api/deploy":
                 r = deploy(sess, b.get("mode", "workflow"), b.get("name", "Untitled"),
@@ -607,6 +1056,14 @@ class H(BaseHTTPRequestHandler):
                 dify(sess, "POST", f"/apps/{b.get('app_id','')}/workflows/publish", {})
                 log_act(sess, "publish")
                 return self._send(200, {"ok": True})
+            if p == "/api/save-draft":
+                r = save_draft(sess, b.get("app_id", ""), b.get("graph", {}))
+                log_act(sess, "edit", "edited flow")
+                return self._send(200, r)
+            if p == "/api/decide":
+                return self._send(200, decide(sess, b.get("task_id", ""), b.get("decision", ""), b.get("note", "")))
+            if p == "/api/test-tool":
+                return self._send(200, test_tool(sess, b.get("prompt", ""), b.get("input", ""), b.get("model", "")))
             if p == "/api/apikey":
                 r = dify(sess, "POST", f"/apps/{b.get('app_id','')}/api-keys", {})
                 return self._send(200, {"token": r.get("token", "")})
@@ -616,6 +1073,8 @@ class H(BaseHTTPRequestHandler):
                 return self._send(200, r)
             if p == "/api/provider/install":
                 return self._send(200, provider_install(sess, b.get("name", "")))
+            if p == "/api/tool-connect":
+                return self._send(200, tool_connect(sess, b.get("provider", ""), b.get("credentials", {}), b.get("name", ""), b.get("type", "oauth2")))
             if p == "/api/settings":
                 return self._send(200, settings_set(b.get("provider", ""), b.get("model", "")))
             if p == "/api/chat":

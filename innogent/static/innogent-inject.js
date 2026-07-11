@@ -56,6 +56,48 @@
     run();
     new MutationObserver(schedule).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
     loadAssistant();
+    if (/[?&]embed=wakeel/.test(location.search)) embedMode();
+  }
+
+  // ---- Wakeel embed: show ONLY the orchestration canvas (strip studio chrome) ----
+  function embedMode() {
+    document.documentElement.setAttribute("data-wakeel-embed", "1");
+    var css = document.createElement("style");
+    css.textContent =
+      "html[data-wakeel-embed] .wk-hide{display:none !important}" +
+      "html[data-wakeel-embed] body{overflow:hidden}";
+    document.head.appendChild(css);
+    function hideChrome() {
+      var LABELS = ["Orchestrate", "API Access", "Logs", "Monitoring", "Annotations"];
+      // find the app-detail left nav: an element whose direct nav items match the labels
+      var cands = document.querySelectorAll("a,button,li,div,span");
+      var items = [];
+      for (var i = 0; i < cands.length; i++) {
+        var t = (cands[i].textContent || "").trim();
+        if (LABELS.indexOf(t) !== -1 && cands[i].querySelectorAll("*").length <= 3) items.push(cands[i]);
+      }
+      var done = false;
+      if (items.length >= 3) {
+        // common ancestor of the nav items
+        var anc = items[0];
+        var contains = function (a) { return items.every(function (n) { return a.contains(n); }); };
+        while (anc && !contains(anc)) anc = anc.parentElement;
+        // walk up to the left sidebar column (narrower than half the viewport)
+        var side = anc, guard = 0;
+        while (side && side.parentElement && side.parentElement.getBoundingClientRect().width < window.innerWidth * 0.55 && guard++ < 6) side = side.parentElement;
+        if (side && side.getBoundingClientRect().width < window.innerWidth * 0.55) { side.classList.add("wk-hide"); done = true; }
+      }
+      // hide the small "Auto-Saved / Published" status line for a cleaner look
+      var cands2 = document.querySelectorAll("div,span,p");
+      for (var j = 0; j < cands2.length; j++) {
+        var tt = (cands2[j].textContent || "").trim();
+        if (/^Auto-Saved/.test(tt) && cands2[j].querySelectorAll("*").length <= 4 && !cands2[j].classList.contains("wk-hide")) { cands2[j].classList.add("wk-hide"); }
+      }
+      return done;
+    }
+    var tries = 0;
+    var iv = setInterval(function () { if (hideChrome() || tries++ > 30) clearInterval(iv); }, 400);
+    new MutationObserver(function () { hideChrome(); }).observe(document.documentElement, { childList: true, subtree: true });
   }
 
   // ---- Build Assistant on app pages ----
