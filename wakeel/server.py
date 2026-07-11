@@ -576,8 +576,14 @@ def _conn_all():
 
 
 def services_connected(sess):
-    u = _conn_all().get(sess["email"], {})
-    return {"connected": [k for k, v in u.items() if v.get("connected")]}
+    # Google services reflect REAL granted OAuth scopes; other services use the
+    # recorded state (until their real OAuth — e.g. Microsoft — is wired too).
+    real_google = set(google_connected(sess))
+    rec = _conn_all().get(sess["email"], {})
+    recorded = set(k for k, v in rec.items() if v.get("connected") and k not in GOOGLE_SCOPES)
+    return {"connected": sorted(real_google | recorded),
+            "google_configured": google_configured(),
+            "google_services": sorted(real_google)}
 
 
 def service_connect(sess, service, connect=True):
@@ -597,6 +603,164 @@ def service_connect(sess, service, connect=True):
         pass
     log_act(sess, "connect", service + ("" if connect else " (disconnected)"))
     return {"ok": True, "service": service, "connected": connect}
+
+
+# ==== REAL Google OAuth (per-service scopes) ====
+GOOGLE_TOKENS_FILE = os.path.join(HERE, "google_tokens.json")
+GOOGLE_OAUTH_FILE = os.path.join(HERE, "google_oauth.json")  # {client_id, client_secret}
+# the exact Google API scope(s) each service needs — this is what makes access REAL
+GOOGLE_SCOPES = {
+    "Gmail": ["https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/gmail.readonly"],
+    "Google Sheets": ["https://www.googleapis.com/auth/spreadsheets"],
+    "Google Drive": ["https://www.googleapis.com/auth/drive"],
+    "Google Docs": ["https://www.googleapis.com/auth/documents"],
+    "Google Calendar": ["https://www.googleapis.com/auth/calendar"],
+}
+_OAUTH_STATE = {}  # nonce -> {email, service, ts}
+
+
+def _google_cfg():
+    cid = os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "")
+    csec = os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET", "")
+    if not cid:
+        try:
+            with open(GOOGLE_OAUTH_FILE) as f:
+                j = json.load(f)
+                cid, csec = j.get("client_id", ""), j.get("client_secret", "")
+        except Exception:
+            pass
+    base = os.environ.get("WAKEEL_PUBLIC_BASE", "http://localhost").rstrip("/")
+    return {"client_id": cid, "client_secret": csec,
+            "redirect_uri": base + "/wakeel/api/oauth/google/callback"}
+
+
+def google_configured():
+    return bool(_google_cfg()["client_id"])
+
+
+def _gtokens():
+    try:
+        with open(GOOGLE_TOKENS_FILE) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _save_gtokens(d):
+    try:
+        with open(GOOGLE_TOKENS_FILE, "w") as f:
+            json.dump(d, f)
+    except OSError:
+        pass
+
+
+def google_connected(sess):
+    """Services genuinely authorized (all their scopes granted by the real consent)."""
+    granted = set(_gtokens().get(sess["email"], {}).get("scopes", []))
+    return [svc for svc, scs in GOOGLE_SCOPES.items() if scs and all(s in granted for s in scs)]
+
+
+def google_oauth_start(sess, service):
+    cfg = _google_cfg()
+    if not cfg["client_id"]:
+        return {"error": "not_configured"}
+    scopes = list(GOOGLE_SCOPES.get(service, [])) + ["openid", "email", "profile"]
+    nonce = secrets.token_urlsafe(24)
+    _OAUTH_STATE[nonce] = {"email": sess["email"], "service": service, "ts": time.time()}
+    params = {
+        "client_id": cfg["client_id"], "redirect_uri": cfg["redirect_uri"],
+        "response_type": "code", "scope": " ".join(scopes), "access_type": "offline",
+        "include_granted_scopes": "true", "prompt": "consent", "state": nonce,
+    }
+    return {"url": "https://accounts.google.com/o/oauth2/v2/auth?" + urllib.parse.urlencode(params)}
+
+
+def _google_token_exchange(data):
+    body = urllib.parse.urlencode(data).encode()
+    req = urllib.request.Request("https://oauth2.googleapis.com/token", data=body,
+                                 headers={"Content-Type": "application/x-www-form-urlencoded"}, method="POST")
+    return json.loads(urllib.request.urlopen(req, timeout=30).read())
+
+
+def google_oauth_callback(query):
+    code, state = query.get("code"), query.get("state")
+    st = _OAUTH_STATE.pop(state, None)
+    if not code or not st:
+        return "<h3>Sign-in link expired. Please try connecting again.</h3>"
+    cfg = _google_cfg()
+    try:
+        tok = _google_token_exchange({
+            "code": code, "client_id": cfg["client_id"], "client_secret": cfg["client_secret"],
+            "redirect_uri": cfg["redirect_uri"], "grant_type": "authorization_code"})
+    except Exception as e:
+        return f"<h3>Could not complete Google sign-in: {str(e)[:200]}</h3>"
+    email = st["email"]
+    allt = _gtokens()
+    rec = allt.get(email, {})
+    if tok.get("refresh_token"):
+        rec["refresh_token"] = tok["refresh_token"]
+    rec["access_token"] = tok.get("access_token", "")
+    rec["expiry"] = int(time.time()) + int(tok.get("expires_in", 3600))
+    rec["scopes"] = sorted(set(rec.get("scopes", [])) | set((tok.get("scope") or "").split()))
+    # who signed in (for display)
+    try:
+        ui = urllib.request.Request("https://www.googleapis.com/oauth2/v2/userinfo",
+                                    headers={"Authorization": "Bearer " + rec["access_token"]})
+        rec["google_email"] = json.loads(urllib.request.urlopen(ui, timeout=15).read()).get("email", "")
+    except Exception:
+        pass
+    allt[email] = rec
+    _save_gtokens(allt)
+    svc = st["service"]
+    return ("<!doctype html><meta charset=utf-8><style>body{font:15px -apple-system,sans-serif;background:#0b1322;"
+            "color:#eaf2ea;display:grid;place-items:center;height:100vh;margin:0;text-align:center}"
+            ".c{max-width:340px}.k{width:56px;height:56px;border-radius:16px;background:#00a862;display:grid;"
+            "place-items:center;margin:0 auto 16px;font-size:28px}</style>"
+            f"<div class=c><div class=k>&#10003;</div><h2>Connected {svc}</h2>"
+            f"<p>{rec.get('google_email','Your Google account')} is now linked. You can close this window.</p></div>"
+            "<script>try{window.opener&&window.opener.postMessage({wakeel_oauth:true,service:"
+            + json.dumps(svc) + ",ok:true},'*')}catch(e){}setTimeout(function(){window.close()},1200)</script>")
+
+
+def google_access_token(sess):
+    """A valid access token for calling Google APIs — refreshes if expired. This is
+    what the agent uses for REAL Gmail/Sheets/Drive calls."""
+    allt = _gtokens()
+    rec = allt.get(sess["email"])
+    if not rec or not rec.get("refresh_token"):
+        raise RuntimeError("Google account not connected")
+    if rec.get("access_token") and rec.get("expiry", 0) > time.time() + 60:
+        return rec["access_token"]
+    cfg = _google_cfg()
+    tok = _google_token_exchange({
+        "client_id": cfg["client_id"], "client_secret": cfg["client_secret"],
+        "refresh_token": rec["refresh_token"], "grant_type": "refresh_token"})
+    rec["access_token"] = tok.get("access_token", "")
+    rec["expiry"] = int(time.time()) + int(tok.get("expires_in", 3600))
+    allt[sess["email"]] = rec
+    _save_gtokens(allt)
+    return rec["access_token"]
+
+
+def google_verify(sess):
+    """Prove the connection is real by calling Google with the stored token."""
+    try:
+        at = google_access_token(sess)
+        ui = urllib.request.Request("https://www.googleapis.com/oauth2/v2/userinfo",
+                                    headers={"Authorization": "Bearer " + at})
+        info = json.loads(urllib.request.urlopen(ui, timeout=15).read())
+        return {"ok": True, "google_email": info.get("email", ""), "services": google_connected(sess)}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:200]}
+
+
+def oauth_config_set(client_id, client_secret):
+    try:
+        with open(GOOGLE_OAUTH_FILE, "w") as f:
+            json.dump({"client_id": client_id.strip(), "client_secret": client_secret.strip()}, f)
+        return {"ok": True, "configured": bool(client_id.strip())}
+    except OSError as e:
+        return {"error": str(e)}
 
 
 def models_list(sess):
@@ -1963,6 +2127,11 @@ class H(BaseHTTPRequestHandler):
             return self._file("wakeel-mark.svg", "image/svg+xml")
         if p == "/api/health":
             return self._send(200, {"ok": True, "sessions": len(SESSIONS)})
+        if p == "/api/oauth/google/callback":
+            # top-level redirect back from Google — no session guard (uses signed state)
+            q = dict(x.split("=", 1) for x in (self.path.split("?", 1) + [""])[1].split("&") if "=" in x)
+            q = {k: urllib.parse.unquote(v) for k, v in q.items()}
+            return self._send(200, google_oauth_callback(q), "text/html; charset=utf-8")
         sess = self._sess()
         if p.startswith("/api/") and not sess:
             return self._send(401, {"error": "login required"})
@@ -2000,6 +2169,11 @@ class H(BaseHTTPRequestHandler):
                 return self._send(200, security_get(sess))
             if p == "/api/services":
                 return self._send(200, services_connected(sess))
+            if p == "/api/oauth/google/start":
+                q = dict(x.split("=", 1) for x in (self.path.split("?", 1) + [""])[1].split("&") if "=" in x)
+                return self._send(200, google_oauth_start(sess, urllib.parse.unquote(q.get("service", ""))))
+            if p == "/api/google/verify":
+                return self._send(200, google_verify(sess))
             if p == "/api/tasks":
                 return self._send(200, tasks_list(sess))
             if p == "/api/task":
@@ -2157,6 +2331,8 @@ class H(BaseHTTPRequestHandler):
                 return self._send(200, team_run(sess, b.get("id", ""), b.get("input", "")))
             if p == "/api/service-connect":
                 return self._send(200, service_connect(sess, b.get("service", ""), b.get("connect", True)))
+            if p == "/api/oauth/config":
+                return self._send(200, oauth_config_set(b.get("client_id", ""), b.get("client_secret", "")))
             if p == "/api/security-role":
                 return self._send(200, security_set_role(sess, b.get("email", ""), b.get("role", "")))
             if p == "/api/security-sso":

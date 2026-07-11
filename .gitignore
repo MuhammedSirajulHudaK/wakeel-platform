@@ -280,3 +280,5 @@ wakeel/beamkeys.json
 wakeel/teams.json
 wakeel/security.json
 wakeel/connections.json
+wakeel/google_tokens.json
+wakeel/google_oauth.json

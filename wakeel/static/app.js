@@ -660,27 +660,19 @@ function designCard(m) {
   const pl = d.plain || {};
   const need = neededServices(d);
   const isConn = (s) => CONNECTED.has(s);
-  const provOf = (s) => SVC_PROVIDER[s] || null;
-  const provDone = (p) => need.filter(s => provOf(s) === p).every(s => isConn(s));
-  const svcForStep = (text) => need.find(s => (SVC_KEYWORDS[s] || /(?!)/).test(text || "")) || null;
-  const grpBtn = (p) => { const m = PROVIDER_META[p]; return `<button class="btn xs cn-inline" data-grp="${p}"><span class="cn-glg">${L[m.logo]}</span> ${t("Connect")} ${m.name}</button>`; };
-  const soloBtn = (s) => `<button class="btn xs cn-inline" data-one="${esc(s)}">${IC.plus} ${t("Connect")} ${esc(s)}</button>`;
-  const stepConnect = (s) => {
-    const p = provOf(s);
-    if (p) return provDone(p) ? `<span class="cn-tag ok">${IC.check} ${PROVIDER_META[p].name} ${t("connected")}</span>` : grpBtn(p);
-    return isConn(s) ? `<span class="cn-tag ok">${IC.check} ${t("Connected")}</span>` : soloBtn(s);
+  const svcForStep = (text) => { // the service mentioned earliest in the step
+    let best = null, at = 1e9;
+    need.forEach(s => { const m = (text || "").match(SVC_KEYWORDS[s] || /(?!)/); if (m && m.index < at) { at = m.index; best = s; } });
+    return best;
   };
+  // one specific button per service — "Connect Google Sheets", "Connect Gmail", …
+  const svcBtn = (s) => isConn(s)
+    ? `<span class="cn-tag ok">${IC.check} ${esc(s)} ${t("connected")}</span>`
+    : `<button class="btn xs cn-inline" data-connect="${esc(s)}"><span class="cn-glg">${L[LOGO_MAP[s]] || IC.plus}</span> ${t("Connect")} ${esc(s)}</button>`;
   function connectSummary() {
     if (!need.length) return "";
     const n = need.filter(isConn).length, all = n === need.length;
-    const byProv = {}, solo = [];
-    need.forEach(s => { const p = provOf(s); if (p) (byProv[p] = byProv[p] || []).push(s); else solo.push(s); });
-    let rows = "";
-    Object.keys(byProv).forEach(p => {
-      const m = PROVIDER_META[p], svcs = byProv[p];
-      rows += `<div class="cn-sumrow"><div class="cn-sumsvcs">${svcs.map(s => `<span class="cn-schip ${isConn(s) ? "on" : ""}">${brandLogo(s, 18)}${esc(s)}</span>`).join("")}</div>${provDone(p) ? `<span class="cn-tag ok">${IC.check} ${m.name} ${t("connected")}</span>` : grpBtn(p)}</div>`;
-    });
-    solo.forEach(s => { rows += `<div class="cn-sumrow"><span class="cn-schip ${isConn(s) ? "on" : ""}">${brandLogo(s, 18)}${esc(s)}</span>${isConn(s) ? `<span class="cn-tag ok">${IC.check} ${t("Connected")}</span>` : soloBtn(s)}</div>`; });
+    const rows = need.map(s => `<div class="cn-sumrow"><span class="cn-schip ${isConn(s) ? "on" : ""}">${brandLogo(s, 18)}${esc(s)}</span>${svcBtn(s)}</div>`).join("");
     return `<details class="cn-summary" ${all ? "" : "open"}><summary><span class="cn-plug">${IC.integrations}</span>${all ? t("All services connected") : t("Connect your services")}<span class="cn-count ${all ? "ok" : ""}">${n}/${need.length}</span></summary><div class="cn-sumlist">${rows}</div></details>`;
   }
   function syncPlain() {
@@ -689,21 +681,10 @@ function designCard(m) {
       <div class="ds-plain">
         <div class="ds-plain-h"><span class="dpl-badge">${IC.spark}</span><div><div class="dpl-t">${t("Here's what I'll do for you")}</div>${pl.intro ? `<div class="dpl-intro">${esc(pl.intro)}</div>` : ""}</div></div>
         ${connectSummary()}
-        <div class="dpl-steps">${pl.steps.map((s, i) => { const svc = svcForStep(s.text); return `<div class="dpl-step"><span class="dpl-ico">${esc(s.icon || "•")}</span><span class="dpl-n">${i + 1}</span><div class="dpl-body"><span class="dpl-x">${esc(s.text || "")}</span>${svc ? `<div class="dpl-cn">${stepConnect(svc)}</div>` : ""}</div></div>`; }).join("")}</div>
+        <div class="dpl-steps">${pl.steps.map((s, i) => { const svc = svcForStep(s.text); return `<div class="dpl-step"><span class="dpl-ico">${esc(s.icon || "•")}</span><span class="dpl-n">${i + 1}</span><div class="dpl-body"><span class="dpl-x">${esc(s.text || "")}</span>${svc ? `<div class="dpl-cn">${svcBtn(svc)}</div>` : ""}</div></div>`; }).join("")}</div>
         ${pl.reassurance ? `<div class="dpl-safe">${IC.shield} ${esc(pl.reassurance)}</div>` : ""}
       </div>` : "";
-    host.querySelectorAll("[data-grp]").forEach(b => b.onclick = () => connectGrp(b.dataset.grp));
-    host.querySelectorAll("[data-one]").forEach(b => b.onclick = () => connectSolo(b.dataset.one));
-  }
-  async function connectGrp(p) {
-    [...el.querySelectorAll("[data-grp]")].filter(b => b.dataset.grp === p).forEach(b => { b.disabled = true; b.innerHTML = `<span class="spin"></span> ${t("Signing in")}…`; });
-    await sleep(900);
-    for (const s of need.filter(x => provOf(x) === p)) { try { await api("POST", "service-connect", { service: s }); } catch (e) {} CONNECTED.add(s); }
-    syncPlain();
-  }
-  async function connectSolo(s) {
-    [...el.querySelectorAll("[data-one]")].filter(b => b.dataset.one === s).forEach(b => { b.disabled = true; b.innerHTML = `<span class="spin"></span>`; });
-    await sleep(700); try { await api("POST", "service-connect", { service: s }); } catch (e) {} CONNECTED.add(s); syncPlain();
+    host.querySelectorAll("[data-connect]").forEach(b => b.onclick = () => connectSvc(b.dataset.connect, () => syncPlain()));
   }
   el.innerHTML = `
     <div class="ds-intro">${t("Here's what I'll set up for your")} <b>${esc(d.name)}</b>${t(". Have a look, and tell me if you'd like anything changed before I build it.")}</div>
@@ -724,7 +705,7 @@ function designCard(m) {
         <button class="btn" id="dsTweak">${t("Request changes")}</button></div>
     </div>`;
   syncPlain();
-  (async () => { try { const r = await api("GET", "services"); (r.connected || []).forEach(x => CONNECTED.add(x)); syncPlain(); } catch (e) {} })();
+  (async () => { await refreshServices(); syncPlain(); })();
   setTimeout(() => {
     $("#dsBuild").onclick = () => buildFromDesign(d, $("#dsBuild"));
     $("#dsTweak").onclick = () => { const i = $("#ins"); if (i) { i.placeholder = t("Describe the changes you want…"); i.focus(); } };
@@ -773,18 +754,76 @@ const SVC_PURPOSE = {
 };
 // keywords that tie a plain-language step to the service it uses
 const SVC_KEYWORDS = {
-  "Gmail": /e-?mail|inbox|reply|repli|outreach|remind|mail|contact|send/i,
-  "Google Sheets": /sheet|spreadsheet|registry|tracking|list of business|update the (google )?sheet/i,
-  "Google Drive": /drive|\bsop\b|policy|policies|template|document|checklist|rule|file/i,
-  "Google Docs": /\bdoc\b|document/i,
-  "Google Calendar": /calendar|schedule|daily/i,
-  "Microsoft Outlook": /e-?mail|inbox|reply|repli|outreach|remind|outlook|mail|contact|send/i,
+  "Gmail": /gmail|e-?mail|inbox|\brepl(y|ies)|outreach|remind/i,
+  "Google Sheets": /sheet|spreadsheet|registry|tracking/i,
+  "Google Drive": /drive|\bsop\b|policy|policies|template|instruction|document|checklist|\brule/i,
+  "Google Docs": /google doc|\bdoc\b/i,
+  "Google Calendar": /calendar/i,
+  "Microsoft Outlook": /outlook|e-?mail|inbox|\brepl(y|ies)|outreach|remind/i,
   "Excel on SharePoint": /excel|sheet|spreadsheet|registry|tracking/i,
-  "Microsoft SharePoint": /sharepoint|\bsop\b|policy|policies|template|document|checklist|rule/i,
-  "OneDrive": /onedrive|\bfile\b|drive/i,
-  "Slack": /slack|channel|notify|post/i,
+  "Microsoft SharePoint": /sharepoint|\bsop\b|policy|policies|template|instruction|document|checklist/i,
+  "OneDrive": /onedrive/i,
+  "Slack": /slack|channel|notify/i,
 };
 let CONNECTED = new Set();
+const GOOGLE_SVCS = new Set(["Gmail", "Google Sheets", "Google Drive", "Google Docs", "Google Calendar"]);
+let GOOGLE_CONFIGURED = false;
+async function refreshServices() {
+  try { const r = await api("GET", "services"); CONNECTED = new Set(r.connected || []); GOOGLE_CONFIGURED = !!r.google_configured; return r; }
+  catch (e) { return {}; }
+}
+// connect ONE specific service. Google services do a REAL OAuth consent (popup);
+// others record the link until their real OAuth is wired.
+async function connectSvc(service, onDone) {
+  const mark = (html) => [...document.querySelectorAll("[data-connect]")].filter(b => b.dataset.connect === service).forEach(b => { b.disabled = true; b.innerHTML = html; });
+  if (GOOGLE_SVCS.has(service)) {
+    let r; try { r = await api("GET", "oauth/google/start?service=" + encodeURIComponent(service)); } catch (e) { toast(e.message, true); return; }
+    if (r.error === "not_configured") { openGoogleSetup(() => connectSvc(service, onDone)); return; }
+    if (!r.url) { toast("Couldn't start Google sign-in", true); return; }
+    mark(`<span class="spin"></span> ${t("Waiting for Google…")}`);
+    const w = window.open(r.url, "wkoauth", "width=520,height=680");
+    await waitForConnect(service, w);
+    await refreshServices(); onDone && onDone();
+  } else {
+    mark(`<span class="spin"></span>`);
+    await sleep(600); try { await api("POST", "service-connect", { service }); } catch (e) {} CONNECTED.add(service); onDone && onDone();
+  }
+}
+function waitForConnect(service, w) {
+  return new Promise(res => {
+    let done = false;
+    const finish = () => { if (done) return; done = true; window.removeEventListener("message", onMsg); clearInterval(iv); res(); };
+    const onMsg = (e) => { if (e.data && e.data.wakeel_oauth) finish(); };
+    window.addEventListener("message", onMsg);
+    const iv = setInterval(async () => {
+      try { const r = await api("GET", "services"); if ((r.connected || []).includes(service)) { CONNECTED = new Set(r.connected || []); finish(); } } catch (e) {}
+      if (w && w.closed) setTimeout(finish, 700);
+    }, 1500);
+    setTimeout(finish, 120000);
+  });
+}
+// one-time in-app Google OAuth credential setup (so the demo can go real without touching env)
+function openGoogleSetup(onSaved) {
+  const redirect = location.origin + "/wakeel/api/oauth/google/callback";
+  const d = document.createElement("div"); d.className = "modal-back";
+  d.innerHTML = `<div class="modal fade" style="width:560px" onclick="event.stopPropagation()">
+    <div style="display:flex"><h2 style="flex:1">${IC.lock} Turn on real Google sign-in</h2><button class="x" id="gsx">×</button></div>
+    <p class="page-sub" style="margin-top:-6px">A one-time setup so agents get <b>real</b> access to your Google Workspace. In <a href="https://console.cloud.google.com/apis/credentials" target="_blank" class="linky">Google Cloud → Credentials</a>, create an <b>OAuth client ID</b> (type: <b>Web application</b>), add the redirect URI below, then paste the two values.</p>
+    <div class="field"><label>Authorized redirect URI — copy this into your Google OAuth client</label><input class="input" id="gsRedir" readonly value="${esc(redirect)}"></div>
+    <div class="field"><label>Client ID</label><input class="input" id="gsCid" placeholder="…apps.googleusercontent.com"></div>
+    <div class="field"><label>Client secret</label><input class="input" id="gsSec" type="password" placeholder="GOCSPX-…"></div>
+    <button class="btn primary block" id="gsSave">Save &amp; continue</button>
+    <div class="err" id="gsErr"></div></div>`;
+  document.body.appendChild(d); d.onclick = () => d.remove(); $("#gsx").onclick = () => d.remove();
+  $("#gsRedir").onclick = () => { $("#gsRedir").select(); document.execCommand && document.execCommand("copy"); toast("Redirect URI copied"); };
+  $("#gsSave").onclick = async () => {
+    const cid = $("#gsCid").value.trim(), sec = $("#gsSec").value.trim();
+    if (!cid) { $("#gsErr").textContent = "Enter the Client ID"; return; }
+    $("#gsSave").disabled = true;
+    try { await api("POST", "oauth/config", { client_id: cid, client_secret: sec }); await refreshServices(); d.remove(); onSaved && onSaved(); }
+    catch (e) { $("#gsErr").textContent = e.message; $("#gsSave").disabled = false; }
+  };
+}
 // figure out exactly which real services an agent design needs (skip AI models)
 function neededServices(d) {
   const known = Object.keys(LOGO_MAP);
@@ -822,7 +861,7 @@ async function maybeShowConnectBanner(info, agentName) {
   wrap.parentNode.insertBefore(bar, wrap);
   if (!done) $("#cbConnect").onclick = async () => {
     const btn = $("#cbConnect"); btn.disabled = true; btn.innerHTML = `<span class="spin"></span> ${t("Signing in")}…`;
-    for (const s of missing) { try { await api("POST", "service-connect", { service: s }); } catch (e) {} }
+    for (const s of missing) { await connectSvc(s, () => {}); }
     viewAgent();
   };
 }

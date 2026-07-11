@@ -830,3 +830,6 @@ textarea.input{padding:12px 14px;min-height:auto;resize:none}
 .cn-schip.on{opacity:1;border-color:rgba(0,168,98,.4)}
 .cn-schip .blogo{width:18px;height:18px}
 .cn-sumrow .cn-inline,.cn-sumrow .cn-tag{margin-inline-start:auto}
+
+/* Google setup: readonly redirect field */
+.input[readonly]{background:var(--panel-3);color:var(--muted);cursor:pointer}
