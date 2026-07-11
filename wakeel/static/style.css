@@ -791,3 +791,15 @@ textarea.input{padding:12px 14px;min-height:auto;resize:none}
 .btn.primary.pulse{animation:cnpulse 1.6s ease-in-out 2}
 .connect-modal.celebrate .cn-badge.ok{animation:cnpop .5s ease both}
 @keyframes cnpop{0%{transform:scale(.6);opacity:0}60%{transform:scale(1.12)}100%{transform:scale(1)}}
+
+/* ---- connect-services banner on the agent page ---- */
+.connect-banner{display:flex;align-items:center;gap:14px;margin:14px 18px 0;padding:13px 16px;border-radius:13px;background:linear-gradient(180deg,rgba(0,168,98,.10),var(--panel-2));border:1px solid rgba(0,168,98,.3)}
+.connect-banner.done{background:var(--panel-2);border-color:var(--line)}
+.cb-l{display:flex;align-items:center;gap:12px;flex:1;min-width:0}
+.cb-l>svg{width:22px;height:22px;color:var(--wakeel);flex:none}
+.cb-l b{display:block;font-size:14px}
+.cb-l span{font-size:12.5px;color:var(--muted)}
+.cb-logos{display:flex;align-items:center;gap:6px;flex:none}
+.cb-lg{opacity:.4;filter:grayscale(1);transition:.2s}
+.cb-lg.on{opacity:1;filter:none}
+.connect-banner .btn.sm{flex:none}

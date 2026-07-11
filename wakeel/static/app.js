@@ -738,6 +738,33 @@ function neededServices(d) {
   known.forEach(s => { if (models.has(s) || found.includes(s)) return; if (txt.includes('"' + s + '"') || txt.includes(s)) found.push(s); });
   return found;
 }
+// detect services a BUILT agent needs by scanning its node titles/prompts/graph
+function neededServicesFromInfo(info) {
+  const models = new Set(["OpenAI", "Azure OpenAI", "Anthropic Claude", "Google Gemini", "Ollama (local)", "vLLM", "Microsoft Graph", "Microsoft Entra ID"]);
+  const txt = JSON.stringify(info || {});
+  const found = [];
+  Object.keys(LOGO_MAP).forEach(s => {
+    if (models.has(s) || found.includes(s)) return;
+    const re = new RegExp("\\b" + s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i");
+    if (re.test(txt)) found.push(s);
+  });
+  return found;
+}
+// persistent, discoverable connect prompt on an agent's page
+async function maybeShowConnectBanner(info, agentName) {
+  const need = neededServicesFromInfo(info);
+  if (!need.length) return;
+  let connected = []; try { const r = await api("GET", "services"); connected = r.connected || []; } catch (e) {}
+  const missing = need.filter(s => !connected.includes(s));
+  const wrap = $("#flowWrap"); if (!wrap) return;
+  const done = !missing.length;
+  const bar = document.createElement("div"); bar.className = "connect-banner" + (done ? " done" : "");
+  bar.innerHTML = `<div class="cb-l">${done ? IC.check : IC.integrations}<div><b>${done ? t("All services connected") : t("Connect this agent to its services")}</b><span>${done ? t("This agent can reach everything it needs.") : t("It needs") + " " + need.map(esc).join(", ") + " " + t("to run.")}</span></div></div>
+    <div class="cb-logos">${need.map(s => `<span class="cb-lg ${connected.includes(s) ? "on" : ""}">${brandLogo(s, 24)}</span>`).join("")}</div>
+    ${done ? "" : `<button class="btn primary sm" id="cbConnect">${IC.play} ${t("Connect")}</button>`}`;
+  wrap.parentNode.insertBefore(bar, wrap);
+  if (!done) $("#cbConnect").onclick = () => openConnectServices(need, agentName || "this agent", () => viewAgent());
+}
 async function openConnectServices(services, agentName, onDone) {
   services = Array.from(new Set(services || []));
   if (!services.length) { onDone && onDone(); return; }
@@ -838,6 +865,8 @@ async function viewAgent() {
     else if (ASUB === "instructions") renderInstructions(info);
     else if (ASUB === "simple") renderFlow(info); // simplified card view (alternative)
     else renderFlowStudio(info); // default "flow" = the real Dify diagram, cleaned, + chatbot
+    // show a persistent "connect your services" prompt on the flow view
+    if (ASUB === "flow" || ASUB === "config" || ASUB === "simple") maybeShowConnectBanner(info, app.name);
   } catch (e) { $("#flowWrap").innerHTML = `<div class="empty-state">⚠️ ${esc(e.message)}</div>`; }
 }
 
