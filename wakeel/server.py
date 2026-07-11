@@ -898,6 +898,30 @@ def selfheal(sess, app_id, failures, feedback=""):
                       for n in graph.get("nodes", [])]}
 
 
+EVAL_FILE = os.path.join(HERE, "evaluations.json")
+
+
+def _eval_all():
+    try:
+        with open(EVAL_FILE) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def eval_get(sess, app_id):
+    """Persisted test dataset + last results for an agent (Beam 'Test Datasets' / 'Evaluation Framework')."""
+    return {"cases": _eval_all().get(app_id, [])}
+
+
+def eval_save(sess, app_id, cases):
+    data = _eval_all()
+    data[app_id] = (cases or [])[:50]
+    with open(EVAL_FILE, "w") as f:
+        json.dump(data, f)
+    return {"ok": True}
+
+
 # ---------------- HTTP ----------------
 
 class H(BaseHTTPRequestHandler):
@@ -1066,6 +1090,9 @@ class H(BaseHTTPRequestHandler):
             if p == "/api/automation":
                 q = dict(x.split("=", 1) for x in (self.path.split("?", 1) + [""])[1].split("&") if "=" in x)
                 return self._send(200, automation_get(sess, q.get("id", "")))
+            if p == "/api/eval":
+                q = dict(x.split("=", 1) for x in (self.path.split("?", 1) + [""])[1].split("&") if "=" in x)
+                return self._send(200, eval_get(sess, q.get("id", "")))
             if p == "/api/governance":
                 q = dict(x.split("=", 1) for x in (self.path.split("?", 1) + [""])[1].split("&") if "=" in x)
                 return self._send(200, governance(sess, q.get("id", ""), q.get("force") == "1"))
@@ -1164,6 +1191,8 @@ class H(BaseHTTPRequestHandler):
                 return self._send(200, automation_set(sess, b.get("app_id", ""), b.get("agent_mode", "copilot"), b.get("nodes", {})))
             if p == "/api/rate":
                 return self._send(200, rate_output(sess, b.get("task_id", ""), b.get("rating", "up")))
+            if p == "/api/eval-save":
+                return self._send(200, eval_save(sess, b.get("app_id", ""), b.get("cases", [])))
             if p == "/api/test-tool":
                 return self._send(200, test_tool(sess, b.get("prompt", ""), b.get("input", ""), b.get("model", "")))
             if p == "/api/apikey":

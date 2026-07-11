@@ -194,7 +194,7 @@ const T = {
   "No agents yet": "لا يوجد وكلاء بعد", "Wakeel AI": "وكيل الذكي", "Beta": "تجريبي",
   // agent tabs
   "Flow": "المخطط", "Triggers": "المشغّلات", "Memory": "الذاكرة",
-  "Governance": "الحوكمة", "Instructions": "التعليمات", "Automation": "أوضاع الأتمتة",
+  "Governance": "الحوكمة", "Instructions": "التعليمات", "Automation": "أوضاع الأتمتة", "Evaluate": "التقييم",
   // home
   "What do you want to work on?": "بماذا تريد أن تعمل؟",
   "Ask Wakeel to perform tasks, build an agent, or brainstorm ideas": "اطلب من وكيل تنفيذ المهام أو بناء وكيل أو طرح الأفكار",
@@ -335,7 +335,7 @@ function renderShell() {
   if (showCop) wireCopilot();
 }
 
-const SUBTABS = [["flow", "Flow", IC.flow], ["triggers", "Triggers", IC.integrations], ["automation", "Automation", IC.bolt], ["memory", "Memory", IC.book], ["governance", "Governance", IC.check], ["instructions", "Instructions", IC.skills]];
+const SUBTABS = [["flow", "Flow", IC.flow], ["triggers", "Triggers", IC.integrations], ["automation", "Automation", IC.bolt], ["evaluate", "Evaluate", IC.check], ["memory", "Memory", IC.book], ["governance", "Governance", IC.check], ["instructions", "Instructions", IC.skills]];
 async function loadAgents() {
   try {
     const d = await api("GET", "apps"); APPS = d.apps || [];
@@ -551,7 +551,7 @@ async function buildFromDesign(d, btn) {
 /* ---------- AGENT / FLOW ---------- */
 function openAgent(id, sub) { LASTDESIGN = null; AGENT = id; ASUB = sub || "flow"; VIEW = "agent"; COPILOT = true; CFGNODE = null; location.hash = "agent/" + id; renderShell(); }
 
-const ATABS = [["flow", "Flow"], ["triggers", "Triggers"], ["automation", "Automation"], ["memory", "Memory"], ["governance", "Governance"], ["instructions", "Instructions"]];
+const ATABS = [["flow", "Flow"], ["triggers", "Triggers"], ["automation", "Automation"], ["evaluate", "Evaluate"], ["memory", "Memory"], ["governance", "Governance"], ["instructions", "Instructions"]];
 async function viewAgent() {
   const app = APPS.find(a => a.id === AGENT) || { name: "Agent" };
   const cur = ASUB === "config" ? "flow" : ASUB;
@@ -567,6 +567,7 @@ async function viewAgent() {
     window.__agentInfo = info;
     if (ASUB === "triggers") renderTriggers(info);
     else if (ASUB === "automation") renderAutomation(info);
+    else if (ASUB === "evaluate") renderEvaluate(info);
     else if (ASUB === "memory") renderMemory(info);
     else if (ASUB === "governance") renderGovernance(info);
     else if (ASUB === "instructions") renderInstructions(info);
@@ -698,6 +699,82 @@ async function renderAutomation(info) {
 }
 function nodeGlyph(tp) { return ({ llm: IC.spark, tool: IC.integrations, agent: IC.agent, "http-request": IC.integrations, code: IC.skills, "question-classifier": IC.flow }[tp]) || IC.spark; }
 function stepKind(tp) { return ({ llm: "AI reasoning step", tool: "Tool / connector action", agent: "Calls another agent", "http-request": "HTTP request", code: "Code step", "question-classifier": "Classifier / routing" }[tp]) || "Step"; }
+
+/* ---------- Evaluation (Beam: Test Datasets + Evaluation Framework + Optimize) ---------- */
+let EVAL_CASES = [];
+async function renderEvaluate(info) {
+  $("#flowWrap").innerHTML = `<div class="content"><div class="pad" id="evPad"><div class="empty-state"><div class="spin" style="margin:0 auto"></div></div></div></div>`;
+  try { const d = await api("GET", "eval?id=" + AGENT); EVAL_CASES = d.cases || []; } catch (e) { EVAL_CASES = []; }
+  drawEval();
+}
+function evalScore() {
+  const run = EVAL_CASES.filter(c => c.last);
+  if (!run.length) return null;
+  return Math.round(run.filter(c => c.last.pass).length * 100 / run.length);
+}
+function drawEval() {
+  const score = evalScore();
+  const passed = EVAL_CASES.filter(c => c.last && c.last.pass).length;
+  const failed = EVAL_CASES.filter(c => c.last && !c.last.pass).length;
+  const rows = EVAL_CASES.map((c, i) => `
+    <div class="ev-case" data-i="${i}">
+      <div class="ev-main">
+        <div class="ev-verdict">${c.last ? (c.last.pass ? `<span class="st-pill ok">Pass</span>` : `<span class="st-pill bad">Fail</span>`) : `<span class="st-pill idle">Not run</span>`}</div>
+        <div class="ev-txt"><div class="ev-in">${esc(c.input)}</div><div class="ev-exp"><b>Expected:</b> ${esc(c.expected)}</div>${c.last && c.last.reason ? `<div class="ev-reason">${c.last.pass ? "✓" : "✕"} ${esc(c.last.reason)}</div>` : ""}</div>
+      </div>
+      <div class="ev-actions"><button class="btn sm ev-run" data-i="${i}">${IC.play} Run</button><button class="icn-btn ev-del" data-i="${i}" title="Remove">✕</button></div>
+    </div>`).join("");
+  $("#evPad").innerHTML = `
+    <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+      <h1 class="page-h" style="margin:0">Evaluate</h1>
+      ${score != null ? `<span class="ev-badge ${score >= 80 ? "g" : score >= 50 ? "y" : "r"}">Evaluation score ${score}%</span>` : ""}
+      ${EVAL_CASES.length ? `<span class="page-sub" style="margin:0">${passed} passed · ${failed} failed · ${EVAL_CASES.length} cases</span>` : ""}
+    </div>
+    <p class="page-sub">Build a test dataset, run it against the agent, and score the outputs. When cases fail, Wakeel can optimise the prompts to fix them.</p>
+    <div style="display:flex;gap:9px;flex-wrap:wrap;margin-bottom:18px">
+      <button class="btn primary sm" id="evRunAll" ${EVAL_CASES.length ? "" : "disabled"}>${IC.play} Run all</button>
+      <button class="btn sm" id="evGen">${IC.spark} Generate test cases</button>
+      <button class="btn sm" id="evAdd">${IC.plus} Add case</button>
+      ${failed ? `<button class="btn sm" id="evHeal" style="margin-inline-start:auto;border-color:#0b7a48;color:var(--wakeel)">${IC.bolt} Optimise to fix ${failed} failing</button>` : ""}
+    </div>
+    <div class="ev-list">${rows || `<div class="empty-state" style="padding:40px 0"><div class="big">${IC.check}</div><h3>No test cases yet</h3><div>Generate a dataset or add a case to start evaluating this agent.</div></div>`}</div>
+    <div id="evMsg" style="margin-top:14px;color:var(--muted);font-size:13px"></div>`;
+  const save = () => api("POST", "eval-save", { app_id: AGENT, cases: EVAL_CASES }).catch(() => {});
+  const runOne = async (i, btn) => {
+    const c = EVAL_CASES[i]; if (!c) return;
+    if (btn) { btn.disabled = true; btn.innerHTML = `<span class="spin"></span>`; }
+    try { const r = await api("POST", "test-case", { app_id: AGENT, input: c.input, expected: c.expected });
+      c.last = { pass: r.pass, reason: r.reason || "", output: (r.output || "").slice(0, 800), ts: Date.now() / 1000 | 0 };
+    } catch (e) { c.last = { pass: false, reason: e.message }; }
+  };
+  $("#evGen").onclick = async () => {
+    const b = $("#evGen"); b.disabled = true; b.innerHTML = `<span class="spin"></span> Generating…`;
+    try { const r = await api("POST", "gen-tests", { app_id: AGENT, count: 6 }); EVAL_CASES = (r.cases || []).map(c => ({ input: c.input, expected: c.expected })).concat(EVAL_CASES); await save(); drawEval(); }
+    catch (e) { $("#evMsg").textContent = "⚠️ " + e.message; b.disabled = false; b.innerHTML = `${IC.spark} Generate test cases`; }
+  };
+  $("#evAdd").onclick = () => {
+    const d = document.createElement("div"); d.className = "modal-back";
+    d.innerHTML = `<div class="modal fade" style="width:520px" onclick="event.stopPropagation()"><div style="display:flex"><h2 style="flex:1">Add test case</h2><button class="x" id="ex">×</button></div>
+      <div class="field"><label>Input</label><textarea class="input" id="evi" rows="3" placeholder="A realistic input for the agent…"></textarea></div>
+      <div class="field"><label>Expected outcome</label><textarea class="input" id="eve" rows="2" placeholder="What a correct output must contain / do…"></textarea></div>
+      <button class="btn primary block" id="evok">Add case</button></div>`;
+    document.body.appendChild(d); d.onclick = () => d.remove(); $("#ex").onclick = () => d.remove(); $("#evi").focus();
+    $("#evok").onclick = async () => { const inp = $("#evi").value.trim(); if (!inp) return; EVAL_CASES.unshift({ input: inp, expected: $("#eve").value.trim() }); await save(); d.remove(); drawEval(); };
+  };
+  $("#evRunAll") && ($("#evRunAll").onclick = async () => {
+    const b = $("#evRunAll"); b.disabled = true; b.innerHTML = `<span class="spin"></span> Running…`;
+    for (let i = 0; i < EVAL_CASES.length; i++) { $("#evMsg").textContent = `Running case ${i + 1}/${EVAL_CASES.length}…`; await runOne(i); }
+    await save(); drawEval();
+  });
+  $("#evHeal") && ($("#evHeal").onclick = async () => {
+    const b = $("#evHeal"); b.disabled = true; b.innerHTML = `<span class="spin"></span> Optimising…`;
+    const failures = EVAL_CASES.filter(c => c.last && !c.last.pass).map(c => ({ input: c.input, expected: c.expected, output: c.last.output }));
+    try { await api("POST", "selfheal", { app_id: AGENT, failures }); $("#evMsg").textContent = "✓ Prompts optimised. Re-run to verify."; b.disabled = false; b.innerHTML = `${IC.check} Re-run to verify`; }
+    catch (e) { $("#evMsg").textContent = "⚠️ " + e.message; b.disabled = false; }
+  });
+  $("#evPad").querySelectorAll(".ev-run").forEach(el => el.onclick = async () => { await runOne(+el.dataset.i, el); await save(); drawEval(); });
+  $("#evPad").querySelectorAll(".ev-del").forEach(el => el.onclick = async () => { EVAL_CASES.splice(+el.dataset.i, 1); await save(); drawEval(); });
+}
 
 function renderMemory(info) {
   $("#flowWrap").innerHTML = `<div class="content"><div class="pad">
@@ -1445,7 +1522,7 @@ async function boot() {
   const rn = q.match(/[?&]run=([^&]+)/); if (rn) window.__autorun = decodeURIComponent(rn[1]);
   const nd = q.match(/[?&]node=(\d+)/); if (nd) window.__autonode = parseInt(nd[1]);
   const tl = q.match(/[?&]tool=(\d+)/); if (tl) window.__autotool = parseInt(tl[1]);
-  const sb = q.match(/[?&]sub=(triggers|automation|memory|governance|instructions|simple)/); if (sb) window.__autosub = sb[1];
+  const sb = q.match(/[?&]sub=(triggers|automation|evaluate|memory|governance|instructions|simple)/); if (sb) window.__autosub = sb[1];
   if (q.match(/[?&]m365=1/)) { window.__autom365 = true; window.__autosub = "triggers"; }
   const cf = q.match(/[?&]config=([^&]+)/); if (cf) { window.__autoconfig = decodeURIComponent(cf[1]); VIEW = "integrations"; }
   if (m) history.replaceState(null, "", location.pathname + location.hash);
