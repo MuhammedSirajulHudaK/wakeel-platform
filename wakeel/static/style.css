@@ -529,3 +529,14 @@ textarea.input{padding:12px 14px;min-height:auto;resize:none}
 .rec-tbl tr:hover .icn-btn{opacity:1}
 .st-pill.info{background:var(--blue-soft);color:#8bb6ff}
 .st-pill.warn{background:rgba(246,196,79,.14);color:var(--yellow)}
+
+/* ---------- Variable Fill + Structured Output ---------- */
+.var-chips{display:flex;flex-wrap:wrap;gap:7px}
+.vchip{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:6px 11px;border-radius:20px;border:1px solid var(--line);background:var(--panel-2);color:var(--muted);cursor:pointer}
+.vchip:hover{border-color:var(--wakeel);color:var(--text)}
+.vchip svg{width:13px;height:13px;color:var(--wakeel)}
+.sch-list{display:flex;flex-direction:column;gap:8px}
+.sch-row{display:flex;gap:8px;align-items:center}
+.sch-row .sch-name{flex:1;min-height:38px}
+.sch-row .sch-type{width:120px;flex:none;min-height:38px}
+.sch-row .icn-btn{flex:none}

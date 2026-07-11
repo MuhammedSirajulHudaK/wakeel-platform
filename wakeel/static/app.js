@@ -1164,8 +1164,14 @@ async function openConfigTool(info, n) {
           <div class="ct-lbl">LLM</div><select class="input" id="ctModel"><option>${esc((node && node.data.model && node.data.model.name) || "gpt-5.1")}</option></select>
           <div class="ct-lbl" style="margin-top:14px">Prompt <span style="color:var(--faint);font-weight:400">— reference inputs with {{#node.field#}}</span></div>
           <textarea class="input ct-prompt" id="ctPrompt" rows="16">${esc(prompt)}</textarea></div>
-        <div class="ct-block"><div class="ct-block-h">Input variables <span class="ct-badge">Used by AI</span></div><div id="ctInputs" class="ct-vars"></div></div>
-        <div class="ct-block"><div class="ct-block-h">Output variables <span class="ct-badge">Used by AI</span></div><div class="ct-var-row"><span class="np-var-sel" style="flex:1">${IC.bolt} text</span><span class="np-fill">String</span></div></div>
+        <div class="ct-block"><div class="ct-block-h">Variables <span class="ct-badge">Variable fill</span></div>
+          <div class="page-sub" style="font-size:12px;margin:0 0 9px">Click a variable to insert it into the prompt — the step fills it at run time.</div>
+          <div class="var-chips" id="ctVars"></div>
+          <div id="ctInputs" class="ct-vars" style="margin-top:10px"></div></div>
+        <div class="ct-block"><div class="ct-block-h">Structured output <span class="ct-badge">Schema</span></div>
+          <div class="page-sub" style="font-size:12px;margin:0 0 9px">Define the fields this step must return, so downstream steps can rely on a fixed shape.</div>
+          <div id="ctSchema" class="sch-list"></div>
+          <button class="btn sm" id="ctAddField" style="margin-top:8px">${IC.plus} Add field</button></div>
       </div>
       <div class="ct-right">
         <div class="ct-block-h">Test output</div>
@@ -1181,11 +1187,43 @@ async function openConfigTool(info, n) {
   try { const m = await api("GET", "models"); const sel = $("#ctModel"); sel.innerHTML = ""; const cur = (node && node.data.model && node.data.model.name); (m.providers || []).forEach(pr => { const g = document.createElement("optgroup"); g.label = pr.label; (pr.models || []).forEach(md => { const o = document.createElement("option"); o.value = pr.provider + "|" + md; o.textContent = md; if (md === cur) o.selected = true; g.appendChild(o); }); sel.appendChild(g); }); } catch (e) {}
   // parse input variables from prompt
   const vars = [...new Set((prompt.match(/{{#([^#}]+)#}}/g) || []).map(s => s.replace(/[{}#]/g, "")))];
-  $("#ctInputs").innerHTML = vars.length ? vars.map(v => `<div class="ct-var-row"><span class="ct-var-nm">${esc(v.split(".").pop())}</span><span class="np-fill">Linked fill · ${esc(v)}</span></div>`).join("") : `<div class="page-sub" style="font-size:12px;margin:0">This tool reads the task input directly.</div>`;
+  $("#ctInputs").innerHTML = vars.length ? vars.map(v => `<div class="ct-var-row"><span class="ct-var-nm">${esc(v.split(".").pop())}</span><span class="np-fill">Linked fill · ${esc(v)}</span></div>`).join("") : `<div class="page-sub" style="font-size:12px;margin:0">This step reads the task input directly.</div>`;
+  // --- Variable Fill: insertable variable chips (task input + upstream steps) ---
+  const order = orderedNodes(info) || info.nodes || [];
+  const meIdx = order.findIndex(x => x.id === n.id);
+  const avail = [{ label: "Task input", v: "sys.query" }].concat(
+    order.filter((x, i) => x.id !== n.id && (meIdx < 0 || i < meIdx) && ["llm", "tool", "code", "question-classifier", "http-request"].includes(x.type))
+      .map(x => ({ label: x.title || x.type, v: (x.id || "") + ".text" })));
+  $("#ctVars").innerHTML = avail.map(a => `<button class="vchip" data-v="${esc(a.v)}">${IC.bolt}<span>${esc(a.label)}</span></button>`).join("");
+  const insertVar = (token) => { const ta = $("#ctPrompt"); const s = ta.selectionStart ?? ta.value.length; ta.value = ta.value.slice(0, s) + token + ta.value.slice(ta.selectionEnd ?? s); ta.focus(); ta.selectionStart = ta.selectionEnd = s + token.length; };
+  $("#ctVars").querySelectorAll(".vchip").forEach(b => b.onclick = () => insertVar("{{#" + b.dataset.v + "#}}"));
+  // --- Structured Output: field schema editor ---
+  let schema = (node && node.data && Array.isArray(node.data.__wakeel_schema)) ? node.data.__wakeel_schema.slice() : [];
+  const drawSchema = () => {
+    $("#ctSchema").innerHTML = schema.length ? schema.map((f, i) => `
+      <div class="sch-row" data-i="${i}"><input class="input sch-name" placeholder="field_name" value="${esc(f.name || "")}"/>
+      <select class="input sch-type">${["string", "number", "boolean", "date", "array", "object"].map(tp => `<option ${f.type === tp ? "selected" : ""}>${tp}</option>`).join("")}</select>
+      <button class="icn-btn sch-del" title="Remove">✕</button></div>`).join("") : `<div class="page-sub" style="font-size:12px;margin:0">No schema — the step returns free text.</div>`;
+    $("#ctSchema").querySelectorAll(".sch-row").forEach(row => {
+      const i = +row.dataset.i;
+      row.querySelector(".sch-name").oninput = e => schema[i].name = e.target.value;
+      row.querySelector(".sch-type").onchange = e => schema[i].type = e.target.value;
+      row.querySelector(".sch-del").onclick = () => { schema.splice(i, 1); drawSchema(); };
+    });
+  };
+  drawSchema();
+  $("#ctAddField").onclick = () => { schema.push({ name: "", type: "string" }); drawSchema(); };
   $("#ctSave").onclick = async () => {
     if (!node) return;
     node.data.title = $("#ctGoal").value.trim() || node.data.title;
-    const txt = $("#ctPrompt").value;
+    let txt = $("#ctPrompt").value;
+    const fields = schema.filter(f => (f.name || "").trim());
+    node.data.__wakeel_schema = fields;
+    if (fields.length) {
+      const spec = fields.map(f => `"${f.name}" (${f.type})`).join(", ");
+      const instr = `\n\nReturn ONLY a JSON object with these fields: ${spec}.`;
+      txt = txt.replace(/\n\nReturn ONLY a JSON object with these fields:.*$/s, "") + instr;
+    }
     if (Array.isArray(node.data.prompt_template) && node.data.prompt_template.length) node.data.prompt_template[0].text = txt;
     else node.data.prompt_template = [{ role: "user", text: txt, edition_type: "basic", id: n.id + "-m" }];
     const mv = $("#ctModel").value; if (mv && mv.includes("|")) { const [pv, md] = mv.split("|"); node.data.model = { provider: pv, name: md, mode: "chat", completion_params: {} }; }
