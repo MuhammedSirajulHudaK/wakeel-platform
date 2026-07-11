@@ -194,7 +194,7 @@ const T = {
   "No agents yet": "لا يوجد وكلاء بعد", "Wakeel AI": "وكيل الذكي", "Beta": "تجريبي",
   // agent tabs
   "Flow": "المخطط", "Triggers": "المشغّلات", "Memory": "الذاكرة",
-  "Governance": "الحوكمة", "Instructions": "التعليمات", "Automation": "أوضاع الأتمتة", "Evaluate": "التقييم",
+  "Governance": "الحوكمة", "Instructions": "التعليمات", "Automation": "أوضاع الأتمتة", "Evaluate": "التقييم", "Records": "السجلات",
   // home
   "What do you want to work on?": "بماذا تريد أن تعمل؟",
   "Ask Wakeel to perform tasks, build an agent, or brainstorm ideas": "اطلب من وكيل تنفيذ المهام أو بناء وكيل أو طرح الأفكار",
@@ -335,7 +335,7 @@ function renderShell() {
   if (showCop) wireCopilot();
 }
 
-const SUBTABS = [["flow", "Flow", IC.flow], ["triggers", "Triggers", IC.integrations], ["automation", "Automation", IC.bolt], ["evaluate", "Evaluate", IC.check], ["memory", "Memory", IC.book], ["governance", "Governance", IC.check], ["instructions", "Instructions", IC.skills]];
+const SUBTABS = [["flow", "Flow", IC.flow], ["triggers", "Triggers", IC.integrations], ["automation", "Automation", IC.bolt], ["records", "Records", IC.projects], ["evaluate", "Evaluate", IC.check], ["memory", "Memory", IC.book], ["governance", "Governance", IC.check], ["instructions", "Instructions", IC.skills]];
 async function loadAgents() {
   try {
     const d = await api("GET", "apps"); APPS = d.apps || [];
@@ -551,7 +551,7 @@ async function buildFromDesign(d, btn) {
 /* ---------- AGENT / FLOW ---------- */
 function openAgent(id, sub) { LASTDESIGN = null; AGENT = id; ASUB = sub || "flow"; VIEW = "agent"; COPILOT = true; CFGNODE = null; location.hash = "agent/" + id; renderShell(); }
 
-const ATABS = [["flow", "Flow"], ["triggers", "Triggers"], ["automation", "Automation"], ["evaluate", "Evaluate"], ["memory", "Memory"], ["governance", "Governance"], ["instructions", "Instructions"]];
+const ATABS = [["flow", "Flow"], ["triggers", "Triggers"], ["automation", "Automation"], ["records", "Records"], ["evaluate", "Evaluate"], ["memory", "Memory"], ["governance", "Governance"], ["instructions", "Instructions"]];
 async function viewAgent() {
   const app = APPS.find(a => a.id === AGENT) || { name: "Agent" };
   const cur = ASUB === "config" ? "flow" : ASUB;
@@ -567,6 +567,7 @@ async function viewAgent() {
     window.__agentInfo = info;
     if (ASUB === "triggers") renderTriggers(info);
     else if (ASUB === "automation") renderAutomation(info);
+    else if (ASUB === "records") renderRecords(info);
     else if (ASUB === "evaluate") renderEvaluate(info);
     else if (ASUB === "memory") renderMemory(info);
     else if (ASUB === "governance") renderGovernance(info);
@@ -699,6 +700,40 @@ async function renderAutomation(info) {
 }
 function nodeGlyph(tp) { return ({ llm: IC.spark, tool: IC.integrations, agent: IC.agent, "http-request": IC.integrations, code: IC.skills, "question-classifier": IC.flow }[tp]) || IC.spark; }
 function stepKind(tp) { return ({ llm: "AI reasoning step", tool: "Tool / connector action", agent: "Calls another agent", "http-request": "HTTP request", code: "Code step", "question-classifier": "Classifier / routing" }[tp]) || "Step"; }
+
+/* ---------- Records / Views (Beam 'Agent Views') ---------- */
+let RECVIEW = null;
+const STATUS_TONE = { "completed": "ok", "compliant": "ok", "response received": "ok", "pending outreach": "idle", "report requested": "info", "under review": "info", "follow-up sent": "warn", "incomplete submission": "warn", "escalation required": "bad", "escalated to officer": "bad", "non-compliant (proposed)": "bad" };
+function statusChip(v) { const tone = STATUS_TONE[(v || "").toLowerCase()] || "idle"; return `<span class="st-pill ${tone}">${esc(v)}</span>`; }
+async function renderRecords(info) {
+  $("#flowWrap").innerHTML = `<div class="content"><div class="pad" id="recPad" style="max-width:100%"><div class="empty-state"><div class="spin" style="margin:0 auto"></div></div></div></div>`;
+  try { RECVIEW = await api("GET", "records?id=" + AGENT); } catch (e) { $("#recPad").innerHTML = `<div class="empty-mini">⚠️ ${esc(e.message)}</div>`; return; }
+  drawRecords();
+}
+function drawRecords(q = "") {
+  const v = RECVIEW; const cols = v.columns || [];
+  const rows = (v.rows || []).filter(r => !q || cols.some(c => String(r[c.name] || "").toLowerCase().includes(q.toLowerCase())));
+  const cell = (c, r) => c.type === "status" ? statusChip(r[c.name]) : `<span>${esc(String(r[c.name] ?? "—"))}</span>`;
+  $("#recPad").innerHTML = `
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><h1 class="page-h" style="margin:0">${esc(v.view)}</h1><span class="st-pill idle">${(v.rows || []).length} records</span>
+      <div style="margin-inline-start:auto;display:flex;gap:9px"><div class="searchbar" style="margin:0;width:220px"><input id="recSearch" placeholder="Search records…" value="${esc(q)}"/></div><button class="btn primary sm" id="recAdd">${IC.plus} New record</button></div></div>
+    <p class="page-sub">The live data this agent reads and writes — a native view of the connected registry.</p>
+    <div class="rec-wrap"><table class="rec-tbl"><thead><tr>${cols.map(c => `<th>${esc(c.name)}</th>`).join("")}<th style="width:34px"></th></tr></thead>
+      <tbody>${rows.length ? rows.map((r, i) => `<tr data-i="${(v.rows || []).indexOf(r)}">${cols.map(c => `<td>${cell(c, r)}</td>`).join("")}<td><button class="icn-btn rec-del" title="Delete">✕</button></td></tr>`).join("") : `<tr><td colspan="${cols.length + 1}" style="text-align:center;color:var(--faint);padding:30px">No records${q ? " match your search" : " yet"}.</td></tr>`}</tbody></table></div>`;
+  $("#recSearch").addEventListener("input", e => drawRecords(e.target.value));
+  const save = () => api("POST", "records-save", { app_id: AGENT, view: v.view, columns: v.columns, rows: v.rows }).catch(() => {});
+  $("#recAdd").onclick = () => {
+    const d = document.createElement("div"); d.className = "modal-back";
+    d.innerHTML = `<div class="modal fade" style="width:520px" onclick="event.stopPropagation()"><div style="display:flex"><h2 style="flex:1">New record</h2><button class="x" id="rx">×</button></div>
+      ${cols.map((c, i) => c.type === "status"
+        ? `<div class="field"><label>${esc(c.name)}</label><select class="input" id="rf${i}">${["Pending Outreach", "Report Requested", "Response Received", "Incomplete Submission", "Under Review", "Follow-up Sent", "Escalation Required", "Completed"].map(s => `<option>${s}</option>`).join("")}</select></div>`
+        : `<div class="field"><label>${esc(c.name)}</label><input class="input" id="rf${i}"/></div>`).join("")}
+      <button class="btn primary block" id="rok">Add record</button></div>`;
+    document.body.appendChild(d); d.onclick = () => d.remove(); $("#rx").onclick = () => d.remove();
+    $("#rok").onclick = async () => { const row = {}; cols.forEach((c, i) => row[c.name] = $("#rf" + i).value.trim() || "—"); v.rows.unshift(row); await save(); d.remove(); drawRecords(); };
+  };
+  $("#recPad").querySelectorAll(".rec-del").forEach(el => el.onclick = async (e) => { const i = +e.target.closest("tr").dataset.i; v.rows.splice(i, 1); await save(); drawRecords($("#recSearch").value); });
+}
 
 /* ---------- Evaluation (Beam: Test Datasets + Evaluation Framework + Optimize) ---------- */
 let EVAL_CASES = [];
@@ -1522,7 +1557,7 @@ async function boot() {
   const rn = q.match(/[?&]run=([^&]+)/); if (rn) window.__autorun = decodeURIComponent(rn[1]);
   const nd = q.match(/[?&]node=(\d+)/); if (nd) window.__autonode = parseInt(nd[1]);
   const tl = q.match(/[?&]tool=(\d+)/); if (tl) window.__autotool = parseInt(tl[1]);
-  const sb = q.match(/[?&]sub=(triggers|automation|evaluate|memory|governance|instructions|simple)/); if (sb) window.__autosub = sb[1];
+  const sb = q.match(/[?&]sub=(triggers|automation|records|evaluate|memory|governance|instructions|simple)/); if (sb) window.__autosub = sb[1];
   if (q.match(/[?&]m365=1/)) { window.__autom365 = true; window.__autosub = "triggers"; }
   const cf = q.match(/[?&]config=([^&]+)/); if (cf) { window.__autoconfig = decodeURIComponent(cf[1]); VIEW = "integrations"; }
   if (m) history.replaceState(null, "", location.pathname + location.hash);

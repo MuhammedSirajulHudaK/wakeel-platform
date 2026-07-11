@@ -898,6 +898,62 @@ def selfheal(sess, app_id, failures, feedback=""):
                       for n in graph.get("nodes", [])]}
 
 
+RECORDS_FILE = os.path.join(HERE, "records.json")
+
+_DEFAULT_VIEW = {
+    "view": "Records",
+    "columns": [{"name": "Name", "type": "string"}, {"name": "Email", "type": "string"},
+                {"name": "Status", "type": "status"}, {"name": "Owner", "type": "string"},
+                {"name": "Next Action", "type": "string"}],
+    "rows": [],
+}
+
+
+def _records_all():
+    try:
+        with open(RECORDS_FILE) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def records_get(sess, app_id):
+    """Agent data view + records (Beam 'Agent Views' / 'List Records from View')."""
+    data = _records_all().get(app_id)
+    if data:
+        return data
+    # seed a view from the agent's registry-style schema if we can infer one
+    info = app_info(sess, app_id)
+    name = (info.get("name") or "").lower()
+    if "emirat" in name or "mohre" in name or "compliance" in name:
+        return {
+            "view": "Compliance Registry",
+            "columns": [{"name": "Business Name", "type": "string"}, {"name": "Contact Email", "type": "string"},
+                        {"name": "Sector", "type": "string"}, {"name": "Compliance Status", "type": "status"},
+                        {"name": "Last Outreach", "type": "date"}, {"name": "Assigned Officer", "type": "string"},
+                        {"name": "Next Action", "type": "string"}],
+            "rows": [
+                {"Business Name": "ABC Trading LLC", "Contact Email": "hr@abctrading.ae", "Sector": "Retail",
+                 "Compliance Status": "Pending Outreach", "Last Outreach": "—", "Assigned Officer": "R. Al Mansoori", "Next Action": "Send report request"},
+                {"Business Name": "Gulf Logistics FZE", "Contact Email": "compliance@gulflog.ae", "Sector": "Logistics",
+                 "Compliance Status": "Report Requested", "Last Outreach": "2026-07-04", "Assigned Officer": "R. Al Mansoori", "Next Action": "Await response"},
+                {"Business Name": "Nakheel Contracting", "Contact Email": "info@nakheelc.ae", "Sector": "Construction",
+                 "Compliance Status": "Escalation Required", "Last Outreach": "2026-06-28", "Assigned Officer": "S. Hameed", "Next Action": "Officer review"},
+                {"Business Name": "Bayan Health Clinic", "Contact Email": "admin@bayanhealth.ae", "Sector": "Healthcare",
+                 "Compliance Status": "Completed", "Last Outreach": "2026-07-01", "Assigned Officer": "S. Hameed", "Next Action": "—"},
+            ],
+        }
+    return dict(_DEFAULT_VIEW)
+
+
+def records_save(sess, app_id, view, columns, rows):
+    data = _records_all()
+    data[app_id] = {"view": view or "Records", "columns": columns or [], "rows": (rows or [])[:500]}
+    with open(RECORDS_FILE, "w") as f:
+        json.dump(data, f)
+    return {"ok": True}
+
+
 EVAL_FILE = os.path.join(HERE, "evaluations.json")
 
 
@@ -1093,6 +1149,9 @@ class H(BaseHTTPRequestHandler):
             if p == "/api/eval":
                 q = dict(x.split("=", 1) for x in (self.path.split("?", 1) + [""])[1].split("&") if "=" in x)
                 return self._send(200, eval_get(sess, q.get("id", "")))
+            if p == "/api/records":
+                q = dict(x.split("=", 1) for x in (self.path.split("?", 1) + [""])[1].split("&") if "=" in x)
+                return self._send(200, records_get(sess, q.get("id", "")))
             if p == "/api/governance":
                 q = dict(x.split("=", 1) for x in (self.path.split("?", 1) + [""])[1].split("&") if "=" in x)
                 return self._send(200, governance(sess, q.get("id", ""), q.get("force") == "1"))
@@ -1193,6 +1252,8 @@ class H(BaseHTTPRequestHandler):
                 return self._send(200, rate_output(sess, b.get("task_id", ""), b.get("rating", "up")))
             if p == "/api/eval-save":
                 return self._send(200, eval_save(sess, b.get("app_id", ""), b.get("cases", [])))
+            if p == "/api/records-save":
+                return self._send(200, records_save(sess, b.get("app_id", ""), b.get("view", ""), b.get("columns", []), b.get("rows", [])))
             if p == "/api/test-tool":
                 return self._send(200, test_tool(sess, b.get("prompt", ""), b.get("input", ""), b.get("model", "")))
             if p == "/api/apikey":

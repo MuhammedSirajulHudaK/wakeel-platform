@@ -515,3 +515,17 @@ textarea.input{padding:12px 14px;min-height:auto;resize:none}
 .ev-reason{font-size:12px;margin-top:6px;color:var(--faint)}
 .ev-actions{display:flex;gap:6px;flex:none;align-items:center}
 .st-pill.bad{background:rgba(239,68,68,.14);color:#ff8b8b}
+
+/* ---------- Records / Views table ---------- */
+.agent-tabs{overflow-x:auto;scrollbar-width:none}
+.agent-tabs::-webkit-scrollbar{display:none}
+.rec-wrap{margin-top:16px;border:1px solid var(--line);border-radius:12px;overflow:auto;background:var(--panel)}
+.rec-tbl{width:100%;border-collapse:collapse;font-size:13px;min-width:640px}
+.rec-tbl th{text-align:start;font-weight:650;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.03em;padding:11px 14px;border-bottom:1px solid var(--line);background:var(--panel-2);white-space:nowrap;position:sticky;top:0}
+.rec-tbl td{padding:11px 14px;border-bottom:1px solid var(--line-2);white-space:nowrap;color:var(--text)}
+.rec-tbl tr:last-child td{border-bottom:0}
+.rec-tbl tbody tr:hover{background:var(--panel-2)}
+.rec-tbl .icn-btn{opacity:0;width:26px;height:26px}
+.rec-tbl tr:hover .icn-btn{opacity:1}
+.st-pill.info{background:var(--blue-soft);color:#8bb6ff}
+.st-pill.warn{background:rgba(246,196,79,.14);color:var(--yellow)}
