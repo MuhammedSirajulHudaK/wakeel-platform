@@ -643,3 +643,21 @@ textarea.input{padding:12px 14px;min-height:auto;resize:none}
 .team-plan b{display:flex;align-items:center;gap:7px;font-size:13px}
 .team-plan b svg{width:15px;height:15px;color:#a78bfa}
 .team-plan p{margin:6px 0 0;font-size:13.5px;color:var(--muted);line-height:1.55}
+
+/* ---- Governance & Audit center ---- */
+.gov-posture{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin-top:16px}
+.gv-h{display:flex;align-items:center;gap:8px;font-weight:700;font-size:13.5px;margin-bottom:12px}
+.gv-h svg{width:16px;height:16px;color:var(--green)}
+.gv-chips{display:flex;flex-wrap:wrap;gap:7px}
+.gv-chip{display:inline-block;padding:5px 11px;border-radius:999px;background:var(--panel-3);border:1px solid var(--line);font-size:12.5px;color:var(--muted)}
+.audit-list{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.audit-row{display:flex;align-items:center;gap:12px;padding:12px 15px;border-bottom:1px solid var(--line-2)}
+.audit-row:last-child{border-bottom:none}
+.au-dot{width:9px;height:9px;border-radius:50%;flex:none}
+.au-dot.g{background:var(--green)} .au-dot.y{background:#e6b02e} .au-dot.b{background:#4a7ad6}
+.au-main{flex:1;min-width:0}
+.au-t{font-size:13.5px}
+.au-det{color:var(--muted)}
+.au-meta{font-size:11.5px;color:var(--muted-2);margin-top:2px}
+.au-time{font-size:11.5px;color:var(--faint);flex:none;white-space:nowrap}
+@media (max-width:720px){.gov-posture{grid-template-columns:1fr}}

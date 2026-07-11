@@ -31,6 +31,8 @@ const IC = {
   thumb: I('<path d="M7 11v9H4a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1zM7 11l4-7a2 2 0 0 1 2 2v3h4.6a2 2 0 0 1 2 2.3l-1 6A2 2 0 0 1 16.6 20H7"/>'),
   trophy: I('<path d="M8 21h8M12 17v4M6 4h12v5a6 6 0 0 1-12 0zM6 6H3v1a4 4 0 0 0 3 3.9M18 6h3v1a4 4 0 0 1-3 3.9"/>'),
   team: I('<circle cx="12" cy="6" r="2.6"/><circle cx="5" cy="17.5" r="2.6"/><circle cx="19" cy="17.5" r="2.6"/><path d="M11 8.2l-4.4 6.6M13 8.2l4.4 6.6"/>'),
+  shield: I('<path d="M12 3l7 3v5c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V6z"/><path d="M9.2 12l2 2 3.6-3.8"/>'),
+  download: I('<path d="M12 4v11M8 11l4 4 4-4M4 19h16"/>'),
 };
 
 /* ---------- gov templates ---------- */
@@ -341,7 +343,7 @@ function renderLogin() {
 }
 
 /* ---------- shell ---------- */
-const NAV = [["home", "Home", IC.home], ["skills", "Skills", IC.skills], ["templates", "Agent templates", IC.templates], ["teams", "Teams", IC.team], ["inbox", "Inbox", IC.inbox], ["tasks", "Tasks", IC.tasks], ["integrations", "Integrations", IC.integrations], ["automations", "Automations", IC.flow], ["views", "Analytics", IC.views]];
+const NAV = [["home", "Home", IC.home], ["skills", "Skills", IC.skills], ["templates", "Agent templates", IC.templates], ["teams", "Teams", IC.team], ["inbox", "Inbox", IC.inbox], ["tasks", "Tasks", IC.tasks], ["integrations", "Integrations", IC.integrations], ["automations", "Automations", IC.flow], ["governance", "Governance", IC.shield], ["views", "Analytics", IC.views]];
 
 function renderShell() {
   applyDir();
@@ -368,7 +370,7 @@ function renderShell() {
   $("#userBtn").onclick = openProfile;
   $("#supBtn").onclick = () => window.open("https://champions.innoventures.ae/", "_blank", "noopener");
   loadAgents();
-  ({ home: viewHome, skills: viewSkills, teams: viewTeams, projects: () => viewEmpty("Projects", "Group related agents, files and notes.", IC.projects), inbox: viewInbox, tasks: viewTasks, templates: viewTemplates, integrations: viewIntegrations, automations: viewAutomations, views: viewAnalytics, developers: viewDevelopers, agent: viewAgent }[VIEW])();
+  ({ home: viewHome, skills: viewSkills, teams: viewTeams, governance: viewGovernance, projects: () => viewEmpty("Projects", "Group related agents, files and notes.", IC.projects), inbox: viewInbox, tasks: viewTasks, templates: viewTemplates, integrations: viewIntegrations, automations: viewAutomations, views: viewAnalytics, developers: viewDevelopers, agent: viewAgent }[VIEW])();
   if (showCop) wireCopilot();
 }
 
@@ -1594,6 +1596,56 @@ function openTeamRun(tm) {
   };
 }
 
+/* ---------- Governance & Audit center (workspace-level) ---------- */
+let GOV_CAT = "all";
+function viewGovernance() {
+  $("#mainCol").innerHTML = `<div class="topbar"><div class="crumbs"><b>${t("Governance")}</b><span class="sep">·</span><span style="color:var(--muted)">Audit &amp; compliance</span></div>
+      <div class="top-actions"><button class="btn sm" id="govExport">${IC.download} Export audit log</button></div></div>
+    <div class="content"><div class="pad" style="max-width:1000px">
+      <h1 class="page-h">${t("Governance")}</h1>
+      <p class="page-sub">Every action across your workspace — who did what, when — plus the compliance posture your agents operate under. This is the accountable record for auditors.</p>
+      <div id="govBody"><div class="empty-mini">Loading…</div></div>
+    </div></div>`;
+  $("#govExport").onclick = () => { const u = "/wakeel/api/audit-export"; window.open(u, "_blank"); };
+  loadGovernance();
+}
+async function loadGovernance() {
+  const el = $("#govBody"); if (!el) return;
+  try {
+    const d = await api("GET", "audit?category=" + encodeURIComponent(GOV_CAT));
+    const s = d.summary || {};
+    const ap = s.approvals || { approved: 0, rejected: 0, pending: 0 };
+    const chips = (arr) => (arr || []).map(x => `<span class="gv-chip">${esc(x)}</span>`).join("");
+    const sevDot = { ok: "g", warn: "y", info: "b" };
+    el.innerHTML = `
+      <div class="metric-row m4">
+        ${metric("Audit events", s.total_events || 0, "", "")}
+        ${metric("Agents governed", s.agents_governed || 0, "", s.agents_governed ? "ok" : "")}
+        ${metric("Approval rate", (s.approval_rate || 0) + "%", "", (s.approval_rate || 0) >= 80 ? "ok" : "")}
+        ${metric("Pending approvals", ap.pending || 0, "", ap.pending ? "bad" : "")}
+      </div>
+      <div class="gov-posture">
+        <div class="gcard" style="cursor:default"><div class="gv-h">${IC.shield} Data residency</div><div class="gv-chips">${chips(s.data_residency)}</div></div>
+        <div class="gcard" style="cursor:default"><div class="gv-h">${IC.check} Compliance standards</div><div class="gv-chips">${chips(s.compliance)}</div></div>
+        <div class="gcard" style="cursor:default"><div class="gv-h">${IC.spark} Model &amp; data policy</div><div class="gv-chips">${chips(s.model_policy)}</div></div>
+        <div class="gcard" style="cursor:default"><div class="gv-h">${IC.thumb} Human decisions</div>
+          <div class="kv"><span>Approved</span><b style="color:var(--green)">${ap.approved}</b></div>
+          <div class="kv"><span>Rejected</span><b style="color:#ff8b8b">${ap.rejected}</b></div>
+          <div class="kv"><span>Pending review</span><b>${ap.pending}</b></div></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;margin:22px 0 10px">
+        <div class="side-sub" style="padding-inline:0;flex:1">Audit trail</div>
+        <div class="seg" id="govCats">${(d.categories || ["all"]).map(c => `<button class="${GOV_CAT === c ? "on" : ""}" data-c="${c}">${c === "all" ? "All" : c}</button>`).join("")}</div>
+      </div>
+      <div class="audit-list">${(d.events || []).length ? (d.events || []).map(e => `
+        <div class="audit-row"><span class="au-dot ${sevDot[e.severity] || "b"}"></span>
+          <div class="au-main"><div class="au-t"><b>${esc(e.label)}</b>${e.detail ? `<span class="au-det"> — ${esc(e.detail)}</span>` : ""}</div>
+            <div class="au-meta">${esc(e.category)} · ${esc(e.actor)}</div></div>
+          <div class="au-time">${timeAgo(e.ts)}</div></div>`).join("") : `<div class="empty-mini" style="padding:16px">No audit events yet in this category.</div>`}</div>`;
+    $("#govCats").querySelectorAll("button").forEach(b => b.onclick = () => { GOV_CAT = b.dataset.c; loadGovernance(); });
+  } catch (e) { el.innerHTML = `<div class="empty-mini">⚠️ ${esc(e.message)}</div>`; }
+}
+
 /* ---------- Tasks (run history) ---------- */
 function statusPill(s) { const m = { succeeded: "ok", completed: "ok", running: "run", failed: "bad", planned: "idle" }; return `<span class="st-pill ${m[s] || "idle"}">${esc(s || "—")}</span>`; }
 function viewTasks() {
@@ -1911,7 +1963,7 @@ async function boot() {
   if (m) history.replaceState(null, "", location.pathname + location.hash);
   const h = location.hash.replace("#", "");
   if (h.startsWith("agent/")) { AGENT = h.split("/")[1]; VIEW = "agent"; COPILOT = true; if (window.__autosub) { ASUB = window.__autosub; window.__autosub = null; } }
-  else if (["home", "skills", "teams", "projects", "inbox", "tasks", "templates", "integrations", "automations", "views", "developers"].includes(h)) VIEW = h;
+  else if (["home", "skills", "teams", "governance", "projects", "inbox", "tasks", "templates", "integrations", "automations", "views", "developers"].includes(h)) VIEW = h;
   try { ME = await api("GET", "me"); } catch (e) { ME = null; }
   if (!ME) return renderLogin();
   try { await api("GET", "sso"); } catch (e) {}

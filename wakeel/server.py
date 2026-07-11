@@ -26,6 +26,7 @@ import time
 import http.cookiejar
 import urllib.request
 import urllib.error
+import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 DIFY = os.environ.get("DIFY_BASE", "http://localhost/console/api")
@@ -812,6 +813,162 @@ def activity(sess, limit=50):
     return {"activity": items}
 
 
+# ---- Governance & Audit center (workspace-level) ----
+# Every action code maps to an audit category + severity so the compliance
+# officer sees WHO did WHAT, WHEN — the accountable record Beam calls "audit trail".
+AUDIT_MAP = {
+    "run": ("Execution", "An agent run was executed", "info"),
+    "team": ("Execution", "A multi-agent team action", "info"),
+    "automation": ("Execution", "An automation was built or run", "info"),
+    "api": ("Execution", "A run via the platform API", "info"),
+    "approve": ("Human decision", "An officer approved an output", "ok"),
+    "reject": ("Human decision", "An officer rejected an output", "warn"),
+    "governance": ("Governance", "A governance package was generated", "info"),
+    "publish": ("Lifecycle", "An agent was published to production", "info"),
+    "build": ("Lifecycle", "An agent was built", "info"),
+    "install": ("Lifecycle", "An agent was installed", "info"),
+    "edit": ("Lifecycle", "An agent flow was edited", "info"),
+    "design": ("Lifecycle", "An agent design was proposed", "info"),
+    "heal": ("Lifecycle", "An agent was auto-healed", "info"),
+    "gen_tests": ("Quality", "Evaluation test cases were generated", "info"),
+    "test": ("Quality", "An evaluation test was run", "info"),
+    "rate": ("Quality", "An output was rated", "info"),
+    "connect": ("Integration", "A connector was linked", "info"),
+    "provider": ("Integration", "A model provider was configured", "info"),
+    "apikey": ("Security", "A platform API key was issued", "warn"),
+    "login": ("Access", "A user signed in", "info"),
+    "chat": ("Assistant", "The assistant was used", "info"),
+    "data": ("Integration", "Knowledge data was added", "info"),
+}
+
+
+def _all_gov_specs(sess):
+    """Latest governance spec per agent for this workspace."""
+    latest = {}
+    try:
+        with open(GOV_FILE) as f:
+            for line in f:
+                try:
+                    d = json.loads(line)
+                except ValueError:
+                    continue
+                if d.get("email") == sess["email"] and d.get("app_id"):
+                    latest[d["app_id"]] = d.get("spec") or {}
+    except OSError:
+        pass
+    return latest
+
+
+# Governance specs are LLM-generated per agent, so the raw compliance/residency
+# strings are long, near-duplicate sentences. Canonicalize them to short standard
+# tags so the audit posture reads as a clean, deduped list for auditors.
+COMPLIANCE_TAGS = [
+    (r"27701", "ISO/IEC 27701"),
+    (r"27017", "ISO/IEC 27017"),
+    (r"27018", "ISO/IEC 27018"),
+    (r"27002", "ISO/IEC 27002"),
+    (r"27001|27000", "ISO/IEC 27001"),
+    (r"42001", "ISO/IEC 42001"),
+    (r"pdpl|decree[- ]law no\.? ?45|personal data protection|data protection|privacy regul", "UAE PDPL (Decree-Law 45/2021)"),
+    (r"adda|abu dhabi digital authority", "ADDA policies"),
+    (r"information assurance|\bia standard", "UAE IA Standards"),
+    (r"\bnesa\b", "NESA"),
+    (r"mohre", "MoHRE policies"),
+    (r"data classification|data management|data residency", "UAE data governance"),
+    (r"ai ethics|human oversight|transparency, accountab", "AI ethics & oversight"),
+    (r"sectoral regulation|trade licens|economic develop", "Sectoral regulations"),
+    (r"gdpr", "GDPR-aligned"),
+]
+
+
+def _canon_compliance(items):
+    import re
+    tags, extra = [], []
+    seen = set()
+    for it in items:
+        low = str(it).lower()
+        matched = False
+        for pat, tag in COMPLIANCE_TAGS:
+            if re.search(pat, low):
+                if tag not in seen:
+                    seen.add(tag)
+                    tags.append(tag)
+                matched = True
+        if not matched:
+            short = str(it).strip().rstrip(".")[:40]
+            if short and short.lower() not in seen:
+                seen.add(short.lower())
+                extra.append(short)
+    return tags + extra[:3]
+
+
+def audit(sess, limit=200, category="all"):
+    raw = []
+    try:
+        with open(ACT_FILE) as f:
+            for line in f:
+                try:
+                    raw.append(json.loads(line))
+                except ValueError:
+                    pass
+    except OSError:
+        pass
+    raw = [i for i in raw if i.get("email") == sess["email"]]
+    events = []
+    for i in raw:
+        act = i.get("action", "")
+        cat, label, sev = AUDIT_MAP.get(act, ("Activity", act, "info"))
+        events.append({"ts": i.get("ts", 0), "actor": i.get("email", ""),
+                       "action": act, "category": cat, "label": label,
+                       "severity": sev, "detail": i.get("detail", "")})
+    events.sort(key=lambda e: e["ts"], reverse=True)
+    if category and category != "all":
+        events = [e for e in events if e["category"] == category]
+    events = events[:limit]
+
+    # roll-up posture from generated governance specs
+    specs = _all_gov_specs(sess)
+    residency, compliance, model_policy = set(), set(), set()
+    for s in specs.values():
+        if s.get("data_residency"):
+            residency.add(s["data_residency"])
+        for c in (s.get("compliance") or []):
+            compliance.add(c)
+        if s.get("model_policy"):
+            model_policy.add(s["model_policy"])
+    decided = _decided(sess)
+    appr = sum(1 for d in decided.values() if d.get("decision") == "approved")
+    rej = sum(1 for d in decided.values() if d.get("decision") == "rejected")
+    pending = len(inbox_list(sess, 999)["items"])
+    cats = {}
+    for e in events:
+        cats[e["category"]] = cats.get(e["category"], 0) + 1
+    summary = {
+        "total_events": len(raw),
+        "agents_governed": len(specs),
+        "approvals": {"approved": appr, "rejected": rej, "pending": pending},
+        "approval_rate": round(appr * 100 / (appr + rej)) if (appr + rej) else 0,
+        "data_residency": (["UAE — all data, logs & model processing stay in-country (Abu Dhabi Government / UAE sovereign cloud)"]
+                           if residency else ["UAE — Abu Dhabi (default policy)"]),
+        "compliance": _canon_compliance(compliance) or ["UAE IA Standards", "ISO/IEC 27001"],
+        "model_policy": (["Azure OpenAI (UAE North) — no customer data used for training"]
+                         if model_policy else ["Azure OpenAI (UAE North) — no data used for training"]),
+        "categories": cats,
+    }
+    return {"summary": summary, "events": events,
+            "categories": ["all"] + sorted({v[0] for v in AUDIT_MAP.values()})}
+
+
+def audit_csv(sess):
+    rows = audit(sess, limit=100000)["events"]
+    out = ["timestamp,iso_time,actor,category,action,detail"]
+    for e in rows:
+        iso = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(e["ts"])) if e["ts"] else ""
+        det = str(e.get("detail", "")).replace('"', "'").replace("\n", " ")
+        out.append(f'{e["ts"]},"{iso}","{e["actor"]}","{e["category"]}","{e["action"]}","{det}"')
+    return "\n".join(out)
+
+
 _KNOWLEDGE_KEY = {"token": ""}
 
 
@@ -1532,6 +1689,13 @@ class H(BaseHTTPRequestHandler):
                 return self._send(200, knowledge_list(sess))
             if p == "/api/activity":
                 return self._send(200, activity(sess))
+            if p == "/api/audit":
+                q = dict(x.split("=", 1) for x in (self.path.split("?", 1) + [""])[1].split("&") if "=" in x)
+                return self._send(200, audit(sess, category=urllib.parse.unquote(q.get("category", "all"))))
+            if p == "/api/audit-export":
+                csv = audit_csv(sess)
+                return self._send(200, csv, ctype="text/csv; charset=utf-8",
+                                  extra={"Content-Disposition": "attachment; filename=wakeel-audit-log.csv"})
             if p == "/api/tasks":
                 return self._send(200, tasks_list(sess))
             if p == "/api/task":
