@@ -470,6 +470,68 @@ def settings_set(provider, model):
     return {"ok": True}
 
 
+AUTOMATION_FILE = os.path.join(HERE, "automation.json")
+RATINGS_FILE = os.path.join(HERE, "ratings.jsonl")
+
+
+def _automation_all():
+    try:
+        with open(AUTOMATION_FILE) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def automation_get(sess, app_id):
+    """Per-agent HITL automation modes (Beam 'Automation Modes'): agent-level default
+    plus per-node Copilot (human approves) / Autopilot (auto) settings."""
+    data = _automation_all().get(app_id) or {}
+    info = app_info(sess, app_id)
+    actionable = [n for n in info.get("nodes", [])
+                  if n.get("type") in ("llm", "tool", "agent", "http-request", "code", "question-classifier")]
+    nodes = data.get("nodes") or {}
+    agent_mode = data.get("agent_mode", "copilot")
+    out_nodes = []
+    for n in actionable:
+        out_nodes.append({"id": n["id"], "title": n.get("title") or n.get("type"),
+                          "type": n.get("type"),
+                          "mode": nodes.get(n["id"], agent_mode)})
+    return {"agent_mode": agent_mode, "nodes": out_nodes}
+
+
+def automation_set(sess, app_id, agent_mode, nodes):
+    data = _automation_all()
+    data[app_id] = {"agent_mode": agent_mode, "nodes": nodes or {}}
+    with open(AUTOMATION_FILE, "w") as f:
+        json.dump(data, f)
+    log_act(sess, "automation", f"{app_id}: {agent_mode}")
+    return {"ok": True}
+
+
+def rate_output(sess, task_id, rating):
+    with open(RATINGS_FILE, "a") as f:
+        f.write(json.dumps({"task_id": task_id, "email": sess["email"],
+                            "rating": rating, "ts": int(time.time())}) + "\n")
+    log_act(sess, "rate", f"{rating} · {task_id}")
+    return {"ok": True}
+
+
+def _ratings(sess):
+    out = {}
+    try:
+        with open(RATINGS_FILE) as f:
+            for line in f:
+                try:
+                    d = json.loads(line)
+                except ValueError:
+                    continue
+                if d.get("email") == sess["email"]:
+                    out[d.get("task_id")] = d.get("rating")
+    except OSError:
+        pass
+    return out
+
+
 ACT_FILE = os.path.join(HERE, "activity.jsonl")
 TASKS_FILE = os.path.join(HERE, "tasks.jsonl")
 
@@ -643,14 +705,31 @@ def governance(sess, app_id, force=False):
     return spec
 
 
-def analytics(sess):
-    tasks = _read_tasks(sess)
+def _pct_change(cur, prev):
+    if not prev:
+        return 100 if cur else 0
+    return round((cur - prev) * 100 / prev)
+
+
+def analytics(sess, days=30):
+    all_tasks = _read_tasks(sess)
     decided = _decided(sess)
+    ratings = _ratings(sess)
+    now = int(time.time())
+    win = days * 86400
+    # split into current window and the preceding window (for % change)
+    tasks = [t for t in all_tasks if (now - t.get("started", now)) < win]
+    prev_tasks = [t for t in all_tasks if win <= (now - t.get("started", now)) < 2 * win]
+
+    def done(ts): return sum(1 for t in ts if t.get("status") in ("succeeded", "completed"))
+    def fail(ts): return sum(1 for t in ts if t.get("status") == "failed")
+
     total = len(tasks)
-    ok = sum(1 for t in tasks if t.get("status") in ("succeeded", "completed"))
-    failed = sum(1 for t in tasks if t.get("status") == "failed")
+    ok = done(tasks)
+    failed = fail(tasks)
     durs = [(t.get("ended", 0) - t.get("started", 0)) for t in tasks if t.get("ended") and t.get("started")]
     avg = round(sum(durs) / len(durs), 1) if durs else 0
+    total_runtime_h = round(sum(durs) / 3600, 2)
     per = {}
     for t in tasks:
         k = t.get("app_name") or "Agent"
@@ -658,20 +737,35 @@ def analytics(sess):
         per[k]["runs"] += 1
         if t.get("status") in ("succeeded", "completed"):
             per[k]["ok"] += 1
-    approvals = {"approved": sum(1 for d in decided.values() if d.get("decision") == "approved"),
-                 "rejected": sum(1 for d in decided.values() if d.get("decision") == "rejected"),
-                 "pending": len(inbox_list(sess, 999)["items"])}
-    # 7-day buckets (by day offset from now)
-    now = int(time.time())
-    days = [0] * 7
+    appr = sum(1 for d in decided.values() if d.get("decision") == "approved")
+    rej = sum(1 for d in decided.values() if d.get("decision") == "rejected")
+    pending = len(inbox_list(sess, 999)["items"])
+    approval_rate = round(appr * 100 / (appr + rej)) if (appr + rej) else 0
+    # feedback score = share of 👍 among rated outputs
+    ups = sum(1 for r in ratings.values() if r == "up")
+    downs = sum(1 for r in ratings.values() if r == "down")
+    feedback_score = round(ups * 100 / (ups + downs)) if (ups + downs) else None
+    # evaluation score = pass rate of stored test-cases (activity 'test' PASS/FAIL) fallback to success rate
+    eval_score = round(ok * 100 / total) if total else 0
+    # day buckets sized to the range (max 30 shown)
+    nb = min(days, 30)
+    buckets = [0] * nb
     for t in tasks:
         off = (now - t.get("started", now)) // 86400
-        if 0 <= off < 7:
-            days[6 - off] += 1
-    return {"total": total, "success_rate": round(ok * 100 / total) if total else 0,
-            "failed": failed, "avg": avg,
-            "agents": sorted(per.values(), key=lambda x: -x["runs"])[:12],
-            "approvals": approvals, "days": days}
+        if 0 <= off < nb:
+            buckets[nb - 1 - off] += 1
+    return {
+        "range": days, "total": total,
+        "total_change": _pct_change(total, len(prev_tasks)),
+        "ok": ok, "ok_change": _pct_change(ok, done(prev_tasks)),
+        "failed": failed, "failed_change": _pct_change(failed, fail(prev_tasks)),
+        "success_rate": round(ok * 100 / total) if total else 0,
+        "avg": avg, "total_runtime": total_runtime_h,
+        "approval_rate": approval_rate, "eval_score": eval_score,
+        "feedback_score": feedback_score,
+        "agents": sorted(per.values(), key=lambda x: -x["runs"])[:12],
+        "approvals": {"approved": appr, "rejected": rej, "pending": pending},
+        "days": buckets}
 
 
 def log_act(sess, action, detail=""):
@@ -967,7 +1061,11 @@ class H(BaseHTTPRequestHandler):
             if p == "/api/inbox":
                 return self._send(200, inbox_list(sess))
             if p == "/api/analytics":
-                return self._send(200, analytics(sess))
+                q = dict(x.split("=", 1) for x in (self.path.split("?", 1) + [""])[1].split("&") if "=" in x)
+                return self._send(200, analytics(sess, int(q.get("range", "30") or 30)))
+            if p == "/api/automation":
+                q = dict(x.split("=", 1) for x in (self.path.split("?", 1) + [""])[1].split("&") if "=" in x)
+                return self._send(200, automation_get(sess, q.get("id", "")))
             if p == "/api/governance":
                 q = dict(x.split("=", 1) for x in (self.path.split("?", 1) + [""])[1].split("&") if "=" in x)
                 return self._send(200, governance(sess, q.get("id", ""), q.get("force") == "1"))
@@ -1062,6 +1160,10 @@ class H(BaseHTTPRequestHandler):
                 return self._send(200, r)
             if p == "/api/decide":
                 return self._send(200, decide(sess, b.get("task_id", ""), b.get("decision", ""), b.get("note", "")))
+            if p == "/api/automation":
+                return self._send(200, automation_set(sess, b.get("app_id", ""), b.get("agent_mode", "copilot"), b.get("nodes", {})))
+            if p == "/api/rate":
+                return self._send(200, rate_output(sess, b.get("task_id", ""), b.get("rating", "up")))
             if p == "/api/test-tool":
                 return self._send(200, test_tool(sess, b.get("prompt", ""), b.get("input", ""), b.get("model", "")))
             if p == "/api/apikey":

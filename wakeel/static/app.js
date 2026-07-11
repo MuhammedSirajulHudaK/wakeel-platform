@@ -28,6 +28,7 @@ const IC = {
   bolt: I('<path d="M13 3L4 14h7l-1 7 9-11h-7z"/>'),
   play: I('<path d="M6 4l14 8-14 8z"/>'),
   help: I('<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 4 2c0 1.5-2 2-2 3.2M12 17h.01"/>'),
+  thumb: I('<path d="M7 11v9H4a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1zM7 11l4-7a2 2 0 0 1 2 2v3h4.6a2 2 0 0 1 2 2.3l-1 6A2 2 0 0 1 16.6 20H7"/>'),
 };
 
 /* ---------- gov templates ---------- */
@@ -193,7 +194,7 @@ const T = {
   "No agents yet": "لا يوجد وكلاء بعد", "Wakeel AI": "وكيل الذكي", "Beta": "تجريبي",
   // agent tabs
   "Flow": "المخطط", "Triggers": "المشغّلات", "Memory": "الذاكرة",
-  "Governance": "الحوكمة", "Instructions": "التعليمات",
+  "Governance": "الحوكمة", "Instructions": "التعليمات", "Automation": "أوضاع الأتمتة",
   // home
   "What do you want to work on?": "بماذا تريد أن تعمل؟",
   "Ask Wakeel to perform tasks, build an agent, or brainstorm ideas": "اطلب من وكيل تنفيذ المهام أو بناء وكيل أو طرح الأفكار",
@@ -334,7 +335,7 @@ function renderShell() {
   if (showCop) wireCopilot();
 }
 
-const SUBTABS = [["flow", "Flow", IC.flow], ["triggers", "Triggers", IC.integrations], ["memory", "Memory", IC.book], ["governance", "Governance", IC.check], ["instructions", "Instructions", IC.skills]];
+const SUBTABS = [["flow", "Flow", IC.flow], ["triggers", "Triggers", IC.integrations], ["automation", "Automation", IC.bolt], ["memory", "Memory", IC.book], ["governance", "Governance", IC.check], ["instructions", "Instructions", IC.skills]];
 async function loadAgents() {
   try {
     const d = await api("GET", "apps"); APPS = d.apps || [];
@@ -550,7 +551,7 @@ async function buildFromDesign(d, btn) {
 /* ---------- AGENT / FLOW ---------- */
 function openAgent(id, sub) { LASTDESIGN = null; AGENT = id; ASUB = sub || "flow"; VIEW = "agent"; COPILOT = true; CFGNODE = null; location.hash = "agent/" + id; renderShell(); }
 
-const ATABS = [["flow", "Flow"], ["triggers", "Triggers"], ["memory", "Memory"], ["governance", "Governance"], ["instructions", "Instructions"]];
+const ATABS = [["flow", "Flow"], ["triggers", "Triggers"], ["automation", "Automation"], ["memory", "Memory"], ["governance", "Governance"], ["instructions", "Instructions"]];
 async function viewAgent() {
   const app = APPS.find(a => a.id === AGENT) || { name: "Agent" };
   const cur = ASUB === "config" ? "flow" : ASUB;
@@ -565,6 +566,7 @@ async function viewAgent() {
     const info = await api("GET", "app-info?id=" + AGENT);
     window.__agentInfo = info;
     if (ASUB === "triggers") renderTriggers(info);
+    else if (ASUB === "automation") renderAutomation(info);
     else if (ASUB === "memory") renderMemory(info);
     else if (ASUB === "governance") renderGovernance(info);
     else if (ASUB === "instructions") renderInstructions(info);
@@ -646,6 +648,56 @@ function buildN8n(key, agentName) {
   };
   return { name: "Wakeel · " + (agentName || "Agent") + " (Microsoft 365)", nodes, connections, active: false, settings: { executionOrder: "v1" }, meta: {}, tags: [] };
 }
+
+/* ---------- Automation Modes (Beam-style HITL: Copilot vs Autopilot per step) ---------- */
+async function renderAutomation(info) {
+  $("#flowWrap").innerHTML = `<div class="content"><div class="pad" id="autoPad"><div class="empty-state"><div class="spin" style="margin:0 auto"></div></div></div></div>`;
+  let a; try { a = await api("GET", "automation?id=" + AGENT); } catch (e) { $("#autoPad").innerHTML = `<div class="empty-mini">⚠️ ${esc(e.message)}</div>`; return; }
+  const modeCard = (val, onpick) => `
+    <div class="mode-seg">
+      <button class="mode-opt ${val === "copilot" ? "on" : ""}" data-m="copilot">${IC.chat}<div><b>Copilot</b><span>Agent drafts · an officer approves before it acts</span></div></button>
+      <button class="mode-opt ${val === "autopilot" ? "on" : ""}" data-m="autopilot">${IC.bolt}<div><b>Autopilot</b><span>Runs end-to-end automatically, no approval</span></div></button>
+    </div>`;
+  const rows = a.nodes.map(n => `
+    <div class="auto-row" data-id="${esc(n.id)}">
+      <div class="ar-info"><div class="dot ${n.mode === "autopilot" ? "ag-green" : "ag-amber"}">${nodeGlyph(n.type)}</div>
+        <div><div class="ar-t">${esc(n.title)}</div><div class="ar-d">${esc(stepKind(n.type))}</div></div></div>
+      <div class="ar-toggle"><button class="pill-toggle ${n.mode === "copilot" ? "on" : ""}" data-v="copilot">${IC.chat} Copilot</button><button class="pill-toggle ${n.mode === "autopilot" ? "on" : ""}" data-v="autopilot">${IC.bolt} Autopilot</button></div>
+    </div>`).join("");
+  $("#autoPad").innerHTML = `
+    <div style="display:flex;align-items:center;gap:12px"><h1 class="page-h" style="margin:0">${t("Automation")}</h1><span class="st-pill ${a.agent_mode === "autopilot" ? "ok" : "idle"}">${a.agent_mode === "autopilot" ? "Autopilot" : "Human-in-the-loop"}</span></div>
+    <p class="page-sub">Choose how much the agent does on its own. <b>Copilot</b> pauses for an officer's approval in the Inbox; <b>Autopilot</b> runs without stopping.</p>
+    <div class="gcard" style="cursor:default;max-width:640px"><h3 style="margin-bottom:4px">Default automation mode</h3><p style="margin:0 0 14px;color:var(--muted);font-size:13px">Applies to every step unless overridden below.</p>${modeCard(a.agent_mode)}</div>
+    <div class="side-sub" style="padding-inline:0;margin-top:22px">Per-step checkpoints</div>
+    <div class="auto-list">${rows || `<div class="empty-mini">No configurable steps.</div>`}</div>
+    <div style="display:flex;gap:10px;align-items:center;margin-top:20px"><button class="btn primary" id="autoSave">${IC.check} Save automation</button><span id="autoMsg" style="color:var(--wakeel);font-size:13px"></span></div>`;
+  const state = { agent_mode: a.agent_mode, nodes: {} };
+  a.nodes.forEach(n => state.nodes[n.id] = n.mode);
+  // agent-level default
+  $("#autoPad").querySelectorAll(".mode-opt").forEach(b => b.onclick = () => {
+    state.agent_mode = b.dataset.m;
+    $("#autoPad").querySelectorAll(".mode-opt").forEach(x => x.classList.toggle("on", x.dataset.m === state.agent_mode));
+    $("#autoPad").querySelector(".st-pill").className = "st-pill " + (state.agent_mode === "autopilot" ? "ok" : "idle");
+    $("#autoPad").querySelector(".st-pill").textContent = state.agent_mode === "autopilot" ? "Autopilot" : "Human-in-the-loop";
+  });
+  // per-node
+  $("#autoPad").querySelectorAll(".auto-row").forEach(row => {
+    const id = row.dataset.id;
+    row.querySelectorAll(".pill-toggle").forEach(b => b.onclick = () => {
+      state.nodes[id] = b.dataset.v;
+      row.querySelectorAll(".pill-toggle").forEach(x => x.classList.toggle("on", x.dataset.v === state.nodes[id]));
+      const dot = row.querySelector(".dot"); dot.className = "dot " + (state.nodes[id] === "autopilot" ? "ag-green" : "ag-amber");
+    });
+  });
+  $("#autoSave").onclick = async () => {
+    $("#autoSave").disabled = true; $("#autoMsg").textContent = "Saving…";
+    try { await api("POST", "automation", { app_id: AGENT, agent_mode: state.agent_mode, nodes: state.nodes }); $("#autoMsg").textContent = "✓ Saved"; }
+    catch (e) { $("#autoMsg").textContent = "⚠️ " + e.message; }
+    finally { $("#autoSave").disabled = false; setTimeout(() => $("#autoMsg").textContent = "", 2000); }
+  };
+}
+function nodeGlyph(tp) { return ({ llm: IC.spark, tool: IC.integrations, agent: IC.agent, "http-request": IC.integrations, code: IC.skills, "question-classifier": IC.flow }[tp]) || IC.spark; }
+function stepKind(tp) { return ({ llm: "AI reasoning step", tool: "Tool / connector action", agent: "Calls another agent", "http-request": "HTTP request", code: "Code step", "question-classifier": "Classifier / routing" }[tp]) || "Step"; }
 
 function renderMemory(info) {
   $("#flowWrap").innerHTML = `<div class="content"><div class="pad">
@@ -1217,12 +1269,24 @@ async function openTask(id) {
   try {
     const t = await api("GET", "task?id=" + id);
     const dur = t.ended && t.started ? (t.ended - t.started) + "s" : "";
+    const isFail = t.status === "failed";
     $("#tBody").innerHTML = `
-      <div style="display:flex;gap:10px;align-items:center;margin-bottom:6px">${statusPill(t.status)}<b>${esc(t.app_name || "Agent")}</b><span style="margin-inline-start:auto;color:var(--muted);font-size:12px">${dur}</span></div>
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:6px">${statusPill(t.status)}<b>${esc(t.app_name || "Agent")}</b>
+        <div style="margin-inline-start:auto;display:flex;gap:8px;align-items:center"><span style="color:var(--muted);font-size:12px">${dur}</span>
+        ${t.app_id ? `<button class="btn sm" id="rerunBtn">${isFail ? "↻ Retry execution" : "↻ Rerun"}</button>` : ""}</div></div>
       <div style="color:var(--muted);font-size:13px;margin-bottom:16px">${esc(t.input || "")}</div>
       <div class="side-sub" style="padding-inline:0">Steps</div>
       <div class="rowlist" style="border-radius:12px">${(t.nodes || []).map((n, i) => `<div class="lrow" style="padding:11px 14px"><div class="ic" style="width:26px;height:26px">${i + 1}</div><div class="info"><div class="t" style="font-size:13.5px">${esc(n.title || "step")}</div></div>${statusPill(n.status)}<span style="font-size:11px;color:var(--faint);margin-inline-start:10px">${n.ms ? (n.ms / 1000).toFixed(1) + "s" : ""}</span></div>`).join("")}</div>
-      ${t.output ? `<div class="side-sub" style="padding-inline:0">Output</div><div class="rl-out" style="background:var(--panel-2);color:var(--text);border-color:var(--line)">${esc(t.output).slice(0, 3000)}</div>` : ""}`;
+      ${t.output ? `<div style="display:flex;align-items:center;gap:10px"><div class="side-sub" style="padding-inline:0;flex:1">Output</div><div class="rate" id="rate"><span class="rate-l">Rate this output</span><button class="rbtn up" data-r="up" title="Good">${IC.thumb}</button><button class="rbtn down" data-r="down" title="Needs work">${IC.thumb}</button></div></div><div class="rl-out" style="background:var(--panel-2);color:var(--text);border-color:var(--line)">${esc(t.output).slice(0, 3000)}</div>` : ""}`;
+    if ($("#rerunBtn")) $("#rerunBtn").onclick = () => { window.__autorun = t.input || ""; d.remove(); openAgent(t.app_id, "simple"); };
+    if (t.output) {
+      const rateEl = $("#rate");
+      rateEl.querySelectorAll(".rbtn").forEach(b => b.onclick = async () => {
+        rateEl.querySelectorAll(".rbtn").forEach(x => x.classList.remove("sel"));
+        b.classList.add("sel");
+        try { await api("POST", "rate", { task_id: id, rating: b.dataset.r }); rateEl.querySelector(".rate-l").textContent = "Thanks — feedback saved"; } catch (e) {}
+      });
+    }
   } catch (e) { $("#tBody").innerHTML = `<div class="empty-mini">⚠️ ${esc(e.message)}</div>`; }
 }
 
@@ -1251,28 +1315,40 @@ function viewInbox() {
   }).catch(e => { $("#inboxList").innerHTML = `<div class="empty-mini">⚠️ ${esc(e.message)}</div>`; });
 }
 
-/* ---------- Analytics (§9) ---------- */
+/* ---------- Analytics (Beam-style Overview Analytics) ---------- */
+let AN_RANGE = 30;
+const AN_RANGES = [[7, "Last 7 days"], [30, "Last 30 days"], [90, "Last 3 months"]];
 function viewAnalytics() {
-  $("#mainCol").innerHTML = `<div class="topbar"><div class="crumbs"><b>${t("Analytics")}</b></div></div>
+  $("#mainCol").innerHTML = `<div class="topbar"><div class="crumbs"><b>${t("Analytics")}</b></div>
+      <div class="top-actions"><div class="seg" id="anRange">${AN_RANGES.map(([d, l]) => `<button class="${AN_RANGE === d ? "on" : ""}" data-d="${d}">${l}</button>`).join("")}</div></div></div>
     <div class="content"><div class="pad">
       <h1 class="page-h">${t("Analytics")}</h1><p class="page-sub">${t("How your agents are performing across all runs.")}</p>
       <div id="anBody"><div class="empty-mini">${t("Loading…")}</div></div>
     </div></div>`;
-  api("GET", "analytics").then(a => {
+  $("#anRange").querySelectorAll("button").forEach(b => b.onclick = () => { AN_RANGE = +b.dataset.d; viewAnalytics(); });
+  const chg = (v) => v == null ? "" : `<span class="chgpill ${v > 0 ? "up" : v < 0 ? "down" : ""}">${v > 0 ? "▲" : v < 0 ? "▼" : "•"} ${Math.abs(v)}%</span>`;
+  const ring = (pct, tone) => `<svg viewBox="0 0 42 42" class="ring ${tone}"><circle class="rbg" cx="21" cy="21" r="15.9"/><circle class="rfg" cx="21" cy="21" r="15.9" stroke-dasharray="${pct} ${100 - pct}" stroke-dashoffset="25"/><text x="21" y="24" class="rtx">${pct}%</text></svg>`;
+  api("GET", "analytics?range=" + AN_RANGE).then(a => {
     const maxDay = Math.max(1, ...(a.days || [1]));
+    const fb = a.feedback_score == null ? "—" : a.feedback_score + "%";
     $("#anBody").innerHTML = `
-      <div class="metric-row">
-        ${metric("Total runs", a.total)}
-        ${metric("Success rate", a.success_rate + "%", a.success_rate >= 80 ? "ok" : a.success_rate >= 50 ? "warn" : "bad")}
-        ${metric("Avg duration", a.avg + "s")}
-        ${metric("Failed", a.failed, a.failed ? "bad" : "")}
+      <div class="metric-row m4">
+        ${metric("Tasks completed", a.ok, chg(a.ok_change), "ok")}
+        ${metric("Tasks failed", a.failed, chg(a.failed_change), a.failed ? "bad" : "")}
+        ${metric("Approval rate", a.approval_rate + "%", "", a.approval_rate >= 80 ? "ok" : "")}
+        ${metric("Feedback score", fb, "", a.feedback_score != null && a.feedback_score >= 80 ? "ok" : "")}
+      </div>
+      <div class="an-grid2">
+        <div class="gcard gauge" style="cursor:default"><div class="gh">Completion rate</div>${ring(a.success_rate, a.success_rate >= 80 ? "g" : a.success_rate >= 50 ? "y" : "r")}<div class="gsub">${a.ok}/${a.total} tasks</div></div>
+        <div class="gcard gauge" style="cursor:default"><div class="gh">Avg evaluation</div>${ring(a.eval_score, a.eval_score >= 80 ? "g" : a.eval_score >= 50 ? "y" : "r")}<div class="gsub">across evaluated steps</div></div>
+        <div class="gcard kpi" style="cursor:default"><div class="gh">Avg runtime / task</div><div class="kv-big">${a.avg}<span>s</span></div><div class="gsub">mean per execution</div></div>
+        <div class="gcard kpi" style="cursor:default"><div class="gh">Total runtime</div><div class="kv-big">${a.total_runtime}<span>h</span></div><div class="gsub">across all tasks</div></div>
       </div>
       <div class="an-grid">
-        <div class="gcard" style="cursor:default"><h3 style="margin-bottom:14px">Runs · last 7 days</h3>
-          <div class="bars">${(a.days || []).map(v => `<div class="bar-col"><div class="bar" style="height:${Math.round(v / maxDay * 100)}%"></div></div>`).join("")}</div>
-          <div class="bar-x">${["6d", "5d", "4d", "3d", "2d", "1d", "today"].map(l => `<span>${l}</span>`).join("")}</div>
+        <div class="gcard" style="cursor:default"><h3 style="margin-bottom:14px">Task runs · ${AN_RANGES.find(r => r[0] === AN_RANGE)[1].toLowerCase()}</h3>
+          <div class="bars">${(a.days || []).map(v => `<div class="bar-col"><div class="bar" style="height:${Math.round(v / maxDay * 100)}%" title="${v}"></div></div>`).join("")}</div>
         </div>
-        <div class="gcard" style="cursor:default"><h3 style="margin-bottom:14px">Approvals</h3>
+        <div class="gcard" style="cursor:default"><h3 style="margin-bottom:14px">Approvals (HITL)</h3>
           <div class="kv"><span>Approved</span><b style="color:var(--green)">${a.approvals.approved}</b></div>
           <div class="kv"><span>Rejected</span><b style="color:#ff8b8b">${a.approvals.rejected}</b></div>
           <div class="kv"><span>Pending</span><b>${a.approvals.pending}</b></div>
@@ -1282,7 +1358,7 @@ function viewAnalytics() {
       <div class="rowlist">${(a.agents || []).map(g => { const rate = g.runs ? Math.round(g.ok * 100 / g.runs) : 0; return `<div class="lrow"><div class="ic">${IC.agent}</div><div class="info"><div class="t">${esc(g.name)}</div><div class="d">${g.runs} runs</div></div><div style="width:120px;flex:none"><div class="prog"><div class="prog-in" style="width:${rate}%"></div></div></div><span class="st-pill ${rate >= 80 ? "ok" : "idle"}" style="margin-inline-start:12px">${rate}%</span></div>`; }).join("") || `<div class="lrow"><div class="info"><div class="d">No runs yet.</div></div></div>`}</div>`;
   }).catch(e => { $("#anBody").innerHTML = `<div class="empty-mini">⚠️ ${esc(e.message)}</div>`; });
 }
-function metric(label, val, tone) { return `<div class="metric ${tone || ""}"><div class="mv">${val}</div><div class="ml">${label}</div></div>`; }
+function metric(label, val, change, tone) { return `<div class="metric ${tone || ""}"><div class="mv">${val} ${change || ""}</div><div class="ml">${label}</div></div>`; }
 
 /* ---------- Automations (Wakeel's bundled engine — embedded same-origin, auto-signed-in) ---------- */
 const AUTO_CREDS = { user: "admin@wakeel.local", pass: "Wakeel12345" };
@@ -1369,7 +1445,7 @@ async function boot() {
   const rn = q.match(/[?&]run=([^&]+)/); if (rn) window.__autorun = decodeURIComponent(rn[1]);
   const nd = q.match(/[?&]node=(\d+)/); if (nd) window.__autonode = parseInt(nd[1]);
   const tl = q.match(/[?&]tool=(\d+)/); if (tl) window.__autotool = parseInt(tl[1]);
-  const sb = q.match(/[?&]sub=(triggers|memory|governance|instructions|simple)/); if (sb) window.__autosub = sb[1];
+  const sb = q.match(/[?&]sub=(triggers|automation|memory|governance|instructions|simple)/); if (sb) window.__autosub = sb[1];
   if (q.match(/[?&]m365=1/)) { window.__autom365 = true; window.__autosub = "triggers"; }
   const cf = q.match(/[?&]config=([^&]+)/); if (cf) { window.__autoconfig = decodeURIComponent(cf[1]); VIEW = "integrations"; }
   if (m) history.replaceState(null, "", location.pathname + location.hash);

@@ -446,3 +446,55 @@ textarea.input{padding:12px 14px;min-height:auto;resize:none}
 .ds-ask{font-size:14px;font-weight:600}
 .ds-actions{display:flex;gap:10px}
 .btn .spin{border-color:rgba(255,255,255,.3);border-top-color:#fff;margin-inline-end:6px;vertical-align:middle}
+
+/* ---------- Automation Modes (Copilot / Autopilot) ---------- */
+.mode-seg{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.mode-opt{display:flex;align-items:flex-start;gap:11px;text-align:start;padding:14px 15px;border:1px solid var(--line);border-radius:12px;background:var(--panel-2);cursor:pointer;transition:.15s}
+.mode-opt:hover{border-color:var(--line-2);background:var(--panel-3)}
+.mode-opt.on{border-color:var(--wakeel);background:linear-gradient(180deg,rgba(0,168,98,.10),var(--panel-2));box-shadow:0 0 0 1px rgba(0,168,98,.35) inset}
+.mode-opt svg{width:20px;height:20px;color:var(--muted-2);flex:none;margin-top:1px}
+.mode-opt.on svg{color:var(--wakeel)}
+.mode-opt b{display:block;font-size:14px}
+.mode-opt span{display:block;font-size:12px;color:var(--muted);margin-top:2px;line-height:1.4}
+.auto-list{display:flex;flex-direction:column;gap:8px;max-width:760px}
+.auto-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:11px 14px;border:1px solid var(--line);border-radius:11px;background:var(--panel)}
+.ar-info{display:flex;align-items:center;gap:12px;min-width:0}
+.ar-info .dot{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;flex:none;background:var(--panel-3)}
+.ar-info .dot svg{width:16px;height:16px}
+.ar-t{font-size:14px;font-weight:600}
+.ar-d{font-size:12px;color:var(--muted-2)}
+.ar-toggle{display:flex;gap:6px;flex:none;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:3px}
+.pill-toggle{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;padding:6px 11px;border-radius:8px;border:0;background:transparent;color:var(--muted);cursor:pointer}
+.pill-toggle svg{width:14px;height:14px}
+.pill-toggle.on{background:var(--panel-3);color:var(--text)}
+.pill-toggle[data-v="autopilot"].on{color:#22c55e}
+.pill-toggle[data-v="copilot"].on{color:var(--yellow)}
+
+/* ---------- Analytics parity: range seg, change pills, gauge ring, ratings ---------- */
+.seg{display:inline-flex;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:3px}
+.seg button{border:0;background:transparent;color:var(--muted);font-size:12.5px;font-weight:600;padding:6px 12px;border-radius:8px;cursor:pointer}
+.seg button.on{background:var(--panel-3);color:var(--text)}
+.metric-row.m4{grid-template-columns:repeat(4,1fr)}
+.chgpill{font-size:11px;font-weight:700;padding:2px 6px;border-radius:6px;background:var(--panel-3);color:var(--muted);vertical-align:middle;margin-inline-start:4px}
+.chgpill.up{color:#22c55e;background:rgba(34,197,94,.12)}
+.chgpill.down{color:#ff8b8b;background:rgba(239,68,68,.12)}
+.an-grid2{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:16px 0}
+@media(max-width:900px){.an-grid2{grid-template-columns:1fr 1fr}}
+.gcard.gauge,.gcard.kpi{display:flex;flex-direction:column;align-items:center;text-align:center;padding:18px 16px}
+.gcard .gh{font-size:12px;font-weight:650;color:var(--muted);letter-spacing:.02em}
+.gcard .gsub{font-size:11.5px;color:var(--faint);margin-top:8px}
+.ring{width:96px;height:96px;margin:10px 0 2px;transform:rotate(-90deg)}
+.ring .rbg{fill:none;stroke:var(--line);stroke-width:3.4}
+.ring .rfg{fill:none;stroke-width:3.4;stroke-linecap:round;transition:stroke-dasharray .6s}
+.ring.g .rfg{stroke:#22c55e}.ring.y .rfg{stroke:var(--yellow)}.ring.r .rfg{stroke:#ef4444}
+.ring .rtx{fill:var(--text);font-size:9px;font-weight:800;text-anchor:middle;transform:rotate(90deg);transform-origin:21px 21px;stroke:none}
+.kv-big{font-size:34px;font-weight:800;letter-spacing:-.02em;margin:14px 0 2px}
+.kv-big span{font-size:16px;font-weight:600;color:var(--muted);margin-inline-start:2px}
+.rate{display:flex;align-items:center;gap:8px}
+.rate-l{font-size:11.5px;color:var(--faint)}
+.rbtn{width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:var(--panel-2);color:var(--muted-2);cursor:pointer;display:grid;place-items:center}
+.rbtn svg{width:15px;height:15px}
+.rbtn.down svg{transform:rotate(180deg)}
+.rbtn:hover{color:var(--text);border-color:var(--line-2)}
+.rbtn.up.sel{color:#22c55e;border-color:#22c55e;background:rgba(34,197,94,.1)}
+.rbtn.down.sel{color:#ff8b8b;border-color:#5a1e26;background:rgba(239,68,68,.1)}
