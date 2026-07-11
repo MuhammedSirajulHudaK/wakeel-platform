@@ -29,6 +29,7 @@ const IC = {
   play: I('<path d="M6 4l14 8-14 8z"/>'),
   help: I('<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 4 2c0 1.5-2 2-2 3.2M12 17h.01"/>'),
   thumb: I('<path d="M7 11v9H4a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1zM7 11l4-7a2 2 0 0 1 2 2v3h4.6a2 2 0 0 1 2 2.3l-1 6A2 2 0 0 1 16.6 20H7"/>'),
+  trophy: I('<path d="M8 21h8M12 17v4M6 4h12v5a6 6 0 0 1-12 0zM6 6H3v1a4 4 0 0 0 3 3.9M18 6h3v1a4 4 0 0 1-3 3.9"/>'),
 };
 
 /* ---------- gov templates ---------- */
@@ -216,7 +217,8 @@ const T = {
   ". Review it and let me know if you'd like any changes before I build it.": "، راجعه وأخبرني إن رغبت بأي تعديلات قبل أن أبنيه.",
   // buttons / common
   "Create agent": "إنشاء وكيل", "Configure": "إعداد", "Install & connect": "تثبيت وربط",
-  "Request": "طلب", "Installed": "مُثبّت", "Get URL": "الحصول على الرابط", "Choose": "اختيار",
+  "Request": "طلب", "Request access": "طلب التفعيل", "Champions": "الأبطال",
+  "Installed": "مُثبّت", "Get URL": "الحصول على الرابط", "Choose": "اختيار",
   "Save schedule": "حفظ الجدولة", "Native plugin": "إضافة أصلية", "Publish": "نشر",
   "Connect Microsoft 365": "ربط Microsoft 365", "All": "الكل", "Active": "نشط", "Save": "حفظ",
   // triggers
@@ -339,7 +341,7 @@ function renderShell() {
       <div class="agent-list" id="agentList"><div class="empty-mini">${t("Loading…")}</div></div>
       <div class="new-agent" id="newAgent">${IC.plus} ${t("New agent")}</div>
       <div class="side-foot">
-        <div class="foot-row" id="supBtn">${IC.help}<span>${t("Chat & support")}</span></div>
+        <div class="foot-row" id="supBtn">${IC.trophy}<span>${t("Champions")}</span></div>
         <div class="foot-row" id="userBtn"><div class="av">${esc((ME.email || "U")[0].toUpperCase())}</div><span>${esc(ME.email.split("@")[0])}</span></div>
       </div>
     </aside>
@@ -349,7 +351,7 @@ function renderShell() {
   document.querySelectorAll(".nav a").forEach(a => a.onclick = () => { VIEW = a.dataset.v; AGENT = null; COPILOT = false; location.hash = a.dataset.v; renderShell(); });
   $("#newAgent").onclick = () => { VIEW = "home"; THREAD = []; renderShell(); };
   $("#userBtn").onclick = openProfile;
-  $("#supBtn").onclick = openHelp;
+  $("#supBtn").onclick = () => window.open("https://champions.innoventures.ae/", "_blank", "noopener");
   loadAgents();
   ({ home: viewHome, skills: viewSkills, projects: () => viewEmpty("Projects", "Group related agents, files and notes.", IC.projects), inbox: viewInbox, tasks: viewTasks, templates: viewTemplates, integrations: viewIntegrations, automations: viewAutomations, views: viewAnalytics, developers: viewDevelopers, agent: viewAgent }[VIEW])();
   if (showCop) wireCopilot();
@@ -1443,13 +1445,14 @@ function viewIntegrations() {
         const on = isConnected(n);
         const native = !!PLUGIN_MAP[n];
         const c = document.createElement("div"); c.className = "gcard"; c.style.cursor = "default";
-        c.innerHTML = `<div style="display:flex;align-items:center;gap:12px">${brandLogo(n)}<div style="flex:1;min-width:0"><h3 style="font-size:14px">${esc(n)}</h3>${native && !on ? `<div style="font-size:11px;color:var(--wakeel)">Native plugin</div>` : ""}</div>${on ? `<span class="st-pill ok">Installed</span>` : ""}</div>
-          <div class="foot" style="margin-top:14px"><span></span><button class="btn sm ${on ? "" : "primary"}">${on ? t("Configure") : native ? t("Install & connect") : t("Request")}</button></div>`;
+        const sub = on ? "" : native ? `<div style="font-size:11px;color:var(--wakeel)">Native · one-click connect</div>` : `<div style="font-size:11px;color:var(--muted-2)">Request to enable for your workspace</div>`;
+        c.innerHTML = `<div style="display:flex;align-items:center;gap:12px">${brandLogo(n)}<div style="flex:1;min-width:0"><h3 style="font-size:14px">${esc(n)}</h3>${sub}</div>${on ? `<span class="st-pill ok">Installed</span>` : ""}</div>
+          <div class="foot" style="margin-top:14px"><span></span><button class="btn sm ${on ? "" : "primary"}" title="${on ? "Configure this connector" : native ? "Install and connect now" : "Ask the Wakeel team to enable this connector"}">${on ? t("Configure") : native ? t("Install & connect") : t("Request access")}</button></div>`;
         const btn = c.querySelector("button");
         btn.onclick = async (e) => {
           e.stopPropagation();
           if (on) { openToolConfig(n); return; }
-          if (!native) { btn.textContent = "Requested"; return; }
+          if (!native) { toast("Requested — the Wakeel team will enable “" + n + "” for your workspace."); btn.textContent = "✓ Requested"; btn.disabled = true; return; }
           btn.disabled = true; btn.innerHTML = `<span class="spin"></span> Installing…`;
           try { await api("POST", "provider/install", { name: PLUGIN_MAP[n] }); const t = await api("GET", "tools"); TOOLS_INSTALLED = t.installed || []; draw($("#isearch").value); }
           catch (err) { btn.disabled = false; btn.textContent = "Not available yet"; }
@@ -1710,10 +1713,19 @@ async function loadAutos() {
       const c = document.createElement("div"); c.className = "gcard auto-card"; c.style.cursor = "default";
       c.innerHTML = `<div style="display:flex;align-items:center;gap:11px;margin-bottom:10px">
           <div class="dot ${a.active ? "ag-green" : "ag-slate"}">${IC.bolt}</div>
-          <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:15px">${esc(a.name)}</div><div style="font-size:12px;color:var(--muted-2)">${IC.play ? "" : ""}Trigger · ${esc(a.trigger)}</div></div>
+          <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:15px">${esc(a.name)}</div><div style="font-size:12px;color:var(--muted-2)">Trigger · ${esc(a.trigger)}</div></div>
+          <button class="btn sm" data-a="run" title="Run this automation now">${IC.play} Run</button>
           <label class="sw2" title="${a.active ? "Active" : "Paused"}"><input type="checkbox" ${a.active ? "checked" : ""} data-a="toggle"><span></span></label>
           <button class="icn-btn" data-a="del" title="Delete">✕</button></div>
         <div class="auto-steps">${a.steps.map((s, i) => `${i ? `<span class="astep-arr">→</span>` : ""}${autoStepChip(s)}`).join("")}</div>`;
+      c.querySelector('[data-a="run"]').onclick = async (ev) => {
+        const b = ev.currentTarget; b.disabled = true; b.innerHTML = `<span class="spin"></span>`;
+        try { const r = await api("POST", "automation-run", { id: a.id });
+          if (r.ok) toast("Automation ran — check the results in your connectors.");
+          else toast(r.message || "Run failed", !r.needs_connector);
+        } catch (e) { toast("⚠️ " + e.message, true); }
+        finally { b.disabled = false; b.innerHTML = `${IC.play} Run`; }
+      };
       c.querySelector('[data-a="toggle"]').onchange = async (e) => { try { await api("POST", "automation-toggle", { id: a.id, active: e.target.checked }); } catch (err) { alert(err.message); e.target.checked = !e.target.checked; } };
       c.querySelector('[data-a="del"]').onclick = async () => { if (!confirm("Delete this automation?")) return; try { await api("POST", "automation-delete", { id: a.id }); loadAutos(); } catch (err) { alert(err.message); } };
       el.appendChild(c);

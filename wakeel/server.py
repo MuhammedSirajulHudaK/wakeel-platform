@@ -1109,6 +1109,35 @@ def automation_toggle(sess, wid, active):
     return {"ok": True}
 
 
+def automation_run(sess, wid):
+    """Trigger an automation on demand. Reports a friendly message when a
+    connector hasn't been authorized yet (the common case in a fresh workspace)."""
+    full = n8n_api("GET", "/rest/workflows/" + wid).get("data", {})
+    nodes = full.get("nodes", [])
+    trig = next((n for n in nodes if "trigger" in (n.get("type", "")).lower()), (nodes[0] if nodes else None))
+    body = {"workflowData": full}
+    if trig:
+        body["triggerToStartFrom"] = {"name": trig.get("name")}
+    try:
+        res = n8n_api("POST", "/rest/workflows/" + wid + "/run", body)
+        eid = (res.get("data") or {}).get("executionId") or res.get("executionId")
+        log_act(sess, "run", "automation · " + (full.get("name") or "")[:40])
+        return {"ok": True, "executionId": eid}
+    except urllib.error.HTTPError as e:
+        msg = ""
+        try:
+            msg = json.loads(e.read().decode()).get("message", "")
+        except Exception:
+            pass
+        low = msg.lower()
+        if any(k in low for k in ("required", "credential", "not been set", "authorize", "no credentials")):
+            return {"ok": False, "needs_connector": True,
+                    "message": "Connect this automation's apps first (Integrations → Microsoft 365), then run it."}
+        return {"ok": False, "message": (msg[:300] or "run failed")}
+    except Exception as e:
+        return {"ok": False, "message": str(e)[:300]}
+
+
 EVAL_FILE = os.path.join(HERE, "evaluations.json")
 
 
@@ -1553,6 +1582,8 @@ class H(BaseHTTPRequestHandler):
                 return self._send(200, automation_delete(sess, b.get("id", "")))
             if p == "/api/automation-toggle":
                 return self._send(200, automation_toggle(sess, b.get("id", ""), b.get("active", False)))
+            if p == "/api/automation-run":
+                return self._send(200, automation_run(sess, b.get("id", "")))
             if p == "/api/beam-key":
                 return self._send(200, beam_key_new(sess, b.get("label", "")))
             if p == "/api/records-save":
