@@ -1187,7 +1187,8 @@ services:
     volumes:
       - ./volumes/unstructured:/app/data
 
-  # Wakeel connector/automation engine — n8n (bundled, self-hosted, served at /n8n/)
+  # Wakeel connector/automation engine — n8n (bundled, self-hosted, embedded
+  # same-origin at /automations/ so it lives INSIDE Wakeel, not a separate app)
   n8n:
     image: n8nio/n8n:latest
     restart: always
@@ -1195,8 +1196,9 @@ services:
       N8N_HOST: localhost
       N8N_PORT: "5678"
       N8N_PROTOCOL: http
-      N8N_EDITOR_BASE_URL: http://localhost:5679/
-      WEBHOOK_URL: http://localhost:5679/
+      N8N_PATH: /automations/
+      N8N_EDITOR_BASE_URL: http://localhost/automations/
+      WEBHOOK_URL: http://localhost/automations/
       N8N_SECURE_COOKIE: "false"
       N8N_DIAGNOSTICS_ENABLED: "false"
       N8N_PERSONALIZATION_ENABLED: "false"

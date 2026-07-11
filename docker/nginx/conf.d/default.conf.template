@@ -85,6 +85,27 @@ server {
       alias /innogent/innogent-favicon.svg;
     }
 
+    # ---- Wakeel Automations (n8n) served SAME-ORIGIN so it embeds inside Wakeel ----
+    # n8n emits /automations/* URLs (N8N_PATH) but serves at root, so strip the prefix.
+    location = /automations { return 302 /automations/; }
+    location /automations/ {
+      resolver 127.0.0.11 valid=30s ipv6=off;
+      set $n8n_upstream n8n:5678;
+      rewrite ^/automations/(.*)$ /$1 break;
+      proxy_pass http://$n8n_upstream;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_set_header Host $host;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto $scheme;
+      proxy_hide_header X-Frame-Options;
+      proxy_hide_header Content-Security-Policy;
+      proxy_read_timeout 3600s;
+      proxy_send_timeout 3600s;
+      proxy_buffering off;
+    }
+
     location / {
       proxy_pass http://web:3000;
       proxy_set_header Accept-Encoding "";

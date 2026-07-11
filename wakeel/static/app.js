@@ -1284,26 +1284,52 @@ function viewAnalytics() {
 }
 function metric(label, val, tone) { return `<div class="metric ${tone || ""}"><div class="mv">${val}</div><div class="ml">${label}</div></div>`; }
 
-/* ---------- Automations (Wakeel's bundled connector & scheduling engine) ---------- */
+/* ---------- Automations (Wakeel's bundled engine — embedded same-origin, auto-signed-in) ---------- */
+const AUTO_CREDS = { user: "admin@wakeel.local", pass: "Wakeel12345" };
 function viewAutomations() {
-  const url = `http://${location.hostname}:5679/`;
   $("#mainCol").innerHTML = `
-    <div class="topbar"><div class="crumbs"><b>${t("Automations")}</b><span class="sep">·</span><span style="color:var(--muted)">${t("Connector & workflow engine")}</span></div></div>
-    <div class="content"><div class="pad" style="max-width:900px">
-      <div class="auto-hero">
-        <div class="auto-mark">${IC.integrations}</div>
-        <h1 class="page-h" style="margin-top:14px">${t("Automations")}</h1>
-        <p class="page-sub" style="max-width:620px;margin-inline:auto">${t("Wakeel's built-in connector & scheduling engine —")} <b>${t("bundled in this deployment")}</b>${t(". 400+ connectors including all of Microsoft 365, Google, databases and HTTP. Automations read/write across your systems and call your Wakeel agents for the AI.")}</p>
-        <div style="display:flex;gap:10px;justify-content:center;margin-top:8px"><a class="btn primary" href="${url}" target="_blank">${IC.integrations} ${t("Open Automations ↗")}</a></div>
-        <div style="color:var(--faint);font-size:12px;margin-top:12px">${t("Runs in your stack for data residency · sign in:")} admin@wakeel.local</div>
-      </div>
-      <div class="grid" style="margin-top:34px">
-        <div class="gcard" style="cursor:default"><div class="ic">${IC.tasks}</div><h3>${t("Schedule & trigger")}</h3><p>${t("Daily/cron runs, webhooks, \"new email\" or \"row added\" events — the entry points your agents react to.")}</p></div>
-        <div class="gcard" style="cursor:default"><div class="ic">${IC.integrations}</div><h3>${t("400+ connectors")}</h3><p>${t("Outlook, SharePoint, Excel, Teams, Google, SAP, databases, HTTP — the connector layer Wakeel's agents act through.")}</p></div>
-        <div class="gcard" style="cursor:default"><div class="ic">${IC.agent}</div><h3>${t("Calls your agents")}</h3><p>${t("An automation step calls a Wakeel agent's API for the reasoning, then acts on the result (send, update, escalate).")}</p></div>
-      </div>
-      <div class="gcard" style="cursor:default;margin-top:18px;max-width:100%"><h3>How it fits the MoHRE agent</h3><p style="margin-top:6px">Open an agent → <b>Triggers → Connect Microsoft 365</b> to get its endpoint, key, and a ready-made automation. That automation (Schedule → read Excel → call the agent → Outlook send / Excel update / escalate → summary) runs here. Automations = the hands, Wakeel = the brain.</p></div>
-    </div></div>`;
+    <div class="topbar"><div class="crumbs"><b>${t("Automations")}</b><span class="sep">·</span><span style="color:var(--muted)">${t("Connector & workflow engine")}</span></div>
+      <div class="top-actions"><a class="btn sm" href="/automations/" target="_blank" title="Open in a new tab">⤢</a></div></div>
+    <div class="studio-embed" style="margin:0"><iframe id="autoFrame" src="/automations/" title="Wakeel Automations" allow="clipboard-read; clipboard-write"></iframe></div>`;
+  const f = $("#autoFrame");
+  f.addEventListener("load", () => autoSignInN8n(f));
+  setTimeout(() => autoSignInN8n(f), 700); // SPA may not refire load on route change
+}
+function autoSignInN8n(f) {
+  const W = f.contentWindow;
+  let n = 0;
+  const tick = () => {
+    n++;
+    let doc, path;
+    try { doc = W.document; path = W.location.pathname; } catch (e) { return; } // cross-origin guard
+    // Phase 1 — sign in on the n8n login form
+    if (/signin|signup|setup/.test(path)) {
+      const email = doc.querySelector('input[name="emailOrLdapLoginId"], input[type="email"]');
+      const pass = doc.querySelector('input[name="password"], input[type="password"]');
+      const btn = doc.querySelector('button[data-test-id="form-submit-button"]');
+      if (email && pass && btn && !f.__signedIn) {
+        const setVal = (el, val) => {
+          const d = Object.getOwnPropertyDescriptor(W.HTMLInputElement.prototype, "value");
+          d.set.call(el, val);
+          el.dispatchEvent(new W.Event("input", { bubbles: true }));
+          el.dispatchEvent(new W.Event("change", { bubbles: true }));
+        };
+        setVal(email, AUTO_CREDS.user); setVal(pass, AUTO_CREDS.pass);
+        f.__signedIn = true;
+        setTimeout(() => { try { btn.click(); } catch (e) {} }, 160);
+      }
+    } else if (!f.__routed) {
+      // Phase 2 — logged in. n8n's subpath deep-link can land on its 404; recover by
+      // clicking n8n's own home nav (client-side routing resolves correctly).
+      const body = doc.body ? doc.body.innerText : "";
+      const lost = /couldn.?t find|404/i.test(body.slice(0, 400));
+      const home = doc.querySelector('a[href$="/automations/home"], a[href$="/home"], a[href*="/workflow"]');
+      if (lost && home) { home.click(); }        // route via n8n itself
+      else if (!lost && body.length > 40) { f.__routed = true; return; } // real view rendered
+    }
+    if (n < 40) setTimeout(tick, 250);
+  };
+  setTimeout(tick, 300);
 }
 
 function viewEmpty(title, sub, ic) {
