@@ -1710,6 +1710,38 @@ class H(BaseHTTPRequestHandler):
         except FileNotFoundError:
             self._send(404, {"error": "not found"})
 
+    def _nocache(self, name, ctype):
+        """Serve a static asset that must never be stale (app.js / style.css)."""
+        try:
+            with open(os.path.join(HERE, "static", name), "rb") as f:
+                self._send(200, f.read(), ctype,
+                           extra={"Cache-Control": "no-cache, must-revalidate"})
+        except FileNotFoundError:
+            self._send(404, {"error": "not found"})
+
+    def _asset_version(self):
+        v = 0
+        for n in ("app.js", "style.css"):
+            try:
+                v = max(v, int(os.path.getmtime(os.path.join(HERE, "static", n))))
+            except OSError:
+                pass
+        return v
+
+    def _index(self):
+        """Serve index.html with a cache-busting version stamped onto app.js / style.css
+        so browsers always pick up the latest build."""
+        try:
+            with open(os.path.join(HERE, "static", "index.html"), encoding="utf-8") as f:
+                html = f.read()
+        except FileNotFoundError:
+            return self._send(404, {"error": "not found"})
+        v = self._asset_version()
+        html = (html.replace('href="style.css"', f'href="style.css?v={v}"')
+                    .replace('src="app.js"', f'src="app.js?v={v}"'))
+        self._send(200, html.encode(), "text/html; charset=utf-8",
+                   extra={"Cache-Control": "no-cache, must-revalidate"})
+
     def _body(self):
         n = int(self.headers.get("Content-Length", 0))
         return json.loads(self.rfile.read(n) or b"{}") if n else {}
@@ -1864,11 +1896,11 @@ class H(BaseHTTPRequestHandler):
         if p.startswith("/beam/"):
             return self._beam()
         if p in ("/", "/index.html"):
-            return self._file("index.html", "text/html; charset=utf-8")
+            return self._index()
         if p == "/app.js":
-            return self._file("app.js", "application/javascript")
+            return self._nocache("app.js", "application/javascript")
         if p == "/style.css":
-            return self._file("style.css", "text/css")
+            return self._nocache("style.css", "text/css")
         if p == "/tour.html":
             return self._file("tour.html", "text/html; charset=utf-8")
         if p == "/wakeel-mark.svg":
