@@ -802,30 +802,46 @@ function waitForConnect(service, w) {
     setTimeout(finish, 120000);
   });
 }
-// one-time in-app Google OAuth credential setup (so the demo can go real without touching env)
+// one-time in-app Google OAuth setup — a guided step-by-step wizard with deep links
 function openGoogleSetup(onSaved) {
   const redirect = location.origin + "/wakeel/api/oauth/google/callback";
+  const link = (href, label) => `<a href="${href}" target="_blank" rel="noopener" class="btn xs gs-open">${label} ↗</a>`;
   const d = document.createElement("div"); d.className = "modal-back";
-  d.innerHTML = `<div class="modal fade" style="width:560px" onclick="event.stopPropagation()">
-    <div style="display:flex"><h2 style="flex:1">${IC.lock} Turn on real Google sign-in</h2><button class="x" id="gsx">×</button></div>
-    <p class="page-sub" style="margin-top:-6px">A one-time setup so agents get <b>real</b> access to your Google Workspace. In <a href="https://console.cloud.google.com/apis/credentials" target="_blank" class="linky">Google Cloud → Credentials</a>, create an <b>OAuth client ID</b> (type: <b>Web application</b>), add the redirect URI below, then paste the two values.</p>
-    <div class="field"><label>Authorized redirect URI — copy this into your Google OAuth client</label><input class="input" id="gsRedir" readonly value="${esc(redirect)}"></div>
-    <div class="field"><label>Client ID</label><input class="input" id="gsCid" placeholder="…apps.googleusercontent.com"></div>
-    <div class="field"><label>Client secret</label><input class="input" id="gsSec" type="password" placeholder="GOCSPX-…"></div>
-    <button class="btn primary block" id="gsSave">Save &amp; continue</button>
+  d.innerHTML = `<div class="modal fade gs-modal" onclick="event.stopPropagation()">
+    <div style="display:flex;align-items:center"><h2 style="flex:1">${IC.lock} Connect your Google — one-time setup</h2><button class="x" id="gsx">×</button></div>
+    <p class="page-sub" style="margin-top:-4px"><b>You only do this once.</b> It registers Wakeel with Google (the same one-time step Claude &amp; ChatGPT did for their connectors). After you save it, you and every officer just click <b>Connect → sign in with Google</b> — no setup ever again. Each button below opens the exact Google page.</p>
+    <ol class="gs-steps">
+      <li><div class="gs-h"><span class="gs-num">1</span><b>Create a project</b></div>
+        <div class="gs-d">Name it “Wakeel” and Create.</div>${link("https://console.cloud.google.com/projectcreate", "Open project setup")}</li>
+      <li><div class="gs-h"><span class="gs-num">2</span><b>Turn on the 3 APIs</b></div>
+        <div class="gs-d">Click each and press <b>Enable</b>:</div>
+        <div class="gs-links">${link("https://console.cloud.google.com/apis/library/gmail.googleapis.com", "Enable Gmail")}${link("https://console.cloud.google.com/apis/library/sheets.googleapis.com", "Enable Sheets")}${link("https://console.cloud.google.com/apis/library/drive.googleapis.com", "Enable Drive")}</div></li>
+      <li><div class="gs-h"><span class="gs-num">3</span><b>OAuth consent screen</b></div>
+        <div class="gs-d">Choose <b>External</b> → fill app name + your email → under <b>Test users</b> add <b>your own Gmail</b> → Save.</div>${link("https://console.cloud.google.com/apis/credentials/consent", "Open consent screen")}</li>
+      <li><div class="gs-h"><span class="gs-num">4</span><b>Create the OAuth client</b></div>
+        <div class="gs-d"><b>Create credentials → OAuth client ID → Web application</b>. Under <b>Authorized redirect URIs</b> add this exact line:</div>
+        <div class="gs-copy"><input class="input" id="gsRedir" readonly value="${esc(redirect)}"><button class="btn xs" id="gsCopy">Copy</button></div>
+        ${link("https://console.cloud.google.com/apis/credentials", "Open Credentials")}</li>
+      <li><div class="gs-h"><span class="gs-num">5</span><b>Paste the two generated values</b></div>
+        <div class="gs-d">After Create, Google shows them. The ID ends in <code>.apps.googleusercontent.com</code>; the secret starts with <code>GOCSPX-</code>.</div>
+        <div class="field"><label>Client ID</label><input class="input" id="gsCid" placeholder="123…-abc.apps.googleusercontent.com"></div>
+        <div class="field"><label>Client secret</label><input class="input" id="gsSec" type="password" placeholder="GOCSPX-…"></div></li>
+    </ol>
+    <button class="btn primary block" id="gsSave">${IC.check} Save &amp; connect</button>
     <div class="err" id="gsErr"></div></div>`;
   document.body.appendChild(d); d.onclick = () => d.remove(); $("#gsx").onclick = () => d.remove();
-  $("#gsRedir").onclick = () => { $("#gsRedir").select(); document.execCommand && document.execCommand("copy"); toast("Redirect URI copied"); };
+  const copyRedir = () => { const i = $("#gsRedir"); i.select(); try { document.execCommand("copy"); } catch (e) {} toast("Redirect URI copied"); };
+  $("#gsCopy").onclick = copyRedir; $("#gsRedir").onclick = copyRedir;
   $("#gsSave").onclick = async () => {
     const cid = $("#gsCid").value.trim(), sec = $("#gsSec").value.trim();
-    if (!cid) { $("#gsErr").textContent = "Enter the Client ID"; return; }
+    if (!cid) { $("#gsErr").textContent = "Paste the Client ID from step 5."; return; }
     if (cid.includes("@") || !cid.endsWith(".apps.googleusercontent.com")) {
-      $("#gsErr").textContent = "That's not a Client ID. It must end with .apps.googleusercontent.com (it's generated in Google Cloud → Credentials — not your email).";
+      $("#gsErr").textContent = "That's not a Client ID. It must end with .apps.googleusercontent.com (generated in step 4 — not your email).";
       return;
     }
-    if (sec && !/^GOCSPX-/.test(sec)) { $("#gsErr").textContent = "The Client secret usually starts with GOCSPX- — double-check you copied the secret, not the ID."; return; }
-    $("#gsSave").disabled = true;
-    try { await api("POST", "oauth/config", { client_id: cid, client_secret: sec }); await refreshServices(); d.remove(); onSaved && onSaved(); }
+    if (sec && !/^GOCSPX-/.test(sec)) { $("#gsErr").textContent = "The Client secret usually starts with GOCSPX- — check you copied the secret, not the ID."; return; }
+    $("#gsSave").disabled = true; $("#gsErr").textContent = "";
+    try { await api("POST", "oauth/config", { client_id: cid, client_secret: sec }); await refreshServices(); d.remove(); toast("Google setup saved — signing in…"); onSaved && onSaved(); }
     catch (e) { $("#gsErr").textContent = e.message; $("#gsSave").disabled = false; }
   };
 }
