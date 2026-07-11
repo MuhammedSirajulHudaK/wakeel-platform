@@ -227,6 +227,9 @@ const T = {
   "Give the agent an input and watch it work — the simplest way to use it.": "أعطِ الوكيل مُدخلًا وشاهده يعمل — أبسط طريقة لاستخدامه.",
   "When a new email or row arrives, or on a daily schedule. One Microsoft sign-in and it runs itself.": "عند وصول بريد أو صف جديد، أو وفق جدول يومي. تسجيل دخول واحد بمايكروسوفت ويعمل من تلقاء نفسه.",
   "On a schedule": "وفق جدول", "Run every day at 08:00 — or your own timer.": "يعمل يوميًا الساعة 08:00 — أو وفق مؤقّتك.",
+  "Describe an automation and Wakeel builds it — it runs across your connectors (Microsoft 365, Google, HTTP…) and can call your agents. No diagrams to draw.": "صِف أتمتة وسيبنيها وكيل — تعمل عبر موصّلاتك (Microsoft 365 وGoogle وHTTP…) ويمكنها استدعاء وكلائك. دون رسم أي مخططات.",
+  "Describe an automation… e.g. every morning read the registry, ask the compliance agent who needs outreach, email them, and send officers a summary": "صِف أتمتة… مثل: كل صباح اقرأ السجل، اسأل وكيل الامتثال من يحتاج تواصلًا، راسلهم، وأرسل للموظفين ملخصًا",
+  "Runs on your connectors": "يعمل على موصّلاتك", "Your automations": "أتمتتك",
   "Set schedule": "ضبط الجدول", "From another system": "من نظام آخر",
   "Trigger from any system with a secure URL and key.": "التشغيل من أي نظام عبر رابط آمن ومفتاح.",
   "Manual run": "تشغيل يدوي",
@@ -1625,7 +1628,7 @@ curl -X POST ${base}/agent-tasks/<TASK_ID>/rate -H "x-api-key: YOUR_KEY" \\
 
       <div class="side-sub" style="padding-inline:0">API keys</div>
       <div class="gcard" style="cursor:default">
-        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><input class="input" id="keyLabel" placeholder="Key label (e.g. n8n integration)" style="flex:1;min-width:200px"/><button class="btn primary" id="keyGen">${IC.plus} Create API key</button></div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><input class="input" id="keyLabel" placeholder="Key label (e.g. MoHRE portal)" style="flex:1;min-width:200px"/><button class="btn primary" id="keyGen">${IC.plus} Create API key</button></div>
         <div id="keyNew"></div>
         <div id="keyList" style="margin-top:14px"><div class="empty-mini">Loading…</div></div>
       </div>
@@ -1662,52 +1665,60 @@ curl -X POST ${base}/agent-tasks/<TASK_ID>/rate -H "x-api-key: YOUR_KEY" \\
   loadKeys();
 }
 
-/* ---------- Automations (Wakeel's bundled engine — embedded same-origin, auto-signed-in) ---------- */
-const AUTO_CREDS = { user: "admin@wakeel.local", pass: "Wakeel12345" };
+/* ---------- Automations (chat-first; the engine is fully hidden) ---------- */
+let AUTOS = [];
+const AUTO_KIND = { trigger: "ag-blue", tool: "ag-green", agent: "ag-violet", cond: "ag-amber", end: "ag-teal" };
+function autoStepChip(s) { return `<span class="astep ${AUTO_KIND[s.kind] || "ag-slate"}">${esc(s.title)}</span>`; }
 function viewAutomations() {
   $("#mainCol").innerHTML = `
-    <div class="topbar"><div class="crumbs"><b>${t("Automations")}</b><span class="sep">·</span><span style="color:var(--muted)">${t("Connector & workflow engine")}</span></div>
-      <div class="top-actions"><a class="btn sm" href="/automations/" target="_blank" title="Open in a new tab">⤢</a></div></div>
-    <div class="studio-embed" style="margin:0"><iframe id="autoFrame" src="/automations/" title="Wakeel Automations" allow="clipboard-read; clipboard-write"></iframe></div>`;
-  const f = $("#autoFrame");
-  f.addEventListener("load", () => autoSignInN8n(f));
-  setTimeout(() => autoSignInN8n(f), 700); // SPA may not refire load on route change
-}
-function autoSignInN8n(f) {
-  const W = f.contentWindow;
-  let n = 0;
-  const tick = () => {
-    n++;
-    let doc, path;
-    try { doc = W.document; path = W.location.pathname; } catch (e) { return; } // cross-origin guard
-    // Phase 1 — sign in on the n8n login form
-    if (/signin|signup|setup/.test(path)) {
-      const email = doc.querySelector('input[name="emailOrLdapLoginId"], input[type="email"]');
-      const pass = doc.querySelector('input[name="password"], input[type="password"]');
-      const btn = doc.querySelector('button[data-test-id="form-submit-button"]');
-      if (email && pass && btn && !f.__signedIn) {
-        const setVal = (el, val) => {
-          const d = Object.getOwnPropertyDescriptor(W.HTMLInputElement.prototype, "value");
-          d.set.call(el, val);
-          el.dispatchEvent(new W.Event("input", { bubbles: true }));
-          el.dispatchEvent(new W.Event("change", { bubbles: true }));
-        };
-        setVal(email, AUTO_CREDS.user); setVal(pass, AUTO_CREDS.pass);
-        f.__signedIn = true;
-        setTimeout(() => { try { btn.click(); } catch (e) {} }, 160);
-      }
-    } else if (!f.__routed) {
-      // Phase 2 — logged in. n8n's subpath deep-link can land on its 404; recover by
-      // clicking n8n's own home nav (client-side routing resolves correctly).
-      const body = doc.body ? doc.body.innerText : "";
-      const lost = /couldn.?t find|404/i.test(body.slice(0, 400));
-      const home = doc.querySelector('a[href$="/automations/home"], a[href$="/home"], a[href*="/workflow"]');
-      if (lost && home) { home.click(); }        // route via n8n itself
-      else if (!lost && body.length > 40) { f.__routed = true; return; } // real view rendered
-    }
-    if (n < 40) setTimeout(tick, 250);
+    <div class="topbar"><div class="crumbs"><b>${t("Automations")}</b></div></div>
+    <div class="content"><div class="pad" style="max-width:900px">
+      <h1 class="page-h">${t("Automations")}</h1>
+      <p class="page-sub">${t("Describe an automation and Wakeel builds it — it runs across your connectors (Microsoft 365, Google, HTTP…) and can call your agents. No diagrams to draw.")}</p>
+      <div class="composer" style="max-width:100%">
+        <textarea id="autoIns" rows="2" placeholder="${t("Describe an automation… e.g. every morning read the registry, ask the compliance agent who needs outreach, email them, and send officers a summary")}"></textarea>
+        <div class="composer-foot"><span style="color:var(--faint);font-size:12px">${IC.integrations} ${t("Runs on your connectors")}</span><button class="send-btn" id="autoBuild">${IC.up}</button></div>
+      </div>
+      <div id="autoReason"></div>
+      <div class="side-sub" style="padding-inline:0;margin-top:8px">${t("Your automations")}</div>
+      <div id="autoList"><div class="empty-mini">${t("Loading…")}</div></div>
+    </div></div>`;
+  const build = async () => {
+    const desc = $("#autoIns").value.trim(); if (!desc) return;
+    $("#autoIns").value = "";
+    const r = $("#autoReason"); r.innerHTML = `<div class="reason"><div class="rt">Building</div><div class="rstep"><span class="ri"><div class="spin"></div></span> ${esc("Designing the automation from your description")}</div></div>`;
+    try {
+      const a = await api("POST", "automation-build", { description: desc });
+      r.innerHTML = `<div class="reason"><div class="rstep done"><span class="ri">${IC.check}</span> Built “${esc(a.name)}” · ${a.steps.length} steps</div></div>`;
+      setTimeout(() => r.innerHTML = "", 3000);
+      loadAutos();
+    } catch (e) { r.innerHTML = `<div class="empty-mini">⚠️ ${esc(e.message)}</div>`; }
   };
-  setTimeout(tick, 300);
+  $("#autoBuild").onclick = build;
+  $("#autoIns").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); build(); } });
+  $("#autoIns").focus();
+  loadAutos();
+}
+async function loadAutos() {
+  const el = $("#autoList"); if (!el) return;
+  try {
+    const d = await api("GET", "automations"); AUTOS = d.automations || [];
+    if (d.error) { el.innerHTML = `<div class="empty-mini">⚠️ ${esc(d.error)}</div>`; return; }
+    if (!AUTOS.length) { el.innerHTML = `<div class="empty-state" style="padding:36px 0"><div class="big">${IC.integrations}</div><h3>No automations yet</h3><div>Describe one above and Wakeel will build it in your connectors.</div></div>`; return; }
+    el.innerHTML = "";
+    AUTOS.forEach(a => {
+      const c = document.createElement("div"); c.className = "gcard auto-card"; c.style.cursor = "default";
+      c.innerHTML = `<div style="display:flex;align-items:center;gap:11px;margin-bottom:10px">
+          <div class="dot ${a.active ? "ag-green" : "ag-slate"}">${IC.bolt}</div>
+          <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:15px">${esc(a.name)}</div><div style="font-size:12px;color:var(--muted-2)">${IC.play ? "" : ""}Trigger · ${esc(a.trigger)}</div></div>
+          <label class="sw2" title="${a.active ? "Active" : "Paused"}"><input type="checkbox" ${a.active ? "checked" : ""} data-a="toggle"><span></span></label>
+          <button class="icn-btn" data-a="del" title="Delete">✕</button></div>
+        <div class="auto-steps">${a.steps.map((s, i) => `${i ? `<span class="astep-arr">→</span>` : ""}${autoStepChip(s)}`).join("")}</div>`;
+      c.querySelector('[data-a="toggle"]').onchange = async (e) => { try { await api("POST", "automation-toggle", { id: a.id, active: e.target.checked }); } catch (err) { alert(err.message); e.target.checked = !e.target.checked; } };
+      c.querySelector('[data-a="del"]').onclick = async () => { if (!confirm("Delete this automation?")) return; try { await api("POST", "automation-delete", { id: a.id }); loadAutos(); } catch (err) { alert(err.message); } };
+      el.appendChild(c);
+    });
+  } catch (e) { el.innerHTML = `<div class="empty-mini">⚠️ ${esc(e.message)}</div>`; }
 }
 
 function viewEmpty(title, sub, ic) {

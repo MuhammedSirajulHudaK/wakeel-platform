@@ -973,6 +973,142 @@ def records_save(sess, app_id, view, columns, rows):
     return {"ok": True}
 
 
+# ---------------- Automations (manage the bundled engine WITHOUT ever showing it) ----------------
+N8N_BASE = os.environ.get("N8N_BASE_URL", "http://localhost/automations")
+N8N_BID = "wakeel-svc-browser"
+N8N_EMAIL = os.environ.get("N8N_EMAIL", "admin@wakeel.local")
+N8N_PW = os.environ.get("N8N_PW", "Wakeel12345")
+_N8N = {}
+
+
+def _n8n_login():
+    body = json.dumps({"emailOrLdapLoginId": N8N_EMAIL, "password": N8N_PW}).encode()
+    req = urllib.request.Request(N8N_BASE + "/rest/login", data=body,
+                                 headers={"Content-Type": "application/json", "browser-id": N8N_BID}, method="POST")
+    r = urllib.request.urlopen(req, timeout=20)
+    for c in (r.headers.get_all("Set-Cookie") or []):
+        if c.startswith("n8n-auth="):
+            return c.split(";")[0].split("=", 1)[1]
+    raise RuntimeError("automation engine login failed")
+
+
+def n8n_api(method, path, body=None):
+    if not _N8N.get("cookie"):
+        _N8N["cookie"] = _n8n_login()
+
+    def call():
+        data = json.dumps(body).encode() if body is not None else None
+        req = urllib.request.Request(N8N_BASE + path, data=data, method=method,
+                                     headers={"Content-Type": "application/json", "browser-id": N8N_BID,
+                                              "Cookie": "n8n-auth=" + _N8N["cookie"]})
+        raw = urllib.request.urlopen(req, timeout=30).read()
+        return json.loads(raw or "{}")
+    try:
+        return call()
+    except urllib.error.HTTPError as e:
+        if e.code in (401, 403):
+            _N8N["cookie"] = _n8n_login()
+            return call()
+        raise
+
+
+# step type -> (n8n node type, typeVersion, params, friendly label, kind)
+STEP_MAP = {
+    "trigger_schedule": ("n8n-nodes-base.scheduleTrigger", 1.2, {"rule": {"interval": [{"field": "days", "triggerAtHour": 8}]}}, "Every day 08:00", "trigger"),
+    "trigger_webhook": ("n8n-nodes-base.webhook", 2, {"path": "wakeel", "httpMethod": "POST"}, "On incoming request", "trigger"),
+    "read_excel": ("n8n-nodes-base.microsoftExcel", 2.1, {"resource": "worksheet", "operation": "getAll"}, "Read Excel (SharePoint)", "tool"),
+    "call_agent": ("n8n-nodes-base.httpRequest", 4.2, {"method": "POST", "url": "http://localhost/v1/workflows/run"}, "Ask a Wakeel agent", "agent"),
+    "send_outlook": ("n8n-nodes-base.microsoftOutlook", 2, {"resource": "message", "operation": "send"}, "Send email (Outlook)", "tool"),
+    "update_excel": ("n8n-nodes-base.microsoftExcel", 2.1, {"resource": "worksheet", "operation": "update"}, "Update Excel", "tool"),
+    "condition": ("n8n-nodes-base.if", 2, {}, "Condition / branch", "cond"),
+    "notify": ("n8n-nodes-base.set", 3.4, {}, "Compile summary", "end"),
+}
+_TYPE_KIND = {"scheduleTrigger": ("Schedule", "trigger"), "webhook": ("Webhook", "trigger"),
+              "microsoftExcel": ("Excel", "tool"), "microsoftOutlook": ("Outlook", "tool"),
+              "httpRequest": ("Call agent", "agent"), "if": ("Condition", "cond"), "set": ("Notify", "end")}
+
+
+def _clean_wf(w):
+    nodes = w.get("nodes", [])
+    steps = []
+    trig = "Manual"
+    for n in nodes:
+        base = (n.get("type") or "").split(".")[-1]
+        label, kind = _TYPE_KIND.get(base, (base, "tool"))
+        if kind == "trigger":
+            trig = n.get("name") or label
+        steps.append({"title": n.get("name") or label, "kind": kind})
+    return {"id": w.get("id"), "name": w.get("name"), "active": bool(w.get("active")),
+            "trigger": trig, "steps": steps}
+
+
+def automations_list(sess):
+    r = n8n_api("GET", "/rest/workflows")
+    data = r.get("data", r)
+    items = data if isinstance(data, list) else []
+    out = []
+    for w in items:
+        full = w
+        if not w.get("nodes"):  # the list view omits node detail — fetch the workflow
+            try:
+                full = n8n_api("GET", "/rest/workflows/" + str(w.get("id"))).get("data", w)
+            except Exception:
+                full = w
+        if full.get("name") == "My workflow":
+            continue  # skip n8n's default starter workflow
+        out.append(_clean_wf(full))
+    return {"automations": out}
+
+
+def _assemble_n8n(name, steps):
+    nodes, conns, prev = [], {}, None
+    for i, s in enumerate(steps):
+        m = STEP_MAP.get(s.get("type"))
+        if not m:
+            continue
+        ntype, ver, params, label, kind = m
+        nm = (s.get("title") or label)[:60]
+        if any(x["name"] == nm for x in nodes):
+            nm = f"{nm} {i}"
+        nodes.append({"parameters": dict(params), "id": f"n{i}", "name": nm, "type": ntype,
+                      "typeVersion": ver, "position": [260 + i * 240, 300]})
+        if prev is not None:
+            conns.setdefault(prev, {"main": [[]]})["main"][0].append({"node": nm, "type": "main", "index": 0})
+        prev = nm
+    return {"name": name[:80] or "Automation", "nodes": nodes, "connections": conns,
+            "settings": {"executionOrder": "v1"}}
+
+
+def automation_build(sess, description):
+    sys_p = ("You design a simple automation for a UAE government workflow. Use ONLY these step types:\n"
+             "trigger_schedule (runs on a daily timer), trigger_webhook (starts from an incoming request),\n"
+             "read_excel (read rows from SharePoint Excel), call_agent (ask a Wakeel AI agent to decide/draft),\n"
+             "send_outlook (send an email via Outlook), update_excel (write back to Excel),\n"
+             "condition (branch on a value), notify (compile a summary).\n"
+             "Return ONLY JSON: {\"name\":\"<short automation name>\",\"steps\":[{\"type\":\"...\",\"title\":\"<short label>\"}]}\n"
+             "3-8 steps, in order, starting with a trigger. Keep titles short and concrete.")
+    out = _openai_chat([{"role": "system", "content": sys_p}, {"role": "user", "content": description[:2000]}])
+    d = _extract_json(out)
+    steps = d.get("steps") or []
+    wf = _assemble_n8n(d.get("name") or "Automation", steps)
+    if not wf["nodes"]:
+        raise RuntimeError("could not design that automation")
+    res = n8n_api("POST", "/rest/workflows", wf)
+    created = res.get("data", res)
+    log_act(sess, "automation", "built · " + (d.get("name") or "")[:50])
+    return _clean_wf(created)
+
+
+def automation_delete(sess, wid):
+    n8n_api("DELETE", "/rest/workflows/" + wid)
+    return {"ok": True}
+
+
+def automation_toggle(sess, wid, active):
+    n8n_api("PATCH", "/rest/workflows/" + wid, {"active": bool(active)})
+    return {"ok": True}
+
+
 EVAL_FILE = os.path.join(HERE, "evaluations.json")
 
 
@@ -1302,6 +1438,11 @@ class H(BaseHTTPRequestHandler):
             if p == "/api/records":
                 q = dict(x.split("=", 1) for x in (self.path.split("?", 1) + [""])[1].split("&") if "=" in x)
                 return self._send(200, records_get(sess, q.get("id", "")))
+            if p == "/api/automations":
+                try:
+                    return self._send(200, automations_list(sess))
+                except Exception as e:
+                    return self._send(200, {"automations": [], "error": str(e)[:200]})
             if p == "/api/beam-keys":
                 return self._send(200, beam_keys_list(sess))
             if p == "/api/governance":
@@ -1406,6 +1547,12 @@ class H(BaseHTTPRequestHandler):
                 return self._send(200, rate_output(sess, b.get("task_id", ""), b.get("rating", "up")))
             if p == "/api/eval-save":
                 return self._send(200, eval_save(sess, b.get("app_id", ""), b.get("cases", [])))
+            if p == "/api/automation-build":
+                return self._send(200, automation_build(sess, b.get("description", "")))
+            if p == "/api/automation-delete":
+                return self._send(200, automation_delete(sess, b.get("id", "")))
+            if p == "/api/automation-toggle":
+                return self._send(200, automation_toggle(sess, b.get("id", ""), b.get("active", False)))
             if p == "/api/beam-key":
                 return self._send(200, beam_key_new(sess, b.get("label", "")))
             if p == "/api/records-save":
