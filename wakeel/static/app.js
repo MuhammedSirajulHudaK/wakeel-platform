@@ -221,6 +221,14 @@ const T = {
   "Connect Microsoft 365": "ربط Microsoft 365", "All": "الكل", "Active": "نشط", "Save": "حفظ",
   // triggers
   "How this agent starts. Multiple triggers can feed the same flow.": "كيف يبدأ هذا الوكيل. يمكن لعدة مشغّلات تغذية المخطط نفسه.",
+  "Run & triggers": "التشغيل والمشغّلات",
+  "Run the agent yourself now — or set it to run automatically.": "شغّل الوكيل بنفسك الآن — أو اضبطه ليعمل تلقائيًا.",
+  "Run it now": "شغّله الآن", "Run now": "شغّل الآن", "Run automatically": "التشغيل التلقائي",
+  "Give the agent an input and watch it work — the simplest way to use it.": "أعطِ الوكيل مُدخلًا وشاهده يعمل — أبسط طريقة لاستخدامه.",
+  "When a new email or row arrives, or on a daily schedule. One Microsoft sign-in and it runs itself.": "عند وصول بريد أو صف جديد، أو وفق جدول يومي. تسجيل دخول واحد بمايكروسوفت ويعمل من تلقاء نفسه.",
+  "On a schedule": "وفق جدول", "Run every day at 08:00 — or your own timer.": "يعمل يوميًا الساعة 08:00 — أو وفق مؤقّتك.",
+  "Set schedule": "ضبط الجدول", "From another system": "من نظام آخر",
+  "Trigger from any system with a secure URL and key.": "التشغيل من أي نظام عبر رابط آمن ومفتاح.",
   "Manual run": "تشغيل يدوي",
   "Run on demand from Test mode or the API. Always available.": "تشغيل عند الطلب من وضع الاختبار أو الواجهة البرمجية. متاح دائمًا.",
   "Schedule": "جدولة", "Run on a timer — hourly, daily, or a cron expression.": "تشغيل على مؤقّت — كل ساعة أو يوميًا أو بتعبير cron.",
@@ -588,16 +596,21 @@ async function viewAgent() {
 
 function renderTriggers(info) {
   $("#flowWrap").innerHTML = `<div class="content"><div class="pad">
-    <h1 class="page-h">${t("Triggers")}</h1><p class="page-sub">${t("How this agent starts. Multiple triggers can feed the same flow.")}</p>
+    <h1 class="page-h">${t("Run & triggers")}</h1><p class="page-sub">${t("Run the agent yourself now — or set it to run automatically.")}</p>
+    <div class="run-hero">
+      <div class="rh-ic">${IC.play}</div>
+      <div style="flex:1;min-width:0"><h2>${t("Run it now")}</h2><p>${t("Give the agent an input and watch it work — the simplest way to use it.")}</p></div>
+      <button class="btn primary" id="trRunNow">${IC.play} ${t("Run now")}</button>
+    </div>
+    <div class="side-sub" style="padding-inline:0;margin-top:26px">${t("Run automatically")}</div>
     <div class="grid">
-      <div class="gcard" style="cursor:default"><div class="ic">${IC.play}</div><h3>${t("Manual run")} <span class="st-pill ok">${t("Active")}</span></h3><p>${t("Run on demand from Test mode or the API. Always available.")}</p></div>
-      <div class="gcard" id="trSchedule"><div class="ic">${IC.tasks}</div><h3>${t("Schedule")}</h3><p>${t("Run on a timer — hourly, daily, or a cron expression.")}</p><div class="foot"><span></span><button class="btn sm">${t("Configure")}</button></div></div>
-      <div class="gcard" id="trWebhook"><div class="ic">${IC.integrations}</div><h3>${t("Webhook / API")}</h3><p>${t("Trigger from any government system via a secure URL with an API key.")}</p><div class="foot"><span></span><button class="btn sm">${t("Get URL")}</button></div></div>
-      <div class="gcard" id="trIntegration"><div class="ic">${IC.inbox}</div><h3>${t("Integration event")}</h3><p>${t("New email (Outlook), file updated (SharePoint), row added (Excel)…")}</p><div class="foot"><span></span><button class="btn sm">${t("Choose")}</button></div></div>
-      <div class="gcard" id="trM365" style="grid-column:span 2"><div style="display:flex;align-items:center;gap:12px;margin-bottom:2px">${brandLogo("Power Automate", 40)}<h3 style="margin:0">Microsoft 365 <span class="st-pill ok">${t("Recommended")}</span></h3></div><p>${t("Connect Outlook, SharePoint & Excel. Wakeel's built-in automation engine handles the Microsoft connectors and the schedule — the agent does the AI. One Microsoft sign-in, then it runs automatically on your timer.")}</p><div class="foot"><span></span><button class="btn primary sm">${t("Connect Microsoft 365")}</button></div></div>
+      <div class="gcard" id="trM365"><div style="display:flex;align-items:center;gap:11px;margin-bottom:2px">${brandLogo("Power Automate", 36)}<h3 style="margin:0">Microsoft 365 <span class="st-pill ok">${t("Recommended")}</span></h3></div><p>${t("When a new email or row arrives, or on a daily schedule. One Microsoft sign-in and it runs itself.")}</p><div class="foot"><span></span><button class="btn primary sm">${t("Connect Microsoft 365")}</button></div></div>
+      <div class="gcard" id="trSchedule"><div class="ic">${IC.tasks}</div><h3>${t("On a schedule")}</h3><p>${t("Run every day at 08:00 — or your own timer.")}</p><div class="foot"><span></span><button class="btn sm">${t("Set schedule")}</button></div></div>
+      <div class="gcard" id="trWebhook"><div class="ic">${IC.integrations}</div><h3>${t("From another system")}</h3><p>${t("Trigger from any system with a secure URL and key.")}</p><div class="foot"><span></span><button class="btn sm">${t("Get URL")}</button></div></div>
     </div>
     <div id="trPanel" style="margin-top:20px"></div>
   </div></div>`;
+  $("#trRunNow").onclick = () => runNowModal(info);
   $("#trSchedule").querySelector("button").onclick = () => {
     $("#trPanel").innerHTML = `<div class="gcard" style="cursor:default;max-width:520px"><h3>Schedule</h3><div class="field" style="margin-top:12px"><label>Frequency</label><select class="input"><option>Every hour</option><option selected>Every day at 08:00</option><option>Every Monday 09:00</option><option>Custom cron…</option></select></div><button class="btn primary sm">Save schedule</button></div>`;
   };
@@ -610,7 +623,6 @@ Content-Type: application/json
 {"inputs": {...}, "response_mode": "blocking", "user": "gov"}</div></div>`; }
     catch (e) { $("#trPanel").innerHTML = `<div class="empty-mini">⚠️ ${esc(e.message)}</div>`; }
   };
-  $("#trIntegration").querySelector("button").onclick = () => { VIEW = "integrations"; renderShell(); };
   $("#trM365").querySelector("button").onclick = async () => {
     const app = APPS.find(a => a.id === AGENT) || {};
     $("#trPanel").innerHTML = `<div class="gcard" style="cursor:default;max-width:760px"><div style="display:flex;align-items:center;gap:10px"><div class="spin"></div><span style="color:var(--muted)">Connecting Microsoft 365…</span></div></div>`;
@@ -1039,6 +1051,49 @@ function openRunModal(info) {
   d.onclick = () => d.remove(); $("#rx").onclick = () => d.remove();
   $("#runIn").focus();
   $("#runGo").onclick = () => { const input = $("#runIn").value.trim(); if (!input) return; d.remove(); runFlow(input); };
+}
+
+/* Self-contained "Run now" (used from Triggers) — input → live steps → result,
+   no flow canvas needed. */
+function runNowModal(info) {
+  const v = (info.vars || [])[0];
+  const d = document.createElement("div"); d.className = "modal-back";
+  d.innerHTML = `<div class="modal fade" style="width:640px;max-width:94vw" onclick="event.stopPropagation()">
+    <h2>${IC.play} Run ${esc((info.name || "agent").slice(0, 40))} <button class="x" id="rx">×</button></h2>
+    <div style="color:var(--muted);font-size:13px;margin:-8px 0 14px">Type an input and press Run. You'll see each step and the result — just like when a trigger fires.</div>
+    <div class="field"><label>${v ? esc(v.label || v.name) : "Input"}</label><textarea class="input" id="rnIn" rows="3" placeholder="e.g. a citizen complaint, an application summary, an email…"></textarea></div>
+    <button class="btn primary block" id="rnGo">${IC.play} Run</button>
+    <div id="rnSteps" class="rn-steps" hidden></div>
+    <div id="rnOut" class="rn-out" hidden></div>
+  </div>`;
+  document.body.appendChild(d); d.onclick = () => d.remove(); $("#rx").onclick = () => d.remove(); $("#rnIn").focus();
+  $("#rnGo").onclick = async () => {
+    const input = $("#rnIn").value.trim(); if (!input) return;
+    $("#rnGo").disabled = true; $("#rnGo").innerHTML = `<span class="spin"></span> Running…`;
+    const steps = $("#rnSteps"); steps.hidden = false; steps.innerHTML = ""; const out = $("#rnOut"); out.hidden = true;
+    const rows = {}; let answer = "";
+    try {
+      const resp = await fetch("api/run", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ app_id: AGENT, input }) });
+      const reader = resp.body.getReader(); const dec = new TextDecoder(); let buf = "";
+      while (true) {
+        const { value, done } = await reader.read(); if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const parts = buf.split("\n\n"); buf = parts.pop();
+        for (const part of parts) {
+          const line = part.trim(); if (!line.startsWith("data:")) continue;
+          let ev; try { ev = JSON.parse(line.slice(5).trim()); } catch (e) { continue; }
+          const dd = ev.data || {};
+          if (ev.event === "node_started") { const r = document.createElement("div"); r.className = "rn-step run"; r.innerHTML = `<span class="spin"></span> ${esc(dd.title || "Step")}`; steps.appendChild(r); rows[dd.title] = r; steps.scrollTop = steps.scrollHeight; }
+          else if (ev.event === "node_finished") { const r = rows[dd.title]; if (r) { const ok = dd.status !== "failed"; r.className = "rn-step " + (ok ? "ok" : "bad"); r.innerHTML = `<span class="rn-tick">${ok ? IC.check : "✕"}</span> ${esc(dd.title || "Step")}`; } }
+          else if (ev.event === "message" || ev.event === "agent_message") { answer += ev.answer || ""; }
+          else if (ev.event === "workflow_finished") { const o = dd.outputs; if (!answer && o && typeof o === "object") answer = Object.values(o).join("\n"); }
+          else if (ev.event === "error") { if (!answer) answer = "⚠️ " + (ev.message || "Run failed"); }
+        }
+      }
+      out.hidden = false; out.innerHTML = `<div class="rn-out-h">${IC.check} Result</div><div class="rn-out-b">${esc((answer || "(no output)").trim()).slice(0, 5000)}</div>`;
+    } catch (e) { out.hidden = false; out.innerHTML = `<div class="rn-out-h">Error</div><div class="rn-out-b">${esc(e.message)}</div>`; }
+    finally { $("#rnGo").disabled = false; $("#rnGo").innerHTML = `${IC.play} Run again`; }
+  };
 }
 
 async function runFlow(input) {
