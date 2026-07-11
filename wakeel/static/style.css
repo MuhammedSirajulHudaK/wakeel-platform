@@ -803,3 +803,30 @@ textarea.input{padding:12px 14px;min-height:auto;resize:none}
 .cb-lg{opacity:.4;filter:grayscale(1);transition:.2s}
 .cb-lg.on{opacity:1;filter:none}
 .connect-banner .btn.sm{flex:none}
+
+/* ---- inline connect (in the proposal steps, no popup) ---- */
+.btn.xs{min-height:30px;padding:0 11px;font-size:12px;border-radius:8px;gap:7px}
+.cn-inline{background:#fff;color:#1f1f1f;border:1px solid #dadce0;font-weight:600}
+.cn-inline:hover{background:#f6f8fc}
+.cn-glg{width:15px;height:15px;display:inline-flex}.cn-glg svg{width:15px;height:15px}
+.cn-tag{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600}
+.cn-tag.ok{color:#3ee08a}.cn-tag svg{width:14px;height:14px}
+.dpl-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
+.dpl-cn{display:flex}
+/* expandable connect summary at the top of the steps */
+.cn-summary{border:1px solid rgba(0,168,98,.3);border-radius:12px;background:rgba(0,168,98,.05);margin-bottom:14px;overflow:hidden}
+.cn-summary>summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:10px;padding:12px 14px;font-weight:700;font-size:13.5px;user-select:none}
+.cn-summary>summary::-webkit-details-marker{display:none}
+.cn-plug{display:inline-flex;color:var(--wakeel)}.cn-plug svg{width:17px;height:17px}
+.cn-count{margin-inline-start:auto;font-size:12px;font-weight:700;color:var(--muted);background:var(--panel-3);border:1px solid var(--line);border-radius:99px;padding:2px 9px}
+.cn-count.ok{color:#3ee08a;border-color:rgba(0,168,98,.4);background:rgba(0,168,98,.1)}
+.cn-summary>summary::after{content:"▸";color:var(--muted);transition:transform .15s;margin-inline-start:8px}
+.cn-summary[open]>summary::after{transform:rotate(90deg)}
+.cn-sumlist{padding:2px 14px 12px;display:flex;flex-direction:column;gap:9px}
+.cn-sumrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-top:9px;border-top:1px solid var(--line-2)}
+.cn-sumrow:first-child{border-top:none}
+.cn-sumsvcs{display:flex;flex-wrap:wrap;gap:6px;flex:1;min-width:0}
+.cn-schip{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:4px 9px;border-radius:8px;background:var(--panel);border:1px solid var(--line);opacity:.65}
+.cn-schip.on{opacity:1;border-color:rgba(0,168,98,.4)}
+.cn-schip .blogo{width:18px;height:18px}
+.cn-sumrow .cn-inline,.cn-sumrow .cn-tag{margin-inline-start:auto}

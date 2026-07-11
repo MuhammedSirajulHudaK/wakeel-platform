@@ -655,17 +655,59 @@ function designCard(m) {
     <tbody>${d.flow.map((n, i) => `<tr><td class="mut">${i + 1}</td><td>${esc(n.title || "")}</td><td class="mut">${esc(n.model || "—")}</td><td class="mut">${esc(n.integration || "—")}</td></tr>`).join("")}</tbody></table></div>`;
   const chips = (arr) => arr.map(s => `<span class="ds-chip">${esc(s)}</span>`).join("");
   const list = (title, ic, arr) => (arr && arr.length) ? `<div class="ds-sec"><div class="ds-h">${ic} ${title}</div><ul class="ds-list">${arr.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>` : "";
-  // plain-language, non-technical "here's what I'll do for you" — shown first, visually
+  // plain-language "here's what I'll do for you" + INLINE connect (no popup):
+  // an expandable connect summary at the top, and a Connect button under each step.
   const pl = d.plain || {};
-  const plainBlock = (pl.steps && pl.steps.length) ? `
-    <div class="ds-plain">
-      <div class="ds-plain-h"><span class="dpl-badge">${IC.spark}</span><div><div class="dpl-t">${t("Here's what I'll do for you")}</div>${pl.intro ? `<div class="dpl-intro">${esc(pl.intro)}</div>` : ""}</div></div>
-      <div class="dpl-steps">${pl.steps.map((s, i) => `<div class="dpl-step"><span class="dpl-ico">${esc(s.icon || "•")}</span><span class="dpl-n">${i + 1}</span><span class="dpl-x">${esc(s.text || "")}</span></div>`).join("")}</div>
-      ${pl.reassurance ? `<div class="dpl-safe">${IC.shield} ${esc(pl.reassurance)}</div>` : ""}
-    </div>` : "";
+  const need = neededServices(d);
+  const isConn = (s) => CONNECTED.has(s);
+  const provOf = (s) => SVC_PROVIDER[s] || null;
+  const provDone = (p) => need.filter(s => provOf(s) === p).every(s => isConn(s));
+  const svcForStep = (text) => need.find(s => (SVC_KEYWORDS[s] || /(?!)/).test(text || "")) || null;
+  const grpBtn = (p) => { const m = PROVIDER_META[p]; return `<button class="btn xs cn-inline" data-grp="${p}"><span class="cn-glg">${L[m.logo]}</span> ${t("Connect")} ${m.name}</button>`; };
+  const soloBtn = (s) => `<button class="btn xs cn-inline" data-one="${esc(s)}">${IC.plus} ${t("Connect")} ${esc(s)}</button>`;
+  const stepConnect = (s) => {
+    const p = provOf(s);
+    if (p) return provDone(p) ? `<span class="cn-tag ok">${IC.check} ${PROVIDER_META[p].name} ${t("connected")}</span>` : grpBtn(p);
+    return isConn(s) ? `<span class="cn-tag ok">${IC.check} ${t("Connected")}</span>` : soloBtn(s);
+  };
+  function connectSummary() {
+    if (!need.length) return "";
+    const n = need.filter(isConn).length, all = n === need.length;
+    const byProv = {}, solo = [];
+    need.forEach(s => { const p = provOf(s); if (p) (byProv[p] = byProv[p] || []).push(s); else solo.push(s); });
+    let rows = "";
+    Object.keys(byProv).forEach(p => {
+      const m = PROVIDER_META[p], svcs = byProv[p];
+      rows += `<div class="cn-sumrow"><div class="cn-sumsvcs">${svcs.map(s => `<span class="cn-schip ${isConn(s) ? "on" : ""}">${brandLogo(s, 18)}${esc(s)}</span>`).join("")}</div>${provDone(p) ? `<span class="cn-tag ok">${IC.check} ${m.name} ${t("connected")}</span>` : grpBtn(p)}</div>`;
+    });
+    solo.forEach(s => { rows += `<div class="cn-sumrow"><span class="cn-schip ${isConn(s) ? "on" : ""}">${brandLogo(s, 18)}${esc(s)}</span>${isConn(s) ? `<span class="cn-tag ok">${IC.check} ${t("Connected")}</span>` : soloBtn(s)}</div>`; });
+    return `<details class="cn-summary" ${all ? "" : "open"}><summary><span class="cn-plug">${IC.integrations}</span>${all ? t("All services connected") : t("Connect your services")}<span class="cn-count ${all ? "ok" : ""}">${n}/${need.length}</span></summary><div class="cn-sumlist">${rows}</div></details>`;
+  }
+  function syncPlain() {
+    const host = el.querySelector(".ds-plain-host"); if (!host) return;
+    host.innerHTML = (pl.steps && pl.steps.length) ? `
+      <div class="ds-plain">
+        <div class="ds-plain-h"><span class="dpl-badge">${IC.spark}</span><div><div class="dpl-t">${t("Here's what I'll do for you")}</div>${pl.intro ? `<div class="dpl-intro">${esc(pl.intro)}</div>` : ""}</div></div>
+        ${connectSummary()}
+        <div class="dpl-steps">${pl.steps.map((s, i) => { const svc = svcForStep(s.text); return `<div class="dpl-step"><span class="dpl-ico">${esc(s.icon || "•")}</span><span class="dpl-n">${i + 1}</span><div class="dpl-body"><span class="dpl-x">${esc(s.text || "")}</span>${svc ? `<div class="dpl-cn">${stepConnect(svc)}</div>` : ""}</div></div>`; }).join("")}</div>
+        ${pl.reassurance ? `<div class="dpl-safe">${IC.shield} ${esc(pl.reassurance)}</div>` : ""}
+      </div>` : "";
+    host.querySelectorAll("[data-grp]").forEach(b => b.onclick = () => connectGrp(b.dataset.grp));
+    host.querySelectorAll("[data-one]").forEach(b => b.onclick = () => connectSolo(b.dataset.one));
+  }
+  async function connectGrp(p) {
+    [...el.querySelectorAll("[data-grp]")].filter(b => b.dataset.grp === p).forEach(b => { b.disabled = true; b.innerHTML = `<span class="spin"></span> ${t("Signing in")}…`; });
+    await sleep(900);
+    for (const s of need.filter(x => provOf(x) === p)) { try { await api("POST", "service-connect", { service: s }); } catch (e) {} CONNECTED.add(s); }
+    syncPlain();
+  }
+  async function connectSolo(s) {
+    [...el.querySelectorAll("[data-one]")].filter(b => b.dataset.one === s).forEach(b => { b.disabled = true; b.innerHTML = `<span class="spin"></span>`; });
+    await sleep(700); try { await api("POST", "service-connect", { service: s }); } catch (e) {} CONNECTED.add(s); syncPlain();
+  }
   el.innerHTML = `
     <div class="ds-intro">${t("Here's what I'll set up for your")} <b>${esc(d.name)}</b>${t(". Have a look, and tell me if you'd like anything changed before I build it.")}</div>
-    ${plainBlock}
+    <div class="ds-plain-host"></div>
     <details class="ds-tech"><summary>${IC.flow} ${t("See the technical details")}</summary>
     <div class="ds-summary">${esc(d.summary || "")}</div>
     <div class="ds-sec"><div class="ds-h">${IC.flow} ${t("Flow architecture")}</div>${designDiagram(d.flow)}</div>
@@ -681,6 +723,8 @@ function designCard(m) {
       <div class="ds-actions"><button class="btn primary" id="dsBuild">${IC.bolt} ${t("Build this agent")}</button>
         <button class="btn" id="dsTweak">${t("Request changes")}</button></div>
     </div>`;
+  syncPlain();
+  (async () => { try { const r = await api("GET", "services"); (r.connected || []).forEach(x => CONNECTED.add(x)); syncPlain(); } catch (e) {} })();
   setTimeout(() => {
     $("#dsBuild").onclick = () => buildFromDesign(d, $("#dsBuild"));
     $("#dsTweak").onclick = () => { const i = $("#ins"); if (i) { i.placeholder = t("Describe the changes you want…"); i.focus(); } };
@@ -703,9 +747,9 @@ async function buildFromDesign(d, btn) {
     const s3 = step("Deploying to your workspace");
     const r = await api("POST", "deploy", { mode: "agent", name: d.name, graph: g.graph });
     done(s3, "Deployed");
-    LASTDESIGN = null; loadAgents();
-    // WOW moment: offer a one-tap connect for exactly the services this agent needs
-    openConnectServices(neededServices(d), d.name, () => { THREAD = []; openAgent(r.id, "flow"); });
+    LASTDESIGN = null; THREAD = []; loadAgents();
+    // services are connected inline in the proposal (and via the agent-page banner) — no popup
+    openAgent(r.id, "flow");
   } catch (e) { const s = step("Error"); done(s, "Error"); btn.disabled = false; btn.innerHTML = `${IC.bolt} Build this agent`; alert(e.message); }
 }
 
@@ -726,6 +770,19 @@ const SVC_PURPOSE = {
   "Excel on SharePoint": "Read & update your registry", "Microsoft SharePoint": "Read your SOPs & templates",
   "OneDrive": "Read your files", "Microsoft Teams": "Post updates for your team", "Slack": "Post updates for your team",
   "Notion": "Read & write pages", "Salesforce": "Read & update records",
+};
+// keywords that tie a plain-language step to the service it uses
+const SVC_KEYWORDS = {
+  "Gmail": /e-?mail|inbox|reply|repli|outreach|remind|mail|contact|send/i,
+  "Google Sheets": /sheet|spreadsheet|registry|tracking|list of business|update the (google )?sheet/i,
+  "Google Drive": /drive|\bsop\b|policy|policies|template|document|checklist|rule|file/i,
+  "Google Docs": /\bdoc\b|document/i,
+  "Google Calendar": /calendar|schedule|daily/i,
+  "Microsoft Outlook": /e-?mail|inbox|reply|repli|outreach|remind|outlook|mail|contact|send/i,
+  "Excel on SharePoint": /excel|sheet|spreadsheet|registry|tracking/i,
+  "Microsoft SharePoint": /sharepoint|\bsop\b|policy|policies|template|document|checklist|rule/i,
+  "OneDrive": /onedrive|\bfile\b|drive/i,
+  "Slack": /slack|channel|notify|post/i,
 };
 let CONNECTED = new Set();
 // figure out exactly which real services an agent design needs (skip AI models)
@@ -763,7 +820,11 @@ async function maybeShowConnectBanner(info, agentName) {
     <div class="cb-logos">${need.map(s => `<span class="cb-lg ${connected.includes(s) ? "on" : ""}">${brandLogo(s, 24)}</span>`).join("")}</div>
     ${done ? "" : `<button class="btn primary sm" id="cbConnect">${IC.play} ${t("Connect")}</button>`}`;
   wrap.parentNode.insertBefore(bar, wrap);
-  if (!done) $("#cbConnect").onclick = () => openConnectServices(need, agentName || "this agent", () => viewAgent());
+  if (!done) $("#cbConnect").onclick = async () => {
+    const btn = $("#cbConnect"); btn.disabled = true; btn.innerHTML = `<span class="spin"></span> ${t("Signing in")}…`;
+    for (const s of missing) { try { await api("POST", "service-connect", { service: s }); } catch (e) {} }
+    viewAgent();
+  };
 }
 async function openConnectServices(services, agentName, onDone) {
   services = Array.from(new Set(services || []));
