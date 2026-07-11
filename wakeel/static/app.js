@@ -819,6 +819,11 @@ function openGoogleSetup(onSaved) {
   $("#gsSave").onclick = async () => {
     const cid = $("#gsCid").value.trim(), sec = $("#gsSec").value.trim();
     if (!cid) { $("#gsErr").textContent = "Enter the Client ID"; return; }
+    if (cid.includes("@") || !cid.endsWith(".apps.googleusercontent.com")) {
+      $("#gsErr").textContent = "That's not a Client ID. It must end with .apps.googleusercontent.com (it's generated in Google Cloud → Credentials — not your email).";
+      return;
+    }
+    if (sec && !/^GOCSPX-/.test(sec)) { $("#gsErr").textContent = "The Client secret usually starts with GOCSPX- — double-check you copied the secret, not the ID."; return; }
     $("#gsSave").disabled = true;
     try { await api("POST", "oauth/config", { client_id: cid, client_secret: sec }); await refreshServices(); d.remove(); onSaved && onSaved(); }
     catch (e) { $("#gsErr").textContent = e.message; $("#gsSave").disabled = false; }
