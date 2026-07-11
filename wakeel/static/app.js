@@ -328,7 +328,7 @@ function renderLogin() {
       <div class="wave"></div>
       <div class="hero-logo"><div class="logo" style="width:40px;height:40px;border-radius:12px"><span>وكيل</span></div><div style="font-size:22px;font-weight:800">Wakeel</div></div>
       <div class="hero-copy"><h2>The agentic platform for government.</h2><p>Any employee builds, tests and deploys AI agents — in Arabic or English. Describe the task, Wakeel does the rest.</p></div>
-      <div class="hero-foot">🇦🇪 Government of Abu Dhabi · وكيل</div>
+      <div class="hero-foot">Innoventures × Takalam × notension.ai</div>
     </div>
     <div class="signin-form"><div class="signin-card">
       <h1>Sign in</h1><div class="sub">Use your entity account to continue.</div>
@@ -336,7 +336,7 @@ function renderLogin() {
       <div class="field"><label>Password</label><input class="input" id="pw" type="password" autocomplete="current-password"/></div>
       <button class="btn primary block" id="go">Sign in</button>
       <div class="err" id="err"></div>
-      <div style="margin-top:22px;color:var(--faint);font-size:12px">Government of Abu Dhabi · <span class="linky" id="lang">${LANG === "en" ? "العربية" : "English"}</span></div>
+      <div style="margin-top:22px;color:var(--faint);font-size:12px">Innoventures × Takalam × notension.ai · <span class="linky" id="lang">${LANG === "en" ? "العربية" : "English"}</span></div>
     </div></div>
   </div>`;
   $("#lang").onclick = () => { LANG = LANG === "en" ? "ar" : "en"; localStorage.setItem("wakeel_lang", LANG); renderLogin(); };
