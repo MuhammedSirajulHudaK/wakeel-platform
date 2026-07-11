@@ -560,6 +560,45 @@ def tool_connect(sess, provider, credentials, name, ctype):
     return {"ok": True}
 
 
+# ---- Service connections (the one-tap "connect your services" moment) ----
+# Records which external services a workspace has linked for its agents. In
+# production each connect is a real OAuth consent (Google/Microsoft sign-in);
+# here it persists the linked state so the experience is consistent.
+CONN_FILE = os.path.join(HERE, "connections.json")
+
+
+def _conn_all():
+    try:
+        with open(CONN_FILE) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def services_connected(sess):
+    u = _conn_all().get(sess["email"], {})
+    return {"connected": [k for k, v in u.items() if v.get("connected")]}
+
+
+def service_connect(sess, service, connect=True):
+    service = (service or "").strip()
+    if not service:
+        return {"error": "no service named"}
+    allc = _conn_all()
+    u = allc.setdefault(sess["email"], {})
+    if connect:
+        u[service] = {"connected": True, "ts": int(time.time())}
+    else:
+        u.pop(service, None)
+    try:
+        with open(CONN_FILE, "w") as f:
+            json.dump(allc, f)
+    except OSError:
+        pass
+    log_act(sess, "connect", service + ("" if connect else " (disconnected)"))
+    return {"ok": True, "service": service, "connected": connect}
+
+
 def models_list(sess):
     res = dify(sess, "GET", "/workspaces/current/models/model-types/llm")
     out = []
@@ -1959,6 +1998,8 @@ class H(BaseHTTPRequestHandler):
                                   extra={"Content-Disposition": "attachment; filename=wakeel-audit-log.csv"})
             if p == "/api/security":
                 return self._send(200, security_get(sess))
+            if p == "/api/services":
+                return self._send(200, services_connected(sess))
             if p == "/api/tasks":
                 return self._send(200, tasks_list(sess))
             if p == "/api/task":
@@ -2114,6 +2155,8 @@ class H(BaseHTTPRequestHandler):
                 return self._send(200, team_delete(sess, b.get("id", "")))
             if p == "/api/team-run":
                 return self._send(200, team_run(sess, b.get("id", ""), b.get("input", "")))
+            if p == "/api/service-connect":
+                return self._send(200, service_connect(sess, b.get("service", ""), b.get("connect", True)))
             if p == "/api/security-role":
                 return self._send(200, security_set_role(sess, b.get("email", ""), b.get("role", "")))
             if p == "/api/security-sso":

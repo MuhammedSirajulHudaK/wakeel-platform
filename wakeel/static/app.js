@@ -703,8 +703,113 @@ async function buildFromDesign(d, btn) {
     const s3 = step("Deploying to your workspace");
     const r = await api("POST", "deploy", { mode: "agent", name: d.name, graph: g.graph });
     done(s3, "Deployed");
-    LASTDESIGN = null; THREAD = []; loadAgents(); openAgent(r.id, "flow");
+    LASTDESIGN = null; loadAgents();
+    // WOW moment: offer a one-tap connect for exactly the services this agent needs
+    openConnectServices(neededServices(d), d.name, () => { THREAD = []; openAgent(r.id, "flow"); });
   } catch (e) { const s = step("Error"); done(s, "Error"); btn.disabled = false; btn.innerHTML = `${IC.bolt} Build this agent`; alert(e.message); }
+}
+
+/* ---------- Connect your services (one-tap "wow" moment) ---------- */
+const SVC_PROVIDER = {
+  "Gmail": "google", "Google Sheets": "google", "Google Drive": "google", "Google Docs": "google", "Google Calendar": "google",
+  "Microsoft Outlook": "microsoft", "Excel on SharePoint": "microsoft", "Microsoft SharePoint": "microsoft",
+  "OneDrive": "microsoft", "Microsoft Teams": "microsoft", "Microsoft Word": "microsoft",
+};
+const PROVIDER_META = {
+  google: { name: "Google", logo: "google", btn: "Continue with Google" },
+  microsoft: { name: "Microsoft", logo: "microsoft", btn: "Continue with Microsoft" },
+};
+const SVC_PURPOSE = {
+  "Gmail": "Send outreach emails & read replies", "Google Sheets": "Read & update your registry",
+  "Google Drive": "Read your SOPs, policies & templates", "Google Docs": "Read your documents",
+  "Google Calendar": "Schedule the daily checks", "Microsoft Outlook": "Send outreach emails & read replies",
+  "Excel on SharePoint": "Read & update your registry", "Microsoft SharePoint": "Read your SOPs & templates",
+  "OneDrive": "Read your files", "Microsoft Teams": "Post updates for your team", "Slack": "Post updates for your team",
+  "Notion": "Read & write pages", "Salesforce": "Read & update records",
+};
+let CONNECTED = new Set();
+// figure out exactly which real services an agent design needs (skip AI models)
+function neededServices(d) {
+  const known = Object.keys(LOGO_MAP);
+  const models = new Set(["OpenAI", "Azure OpenAI", "Anthropic Claude", "Google Gemini", "Ollama (local)", "vLLM", "Microsoft Graph", "Microsoft Entra ID"]);
+  const found = [];
+  (d.flow || []).forEach(n => { const s = (n.integration || "").trim(); if (known.includes(s) && !models.has(s) && !found.includes(s)) found.push(s); });
+  const txt = JSON.stringify(d);
+  known.forEach(s => { if (models.has(s) || found.includes(s)) return; if (txt.includes('"' + s + '"') || txt.includes(s)) found.push(s); });
+  return found;
+}
+async function openConnectServices(services, agentName, onDone) {
+  services = Array.from(new Set(services || []));
+  if (!services.length) { onDone && onDone(); return; }
+  try { const r = await api("GET", "services"); CONNECTED = new Set(r.connected || []); } catch (e) { CONNECTED = new Set(); }
+  const groups = {}, standalone = [];
+  services.forEach(s => { const p = SVC_PROVIDER[s]; if (p) (groups[p] = groups[p] || []).push(s); else standalone.push(s); });
+  const allOn = () => services.every(s => CONNECTED.has(s));
+  const d = document.createElement("div"); d.className = "modal-back";
+  d.innerHTML = `<div class="modal fade connect-modal" onclick="event.stopPropagation()">
+    <button class="x" id="cnx">×</button>
+    <div class="cn-hero" id="cnHero"></div>
+    <div class="cn-body" id="cnBody"></div>
+    <div class="cn-foot"><button class="btn ghost sm" id="cnSkip">${t("Skip for now")}</button>
+      <button class="btn primary" id="cnStart" disabled>${IC.play} ${t("Start using")} ${esc(agentName)}</button></div>
+  </div>`;
+  document.body.appendChild(d);
+  const close = (cb) => { d.remove(); if (cb) onDone && onDone(); };
+  $("#cnx").onclick = () => close(true);
+  $("#cnSkip").onclick = () => close(true);
+  $("#cnStart").onclick = () => close(true);
+
+  function render() {
+    const on = allOn();
+    $("#cnHero").innerHTML = on
+      ? `<div class="cn-badge ok">${IC.check}</div><div class="cn-h">${t("You're all set! 🎉")}</div><div class="cn-sub">${esc(agentName)} ${t("can now reach everything it needs — switch it on.")}</div>`
+      : `<div class="cn-badge">✨</div><div class="cn-h">${t("One tap and it's live")}</div><div class="cn-sub">${esc(agentName)} ${t("just needs to reach these services. Sign in once and you're connected.")}</div>`;
+    let html = "";
+    Object.keys(groups).forEach(p => {
+      const meta = PROVIDER_META[p], svcs = groups[p], gdone = svcs.every(s => CONNECTED.has(s));
+      html += `<div class="cn-group">
+        <div class="cn-svcs">${svcs.map(s => cnRow(s)).join("")}</div>
+        ${gdone ? `<div class="cn-connected">${IC.check} ${t("Connected with")} ${meta.name}</div>`
+          : `<button class="btn cn-oauth" data-grp="${p}"><span class="cn-glogo">${L[meta.logo]}</span> ${t(meta.btn)}</button>`}
+      </div>`;
+    });
+    standalone.forEach(s => {
+      html += `<div class="cn-group"><div class="cn-svcs">${cnRow(s, true)}</div></div>`;
+    });
+    html += `<div class="cn-note">${IC.lock} ${t("Secure sign-in — Wakeel only gets the access this assistant needs, and you can disconnect anytime.")}</div>`;
+    $("#cnBody").innerHTML = html;
+    $("#cnBody").querySelectorAll("[data-grp]").forEach(b => b.onclick = () => connectGroup(b.dataset.grp, b));
+    $("#cnBody").querySelectorAll("[data-one]").forEach(b => b.onclick = () => connectOne(b.dataset.one, b));
+    $("#cnStart").disabled = !on;
+    if (on) { $("#cnStart").classList.add("pulse"); d.querySelector(".connect-modal").classList.add("celebrate"); }
+  }
+  function cnRow(s, withBtn) {
+    const done = CONNECTED.has(s);
+    return `<div class="cn-svc ${done ? "done" : ""}" data-svc="${esc(s)}">
+      ${brandLogo(s, 34)}<div class="cn-si"><div class="cn-sn">${esc(s)}</div><div class="cn-sp">${esc(SVC_PURPOSE[s] || t("Connect this service"))}</div></div>
+      ${done ? `<span class="cn-check">${IC.check}</span>`
+        : withBtn ? `<button class="btn sm" data-one="${esc(s)}">${t("Connect")}</button>` : `<span class="cn-check pend"></span>`}</div>`;
+  }
+  async function connectGroup(p, btn) {
+    const meta = PROVIDER_META[p];
+    btn.disabled = true; btn.innerHTML = `<span class="spin"></span> ${t("Signing in to")} ${meta.name}…`;
+    await sleep(1000); // the (simulated) single consent screen
+    for (const s of groups[p]) {
+      try { await api("POST", "service-connect", { service: s }); } catch (e) {}
+      CONNECTED.add(s);
+      const row = [...$("#cnBody").querySelectorAll(".cn-svc")].find(r => r.dataset.svc === s);
+      if (row) { row.classList.add("done"); const c = row.querySelector(".cn-check"); if (c) { c.classList.remove("pend"); c.innerHTML = IC.check; } }
+      await sleep(320);
+    }
+    render();
+  }
+  async function connectOne(s, btn) {
+    btn.disabled = true; btn.innerHTML = `<span class="spin"></span>`;
+    await sleep(700);
+    try { await api("POST", "service-connect", { service: s }); } catch (e) {}
+    CONNECTED.add(s); render();
+  }
+  render();
 }
 
 /* ---------- AGENT / FLOW ---------- */
