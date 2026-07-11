@@ -141,11 +141,13 @@ textarea.input{padding:12px 14px;min-height:auto;resize:none}
 
 /* home */
 .home{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px 24px 60px;overflow:auto}
-.home-inner{width:100%;max-width:720px}
+.home-inner{width:100%;max-width:780px}
 .home h1{text-align:center;font-size:30px;font-weight:800;letter-spacing:-.025em;margin:0 0 24px}
 .composer{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:16px 16px 12px;box-shadow:0 20px 60px rgba(0,0,0,.35)}
-.composer textarea{width:100%;border:0;background:transparent;outline:0;resize:none;font-size:15.5px;min-height:52px;color:var(--text)}
+.composer textarea{width:100%;border:0;background:transparent;outline:0;resize:none;font-size:15.5px;min-height:52px;line-height:1.55;color:var(--text)}
 .composer textarea::placeholder{color:var(--muted-2)}
+/* home composer: taller by default, drag the bottom-right corner to resize, auto-grows with content */
+.home-composer textarea{min-height:130px;max-height:50vh;overflow-y:auto;resize:vertical}
 .composer-foot{display:flex;align-items:center;gap:8px}
 .toggle-pill{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--panel-2);border-radius:999px;padding:7px 14px;font-size:13px;font-weight:600;cursor:pointer;color:var(--muted)}
 .toggle-pill .lm{width:18px;height:18px;border-radius:50%;background:#1a2740;display:grid;place-items:center;font-size:10px;color:var(--muted)}

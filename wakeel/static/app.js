@@ -491,8 +491,8 @@ function drawComposerHome() {
     <div class="home-inner fade">
       <h1>${ACTIVE_SKILL ? esc(ACTIVE_SKILL.name) : t("What do you want to work on?")}</h1>
       ${ACTIVE_SKILL ? `<p class="skill-hint">${esc(ACTIVE_SKILL.desc)}</p>` : ""}
-      <div class="composer">
-        <textarea id="ins" rows="2" placeholder="${ACTIVE_SKILL ? esc(ACTIVE_SKILL.ph) : t("Ask Wakeel to perform tasks, build an agent, or brainstorm ideas")}"></textarea>
+      <div class="composer home-composer">
+        <textarea id="ins" rows="5" placeholder="${ACTIVE_SKILL ? esc(ACTIVE_SKILL.ph) : t("Ask Wakeel to perform tasks, build an agent, or brainstorm ideas")}"></textarea>
         <div class="composer-foot">
           ${ACTIVE_SKILL ? skillChip() : `<div class="toggle-pill ${BUILD ? "on" : ""}" id="buildToggle"><span class="lm">و</span> ${t("Build agents")}</div>`}
           <button class="plus-btn" id="plusBtn">${IC.plus}<div class="pop" id="plusPop" hidden>
@@ -517,10 +517,18 @@ function drawComposerHome() {
   wireSkillChip();
   $("#plusBtn").onclick = (e) => { e.stopPropagation(); const p = $("#plusPop"); p.hidden = !p.hidden; };
   document.querySelectorAll("#plusPop a").forEach(a => a.onclick = (e) => { e.stopPropagation(); plusAction(a.dataset.a); });
-  document.querySelectorAll(".chip").forEach(c => c.onclick = () => { $("#ins").value = c.textContent; $("#ins").focus(); });
+  document.querySelectorAll(".chip").forEach(c => c.onclick = () => { $("#ins").value = c.textContent; autoGrow($("#ins")); $("#ins").focus(); });
   $("#sendBtn").onclick = onSend;
   $("#ins").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); } });
+  $("#ins").addEventListener("input", e => autoGrow(e.target));
   $("#ins").focus();
+}
+// grow the composer to fit its content (up to a max), then scroll — so long prompts stay readable
+function autoGrow(el) {
+  if (!el) return;
+  el.style.height = "auto";
+  const max = Math.round(window.innerHeight * 0.5);
+  el.style.height = Math.min(el.scrollHeight, max) + "px";
 }
 function plusAction(a) { if (a === "integration") { VIEW = "integrations"; renderShell(); } else { VIEW = "skills"; renderShell(); } }
 
