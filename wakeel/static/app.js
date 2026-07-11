@@ -173,11 +173,16 @@ async function openToolConfig(name) {
   try {
     const s = await api("GET", "tool-schema?provider=" + encodeURIComponent(provider));
     const fields = s.fields || [];
+    const isMs = /microsoft|outlook|onedrive|sharepoint|teams|excel|office|graph|365/i.test(name + " " + provider);
+    const intro = isMs
+      ? `Connect via Microsoft Graph. Use the token from your Entra ID app (scopes: Mail.Send, Files.ReadWrite, Sites.ReadWrite) — the same app you register under <b>Security → Single sign-on</b>.`
+      : `Connect ${esc(name)} with the API credential from its admin console. Wakeel stores it encrypted and uses it only for this connector.`;
+    const tokenPh = isMs ? "Microsoft Graph access token" : "API key / access token";
     $("#tcBody").innerHTML = `
-      <div style="color:var(--muted);font-size:13px;margin:-6px 0 16px">Connect your Microsoft account. Get a Microsoft Graph token from your Entra ID app (permissions: Mail.Send, Files.ReadWrite, Sites.ReadWrite) or Microsoft Graph Explorer.</div>
-      ${fields.length ? fields.map(f => `<div class="field"><label>${esc(f.label)}${f.required ? " *" : ""}</label><input class="input" data-f="${esc(f.name)}" type="${f.type === "secret-input" ? "password" : "text"}" placeholder="${esc(f.help || f.label)}"/></div>`).join("") : `<div class="field"><label>Access token</label><input class="input" data-f="access_token" type="password" placeholder="Microsoft Graph access token"/></div>`}
+      <div style="color:var(--muted);font-size:13px;margin:-6px 0 16px">${intro}</div>
+      ${fields.length ? fields.map(f => `<div class="field"><label>${esc(f.label)}${f.required ? " *" : ""}</label><input class="input" data-f="${esc(f.name)}" type="${f.type === "secret-input" ? "password" : "text"}" placeholder="${esc(f.help || f.label)}"/></div>`).join("") : `<div class="field"><label>Access token</label><input class="input" data-f="access_token" type="password" placeholder="${tokenPh}"/></div>`}
       <div style="display:flex;align-items:center;gap:12px;margin-top:8px"><button class="btn primary sm" id="tcSave">Connect</button><span class="page-sub" style="margin:0" id="tcMsg"></span></div>
-      <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--line-2);font-size:12px;color:var(--faint)">Tip: for production, register an Entra ID app once — Wakeel then reuses the token. This is a government data-residency step handled by your IT.</div>`;
+      <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--line-2);font-size:12px;color:var(--faint)">${isMs ? "For production, register the Entra ID app once — Wakeel reuses the token via SSO. A data-residency step handled by your IT." : "Credentials are workspace-scoped and never leave your in-country environment."}</div>`;
     $("#tcSave").onclick = async () => {
       const creds = {}; d.querySelectorAll("input[data-f]").forEach(i => { if (i.value.trim()) creds[i.dataset.f] = i.value.trim(); });
       if (!Object.keys(creds).length) { $("#tcMsg").textContent = "Enter a token first"; return; }
@@ -1668,7 +1673,14 @@ async function loadSecurity() {
     const pol = SEC.policy || {};
     const roleName = { admin: "Administrator", officer: "Officer", viewer: "Viewer" };
     const ssoName = (SEC.sso_providers.find(p => p.id === sso.provider) || {}).name;
+    const ai = SEC.ai || { name: "OpenAI API", region: "Global", in_country: false, policy: "" };
     el.innerHTML = `
+      <div class="ai-residency ${ai.in_country ? "on" : "warn"}">
+        <div class="air-ic">${ai.in_country ? IC.shield : IC.help}</div>
+        <div class="air-main"><div class="air-t">AI data residency — <b>${esc(ai.name)} · ${esc(ai.region)}</b></div>
+          <div class="air-d">${ai.in_country ? "Inference runs in-country; no prompt or output leaves the UAE." : "Running on the global OpenAI API. Set AZURE_OPENAI_* to route inference to Azure OpenAI (UAE North)."}</div></div>
+        <span class="air-pill ${ai.in_country ? "ok" : "idle"}">${ai.in_country ? "In-country" : "Global"}</span>
+      </div>
       <div class="side-sub" style="padding-inline:0">Roles &amp; permissions (RBAC)</div>
       <div class="role-grid">${SEC.roles.map(r => `
         <div class="gcard role-card" style="cursor:default">

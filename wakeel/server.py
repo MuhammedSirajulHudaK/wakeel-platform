@@ -59,6 +59,34 @@ try:
 except OSError:
     pass
 
+# Azure OpenAI (UAE North) — data-residency provider. When these are set,
+# every LLM call routes to the in-country Azure endpoint instead of api.openai.com,
+# so no prompt/output leaves the UAE. Falls back to OpenAI if unset.
+AZURE_OPENAI = {
+    "endpoint": os.environ.get("AZURE_OPENAI_ENDPOINT", "").rstrip("/"),
+    "key": os.environ.get("AZURE_OPENAI_KEY", ""),
+    "deployment": os.environ.get("AZURE_OPENAI_DEPLOYMENT", ""),
+    "api_version": os.environ.get("AZURE_OPENAI_API_VERSION", "2024-08-01-preview"),
+    "region": os.environ.get("AZURE_OPENAI_REGION", "UAE North"),
+}
+
+
+def _azure_active():
+    return bool(AZURE_OPENAI["endpoint"] and AZURE_OPENAI["key"] and AZURE_OPENAI["deployment"])
+
+
+def ai_residency():
+    """The active LLM provider — surfaced in Security/Governance so an officer
+    can see, at a glance, whether inference stays in-country."""
+    if _azure_active():
+        return {"provider": "azure", "name": "Azure OpenAI",
+                "region": AZURE_OPENAI["region"], "in_country": True,
+                "policy": f"Azure OpenAI ({AZURE_OPENAI['region']}) — no customer data used for training"}
+    return {"provider": "openai", "name": "OpenAI API", "region": "Global",
+            "in_country": False,
+            "policy": "OpenAI API (global) — set AZURE_OPENAI_* for UAE-North residency"}
+
+
 SESSIONS = {}  # token -> {"opener", "jar", "email", "b64pw", "ts"}
 
 
@@ -952,8 +980,7 @@ def audit(sess, limit=200, category="all"):
         "data_residency": (["UAE — all data, logs & model processing stay in-country (Abu Dhabi Government / UAE sovereign cloud)"]
                            if residency else ["UAE — Abu Dhabi (default policy)"]),
         "compliance": _canon_compliance(compliance) or ["UAE IA Standards", "ISO/IEC 27001"],
-        "model_policy": (["Azure OpenAI (UAE North) — no customer data used for training"]
-                         if model_policy else ["Azure OpenAI (UAE North) — no data used for training"]),
+        "model_policy": [ai_residency()["policy"]],
         "categories": cats,
     }
     return {"summary": summary, "events": events,
@@ -1050,7 +1077,7 @@ def security_get(sess):
                                 "allowed_domains": "gov.ae, abudhabi.ae", "ip_allowlist": ""})
     me = next((m["role"] for m in members if m["email"] == sess["email"]), "admin")
     return {"members": members, "roles": RBAC_ROLES, "sso": sso, "policy": policy,
-            "sso_providers": SSO_PROVIDERS, "my_role": me}
+            "sso_providers": SSO_PROVIDERS, "my_role": me, "ai": ai_residency()}
 
 
 def security_set_role(sess, email, role):
@@ -1092,6 +1119,22 @@ _KNOWLEDGE_KEY = {"token": ""}
 
 
 def _openai_chat(messages):
+    # In-country first: if Azure OpenAI (UAE North) is configured, all inference
+    # goes through it so data never leaves the UAE.
+    if _azure_active():
+        try:
+            url = (f"{AZURE_OPENAI['endpoint']}/openai/deployments/{AZURE_OPENAI['deployment']}"
+                   f"/chat/completions?api-version={AZURE_OPENAI['api_version']}")
+            body = json.dumps({"messages": messages, "temperature": 0.4}).encode()
+            req = urllib.request.Request(url, data=body,
+                                         headers={"Content-Type": "application/json",
+                                                  "api-key": AZURE_OPENAI["key"]}, method="POST")
+            r = json.loads(urllib.request.urlopen(req, timeout=90).read())
+            return r["choices"][0]["message"]["content"]
+        except Exception as e:
+            # fall through to OpenAI only if a global fallback key exists
+            if not OPENAI_KEY:
+                raise RuntimeError(f"Azure OpenAI unavailable: {e}")
     last_err = None
     for model in ("gpt-5.1", "gpt-4o-mini"):
         try:
