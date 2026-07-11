@@ -237,6 +237,18 @@ const T = {
   "Build this agent": "بناء هذا الوكيل", "Request changes": "طلب تعديلات",
   "Here's the full design for your": "إليك التصميم الكامل لـ",
   ". Review it and let me know if you'd like any changes before I build it.": "، راجعه وأخبرني إن رغبت بأي تعديلات قبل أن أبنيه.",
+  "Here's what I'll do for you": "إليك ما سأقوم به من أجلك",
+  "Here's what I'll set up for your": "إليك ما سأجهّزه لـ",
+  ". Have a look, and tell me if you'd like anything changed before I build it.": "، ألقِ نظرة وأخبرني إن رغبت بتغيير أي شيء قبل أن أبنيه.",
+  "See the technical details": "عرض التفاصيل التقنية",
+  "Reading what you need": "أقرأ ما تحتاجه", "Reading your changes": "أقرأ تعديلاتك",
+  "Understood what you need": "فهمت ما تحتاجه", "Got it": "تمام",
+  "Planning how your assistant will work": "أخطّط لكيفية عمل مساعدك", "Updating the plan": "أُحدّث الخطة",
+  "Working out the steps and the safety rules": "أُحدّد الخطوات وقواعد الأمان",
+  "Worked out the steps and the safety rules": "حدّدت الخطوات وقواعد الأمان",
+  "Ready — here's my plan": "جاهز — إليك خطتي", "Updated the plan": "حدّثت الخطة",
+  "Couldn't plan that": "تعذّر التخطيط لذلك",
+  "I couldn't plan that — try describing the task in a bit more detail.": "تعذّر عليّ التخطيط لذلك — حاول وصف المهمة بمزيد من التفصيل.",
   // buttons / common
   "Create agent": "إنشاء وكيل", "Configure": "إعداد", "Install & connect": "تثبيت وربط",
   "Request": "طلب", "Request access": "طلب التفعيل", "Champions": "الأبطال",
@@ -544,18 +556,18 @@ async function onSend() {
   const done = (s, label) => { s.className = "rstep done"; s.innerHTML = `<span class="ri">${IC.check}</span> ${esc(label)}`; };
   if (BUILD) {
     const refining = !!LASTDESIGN;
-    const s1 = step(refining ? "Reading your requested changes" : "Understanding what you want to build");
+    const s1 = step(refining ? t("Reading your changes") : t("Reading what you need"));
     await sleep(refining ? 300 : 500);
-    done(s1, refining ? "Got it" : "Understood the goal");
-    const s2 = step(refining ? "Revising the design" : "Designing the agent architecture");
-    if (!refining) { const t2 = step("Mapping the flow, data and guardrails"); await sleep(650); done(t2, "Mapped the flow, data and guardrails"); }
+    done(s1, refining ? t("Got it") : t("Understood what you need"));
+    const s2 = step(refining ? t("Updating the plan") : t("Planning how your assistant will work"));
+    if (!refining) { const t2 = step(t("Working out the steps and the safety rules")); await sleep(650); done(t2, t("Worked out the steps and the safety rules")); }
     try {
       const body = refining
         ? { instruction: LASTDESIGN.instruction, prior: LASTDESIGN.design, changes: text, lang: LANG }
         : { instruction: text, lang: LANG };
       const d = await api("POST", "design", body);
-      if (!d.flow || !d.flow.length) { done(s2, "Could not design that"); THREAD.push({ role: "ai", text: "I couldn't design that — try describing the task more concretely." }); drawThread(); return; }
-      done(s2, refining ? "Updated the design" : `Designed a ${d.flow.length}-step agent`);
+      if (!d.flow || !d.flow.length) { done(s2, t("Couldn't plan that")); THREAD.push({ role: "ai", text: t("I couldn't plan that — try describing the task in a bit more detail.") }); drawThread(); return; }
+      done(s2, refining ? t("Updated the plan") : t("Ready — here's my plan"));
       LASTDESIGN = { instruction: LASTDESIGN ? LASTDESIGN.instruction : text, design: d };
       THREAD.push({ role: "design", design: d });
       drawThread();
@@ -643,8 +655,18 @@ function designCard(m) {
     <tbody>${d.flow.map((n, i) => `<tr><td class="mut">${i + 1}</td><td>${esc(n.title || "")}</td><td class="mut">${esc(n.model || "—")}</td><td class="mut">${esc(n.integration || "—")}</td></tr>`).join("")}</tbody></table></div>`;
   const chips = (arr) => arr.map(s => `<span class="ds-chip">${esc(s)}</span>`).join("");
   const list = (title, ic, arr) => (arr && arr.length) ? `<div class="ds-sec"><div class="ds-h">${ic} ${title}</div><ul class="ds-list">${arr.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>` : "";
+  // plain-language, non-technical "here's what I'll do for you" — shown first, visually
+  const pl = d.plain || {};
+  const plainBlock = (pl.steps && pl.steps.length) ? `
+    <div class="ds-plain">
+      <div class="ds-plain-h"><span class="dpl-badge">${IC.spark}</span><div><div class="dpl-t">${t("Here's what I'll do for you")}</div>${pl.intro ? `<div class="dpl-intro">${esc(pl.intro)}</div>` : ""}</div></div>
+      <div class="dpl-steps">${pl.steps.map((s, i) => `<div class="dpl-step"><span class="dpl-ico">${esc(s.icon || "•")}</span><span class="dpl-n">${i + 1}</span><span class="dpl-x">${esc(s.text || "")}</span></div>`).join("")}</div>
+      ${pl.reassurance ? `<div class="dpl-safe">${IC.shield} ${esc(pl.reassurance)}</div>` : ""}
+    </div>` : "";
   el.innerHTML = `
-    <div class="ds-intro">${t("Here's the full design for your")} <b>${esc(d.name)}</b>${t(". Review it and let me know if you'd like any changes before I build it.")}</div>
+    <div class="ds-intro">${t("Here's what I'll set up for your")} <b>${esc(d.name)}</b>${t(". Have a look, and tell me if you'd like anything changed before I build it.")}</div>
+    ${plainBlock}
+    <details class="ds-tech"><summary>${IC.flow} ${t("See the technical details")}</summary>
     <div class="ds-summary">${esc(d.summary || "")}</div>
     <div class="ds-sec"><div class="ds-h">${IC.flow} ${t("Flow architecture")}</div>${designDiagram(d.flow)}</div>
     ${nodeTbl}
@@ -653,6 +675,7 @@ function designCard(m) {
     ${list(t("Triggers"), IC.play, d.triggers)}
     ${list(t("Key design decisions"), IC.spark, d.decisions)}
     ${list(t("Guardrails"), IC.help, d.guardrails)}
+    </details>
     <div class="ds-foot">
       <div class="ds-ask">${t("Shall I go ahead and build this agent?")}</div>
       <div class="ds-actions"><button class="btn primary" id="dsBuild">${IC.bolt} ${t("Build this agent")}</button>

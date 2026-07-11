@@ -253,6 +253,9 @@ def design(sess, instruction, prior=None, changes="", lang="en"):
         "{\n"
         '  "name": "<concise agent name>",\n'
         '  "summary": "<2-3 sentence plain-language description of what the agent does>",\n'
+        '  "plain": {"intro":"<ONE warm sentence, no jargon, telling an ordinary non-technical person what this assistant will do for them>",'
+        '"steps":[{"icon":"<a single fitting emoji>","text":"<ONE short everyday-language sentence for a step — like explaining to a friend, no technical words>"}],'
+        '"reassurance":"<ONE sentence: a human officer stays in control and the assistant never makes final decisions>"},\n'
         '  "flow": [ {"id":"n1","title":"Read Excel Registry","kind":"entry|llm|cond|tool|end",'
         '"model":"<model or empty>","integration":"<system used or empty>",'
         '"next":[{"to":"n2","label":"<branch label or empty>"}]} ],\n'
@@ -262,6 +265,10 @@ def design(sess, instruction, prior=None, changes="", lang="en"):
         '  "decisions": ["<key design decision the reviewer should know>", ...],\n'
         '  "guardrails": ["<what the agent must NOT do / where it escalates>", ...]\n'
         "}\n\n"
+        "The 'plain' section is the MOST IMPORTANT part: it must be understandable by anyone with NO "
+        "technical knowledge. Use simple everyday words — never say 'node', 'API', 'trigger', 'schema', "
+        "'LLM', 'model', 'integration' or 'workflow' there. Give 4-6 plain steps, each with a fitting emoji, "
+        "describing what happens in real-world terms (e.g. '📋 Every morning I check your list of businesses'). \n"
         "Rules: 6-16 flow nodes with a single 'entry' and one or more 'end' nodes. Use 'cond' for "
         "routing/branching nodes and give each outgoing edge a short 'label'. Pick concrete, "
         "reasonable model names (e.g. 'GPT 4.1 Mini' for actions, 'Gemini 3 Flash' for document "
@@ -271,10 +278,11 @@ def design(sess, instruction, prior=None, changes="", lang="en"):
         "produce your best design and note the assumption in 'decisions'."
     )
     if lang == "ar":
-        sys_p += ("\n\nIMPORTANT: Write ALL human-readable values (name, summary, node titles, edge "
-                  "labels, status names, triggers, decisions, guardrails, schema column names) in "
-                  "ARABIC. Keep the JSON keys and the 'kind' values in English, and keep product/"
-                  "connector names (Outlook, SharePoint, Excel, Microsoft 365) as-is.")
+        sys_p += ("\n\nIMPORTANT: Write ALL human-readable values (name, summary, the entire 'plain' "
+                  "section — intro, step texts and reassurance — node titles, edge labels, status names, "
+                  "triggers, decisions, guardrails, schema column names) in ARABIC. Keep the JSON keys, the "
+                  "'kind' values and the step emojis as-is, and keep product/connector names (Outlook, "
+                  "SharePoint, Excel, Gmail, Google Sheets, Microsoft 365) as-is.")
     parts = ["OFFICER'S REQUEST:\n" + instruction]
     if prior:
         parts.append("YOUR PREVIOUS DESIGN (JSON):\n" + json.dumps(prior, ensure_ascii=False)[:6000])
@@ -290,6 +298,15 @@ def design(sess, instruction, prior=None, changes="", lang="en"):
         n.setdefault("kind", "llm")
         nx = n.get("next") or []
         n["next"] = [({"to": x} if isinstance(x, str) else x) for x in nx]
+    # ensure a plain-language section exists (fallback derived from the flow)
+    pl = d.get("plain")
+    if not isinstance(pl, dict) or not pl.get("steps"):
+        emoji = {"entry": "📥", "llm": "🤖", "cond": "🔀", "tool": "🔗", "end": "✅"}
+        steps = [{"icon": emoji.get(n.get("kind"), "•"), "text": n.get("title", "")}
+                 for n in d["flow"] if n.get("title")][:6]
+        d["plain"] = {"intro": d.get("summary", "Here's what this assistant will do for you."),
+                      "steps": steps,
+                      "reassurance": "A human officer always stays in control — the assistant reviews and recommends, but never makes the final decision."}
     return d
 
 
