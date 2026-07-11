@@ -298,6 +298,7 @@ function t(s) { return LANG === "ar" ? (T[s] || s) : s; }
 let ME = null, LANG = localStorage.getItem("wakeel_lang") || "en";
 let VIEW = "home", BUILD = true, AGENT = null, ASUB = "flow", COPILOT = false;
 let APPS = [], THREAD = [], LASTGRAPH = null, LASTDESIGN = null, DEPT = "all", CFGNODE = null, ACTIVE_SKILL = null;
+const TOUR_URL = "https://claude.ai/code/artifact/02285f23-7f1c-44b9-a0dc-17aeb972463d";
 
 async function api(method, path, body) {
   const r = await fetch("api/" + path, { method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined, credentials: "include" });
@@ -1783,8 +1784,8 @@ function openHelp() {
   d.innerHTML = `<div class="modal fade" style="width:720px;max-width:94vw" onclick="event.stopPropagation()">
     <div style="display:flex;align-items:center;gap:12px">${logo("")}<div style="flex:1"><h2 style="margin:0">Getting started with Wakeel</h2><div style="color:var(--muted);font-size:13px">Build, test and deploy government AI agents — in Arabic or English.</div></div><button class="x" id="hx">×</button></div>
     <div class="help-grid">${CONCEPTS.map(([ic, t, d]) => `<div class="help-card"><div class="hc-ic">${IC[ic] || IC.spark}</div><div><b>${t}</b><p>${d}</p></div></div>`).join("")}</div>
-    <div class="help-cta"><div><b>Build your first agent</b><span>Describe the task in plain language — Wakeel designs it, you review, it deploys.</span></div><button class="btn primary" id="hcBuild">${IC.bolt} Build an agent</button></div>
-    <div style="text-align:center;margin-top:14px"><a class="linky" href="https://champions.innoventures.ae" target="_blank">Community &amp; champions ↗</a></div>
+    <div class="help-cta"><div><b>See it end to end</b><span>Take the 12-step product tour — one full cycle, with real screens.</span></div><a class="btn primary" href="${TOUR_URL}" target="_blank">${IC.play} Product tour ↗</a></div>
+    <div style="text-align:center;margin-top:14px"><span class="linky" id="hcBuild">Build your first agent</span> · <a class="linky" href="https://champions.innoventures.ae" target="_blank">Champions ↗</a></div>
   </div>`;
   document.body.appendChild(d); d.onclick = () => d.remove(); $("#hx").onclick = () => d.remove();
   $("#hcBuild").onclick = () => { d.remove(); VIEW = "home"; THREAD = []; BUILD = true; renderShell(); };
@@ -1796,13 +1797,17 @@ async function openProfile() {
   d.innerHTML = `<div class="modal fade" style="width:380px" onclick="event.stopPropagation()">
     <h2>${esc(ME.email.split("@")[0])} <button class="x" id="pmx">×</button></h2>
     <div style="color:var(--muted);font-size:13px;margin:-8px 0 16px">${esc(ME.email)}</div>
+    <button class="btn block primary" id="pmTour" style="margin-bottom:10px">${IC.play} Take the product tour</button>
+    <button class="btn block" id="pmHelp" style="margin-bottom:10px">${IC.help} Getting started</button>
     <button class="btn block" id="pmDev" style="margin-bottom:12px">${IC.skills} Developers &amp; API</button>
     <div class="side-sub" style="padding-inline:0">Activity</div>
-    <div id="pmActs" style="max-height:260px;overflow:auto"><div class="empty-mini">…</div></div>
+    <div id="pmActs" style="max-height:230px;overflow:auto"><div class="empty-mini">…</div></div>
     <button class="btn block" style="margin-top:14px;border-color:#5a1e26;color:#ff9ba3" id="pmOut">Sign out</button>
   </div>`;
   document.body.appendChild(d);
   d.onclick = () => d.remove(); $("#pmx").onclick = () => d.remove();
+  $("#pmTour").onclick = () => window.open(TOUR_URL, "_blank", "noopener");
+  $("#pmHelp").onclick = () => { d.remove(); openHelp(); };
   $("#pmDev").onclick = () => { d.remove(); VIEW = "developers"; renderShell(); };
   $("#pmOut").onclick = async () => { try { await api("POST", "logout"); } catch (e) {} ME = null; d.remove(); renderLogin(); };
   try {
