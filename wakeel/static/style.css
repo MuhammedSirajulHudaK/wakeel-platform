@@ -553,3 +553,18 @@ textarea.input{padding:12px 14px;min-height:auto;resize:none}
 .help-cta b{display:block;font-size:15px}
 .help-cta span{font-size:12.5px;color:var(--muted)}
 .help-cta .btn{flex:none;margin-inline-start:auto}
+
+/* ---------- chat-first flow: assistant + tidy header ---------- */
+.cop-h{display:flex;align-items:center;gap:11px}
+.cop-sub{font-size:11.5px;color:var(--muted-2);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cop-chips{display:flex;flex-direction:column;gap:8px;margin-top:16px;width:100%}
+.cop-chip{text-align:start;font-size:13px;padding:10px 13px;border:1px solid var(--line);border-radius:10px;background:var(--panel-2);color:var(--muted);cursor:pointer;transition:.15s}
+.cop-chip:hover{border-color:var(--wakeel);color:var(--text);background:var(--panel-3)}
+.draft-btn.ghost{background:transparent;border:1px solid var(--line);color:var(--muted-2)}
+.draft-btn.ghost:hover{color:var(--text);border-color:var(--line-2)}
+.draft-btn.ghost svg{width:15px;height:15px}
+/* when a node panel is open, tuck the assistant away so the flow isn't crowded */
+.copilot.cop-tuck{display:none}
+
+/* fix: node panel must actually hide when [hidden] (was showing as a blank column) */
+.node-panel[hidden]{display:none}

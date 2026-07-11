@@ -253,6 +253,14 @@ const T = {
   "Outlook, SharePoint, Excel, Teams, Google, SAP, databases, HTTP — the connector layer Wakeel's agents act through.": "Outlook وSharePoint وExcel وTeams وGoogle وSAP وقواعد البيانات وHTTP — طبقة الموصّلات التي يعمل عبرها وكلاء وكيل.",
   "An automation step calls a Wakeel agent's API for the reasoning, then acts on the result (send, update, escalate).": "تستدعي خطوة الأتمتة واجهة الوكيل البرمجية للتفكير، ثم تنفّذ بناءً على النتيجة (إرسال، تحديث، تصعيد).",
   // profile
+  "Build Assistant": "مساعد البناء", "Chat to edit": "تحرير بالمحادثة —",
+  "Let's shape this agent together.": "لنُشكّل هذا الوكيل معًا.",
+  "Tell me what to change and I'll update the flow — no diagrams needed.": "أخبرني بما تريد تغييره وسأحدّث المخطط — دون الحاجة إلى رسوم.",
+  "Ask the assistant to edit this flow…": "اطلب من المساعد تعديل هذا المخطط…",
+  "Add a follow-up step": "أضف خطوة متابعة",
+  "Add a condition / branch": "أضف شرطًا / تفرّعًا",
+  "Make the tone stricter and more formal": "اجعل النبرة أكثر صرامة ورسمية",
+  "Add an Arabic translation step at the end": "أضف خطوة ترجمة عربية في النهاية",
   "Describe a task. Wakeel handles it.": "صِف مهمة، ووكيل يتولّاها.",
   "Edit this flow by chatting — add a step, change a prompt, add a condition.": "عدّل هذا المخطط بالمحادثة — أضف خطوة أو غيّر تعليمة أو أضف شرطًا.",
   "Ask Wakeel to edit this flow…": "اطلب من وكيل تعديل هذا المخطط…",
@@ -309,7 +317,9 @@ const NAV = [["home", "Home", IC.home], ["skills", "Skills", IC.skills], ["proje
 
 function renderShell() {
   applyDir();
-  const showCop = COPILOT && VIEW === "agent" && ASUB !== "flow";
+  // Chat-first: the Build Assistant is the constant companion on the clean flow and
+  // config tabs. Only the advanced Studio canvas (which has its own assistant) hides it.
+  const showCop = COPILOT && VIEW === "agent" && ASUB !== "studio" && ASUB !== "config";
   $("#root").innerHTML = `
   <div class="app">
     <aside class="side">
@@ -572,8 +582,8 @@ async function viewAgent() {
     else if (ASUB === "memory") renderMemory(info);
     else if (ASUB === "governance") renderGovernance(info);
     else if (ASUB === "instructions") renderInstructions(info);
-    else if (ASUB === "simple") renderFlow(info);
-    else renderFlowStudio(info);
+    else if (ASUB === "studio") renderFlowStudio(info);
+    else renderFlow(info); // default "flow" (and "simple") = clean, chat-first cards
   } catch (e) { $("#flowWrap").innerHTML = `<div class="empty-state">⚠️ ${esc(e.message)}</div>`; }
 }
 
@@ -920,13 +930,13 @@ function renderFlowStudio(info) {
   window.__graph = info.graph || { nodes: [], edges: [] };
   $("#flowWrap").innerHTML = `
     <div class="flow-head">
-      <div><h1>Flow</h1><p>Build customised workflows that run from chat or triggers</p></div>
+      <div><h1>Advanced canvas</h1><p>The full node editor — for power users. Most edits are easier by chatting.</p></div>
       <div class="ctrls">
-        <button class="draft-btn" id="simpleBtn">${IC.views} Overview</button>
+        <button class="draft-btn" id="simpleBtn">← Back to flow</button>
       </div>
     </div>
     <div class="studio-embed"><iframe id="studioFrame" src="/app/${AGENT}/workflow?embed=wakeel" title="Flow"></iframe></div>`;
-  $("#simpleBtn").onclick = () => { ASUB = "simple"; viewAgent(); };
+  $("#simpleBtn").onclick = () => { ASUB = "flow"; viewAgent(); };
 }
 function orderedNodes(info) {
   const g = info.graph || {}; const edges = g.edges || [];
@@ -945,11 +955,11 @@ function renderFlow(info) {
   const nodes = orderedNodes(info);
   $("#flowWrap").innerHTML = `
     <div class="flow-head">
-      <div><h1>Flow</h1><p>Build customised workflows that run from chat or triggers</p></div>
+      <div><h1>Flow</h1><p>${esc(info.name || "Your agent")} · ${nodes.length} steps · <span style="color:var(--wakeel)">edit it by chatting with the assistant →</span></p></div>
       <div class="ctrls">
-        <button class="draft-btn" id="studioBtn">${IC.flow} Studio diagram</button>
         <button class="draft-btn run" id="runBtn">${IC.play} Run</button>
         <div class="tmode"><div class="switch" id="tmode"></div> Test mode</div>
+        <button class="draft-btn ghost" id="studioBtn" title="Advanced node canvas">${IC.flow} Advanced</button>
       </div>
     </div>
     <div class="flow-split">
@@ -988,7 +998,7 @@ function renderFlow(info) {
   $("#tmode").onclick = () => $("#tmode").classList.toggle("on");
   $("#pubBtn").onclick = async () => { $("#pubBtn").textContent = "Publishing…"; try { await api("POST", "publish", { app_id: AGENT }); $("#pubBtn").textContent = "✓ Published"; } catch (e) { alert(e.message); $("#pubBtn").textContent = "Publish"; } };
   $("#runBtn").onclick = () => openRunModal(info);
-  if ($("#studioBtn")) $("#studioBtn").onclick = () => { ASUB = "flow"; viewAgent(); };
+  if ($("#studioBtn")) $("#studioBtn").onclick = () => { ASUB = "studio"; viewAgent(); };
   if (window.__autorun) { const tx = window.__autorun; window.__autorun = null; $("#tmode").classList.add("on"); setTimeout(() => runFlow(tx), 700); }
   if (window.__autonode != null) { const idx = window.__autonode; window.__autonode = null; const c = $("#node-" + idx); if (c && nodes[idx]) openNodePanel(info, nodes[idx], c); }
   if (window.__autotool != null) { const idx = window.__autotool; window.__autotool = null; if (nodes[idx]) openConfigTool(info, nodes[idx]); }
@@ -1063,6 +1073,7 @@ function openNodePanel(info, n, card) {
   const isLLM = n.type === "llm";
   const canDelete = n.type !== "start" && n.type !== "end";
   const p = $("#nodePanel"); if (!p) return; p.hidden = false;
+  document.querySelector(".copilot")?.classList.add("cop-tuck"); // give the node panel room
   p.innerHTML = `
     <div class="np-head"><input class="np-title" id="npTitle" value="${esc(n.title || n.type)}"/><button class="x" id="npClose">×</button></div>
     <div class="np-body">
@@ -1083,7 +1094,7 @@ function openNodePanel(info, n, card) {
       </div>
     </div>
     <div class="np-foot">${canDelete ? `<button class="btn sm" id="npDel" style="border-color:#5a1e26;color:#ff9ba3">Delete</button>` : "<span></span>"}<button class="btn primary sm" id="npSave">Save</button><span class="np-msg" id="npMsg"></span></div>`;
-  $("#npClose").onclick = () => { p.hidden = true; document.querySelectorAll(".cnode.selected").forEach(c => c.classList.remove("selected")); };
+  $("#npClose").onclick = () => { p.hidden = true; document.querySelector(".copilot")?.classList.remove("cop-tuck"); document.querySelectorAll(".cnode.selected").forEach(c => c.classList.remove("selected")); };
   document.querySelectorAll(".np-label.collapse").forEach(l => l.onclick = () => l.nextElementSibling && l.classList.toggle("closed"));
   if ($("#npEdit")) $("#npEdit").onclick = () => openConfigTool(info, n);
   if ($("#npGen")) $("#npGen").onclick = () => openConfigTool(info, n);
@@ -1264,14 +1275,21 @@ function openAddStep(afterId) {
 }
 
 /* ---------- copilot ---------- */
+const COP_CHIPS = ["Add a follow-up step", "Add a condition / branch", "Make the tone stricter and more formal", "Add an Arabic translation step at the end"];
 function renderCopilot() {
+  const app = APPS.find(a => a.id === AGENT) || {};
   return `<aside class="copilot">
-    <div class="cop-h">${logo("")}<div class="nm">${t("Wakeel AI")}</div><span class="beta">${t("Beta")}</span></div>
-    <div class="cop-body" id="copBody"><div class="cop-hero">${logo("")}<h3>${t("Describe a task. Wakeel handles it.")}</h3><p>${t("Edit this flow by chatting — add a step, change a prompt, add a condition.")}</p></div></div>
-    <div class="cop-foot"><input id="copIn" placeholder="${t("Ask Wakeel to edit this flow…")}"/><button id="copSend">${IC.send}</button></div>
+    <div class="cop-h">${logo("")}<div style="flex:1"><div class="nm">${t("Build Assistant")}</div><div class="cop-sub">${t("Chat to edit")} ${esc((app.name || "this agent").slice(0, 26))}</div></div></div>
+    <div class="cop-body" id="copBody">
+      <div class="cop-hero">${logo("")}<h3>${t("Let's shape this agent together.")}</h3><p>${t("Tell me what to change and I'll update the flow — no diagrams needed.")}</p>
+        <div class="cop-chips">${COP_CHIPS.map(c => `<button class="cop-chip">${t(c)}</button>`).join("")}</div>
+      </div>
+    </div>
+    <div class="cop-foot"><input id="copIn" placeholder="${t("Ask the assistant to edit this flow…")}"/><button id="copSend">${IC.send}</button></div>
   </aside>`;
 }
 function wireCopilot() {
+  document.querySelectorAll(".cop-chip").forEach(b => b.onclick = () => { $("#copIn").value = b.textContent; send(); });
   const send = async () => {
     const t = $("#copIn").value.trim(); if (!t) return; $("#copIn").value = "";
     const body = $("#copBody");
