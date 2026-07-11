@@ -298,7 +298,7 @@ function t(s) { return LANG === "ar" ? (T[s] || s) : s; }
 let ME = null, LANG = localStorage.getItem("wakeel_lang") || "en";
 let VIEW = "home", BUILD = true, AGENT = null, ASUB = "flow", COPILOT = false;
 let APPS = [], THREAD = [], LASTGRAPH = null, LASTDESIGN = null, DEPT = "all", CFGNODE = null, ACTIVE_SKILL = null;
-const TOUR_URL = "https://claude.ai/code/artifact/02285f23-7f1c-44b9-a0dc-17aeb972463d";
+const TOUR_URL = "/wakeel/tour.html";
 
 async function api(method, path, body) {
   const r = await fetch("api/" + path, { method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined, credentials: "include" });
@@ -1798,17 +1798,15 @@ async function openProfile() {
     <h2>${esc(ME.email.split("@")[0])} <button class="x" id="pmx">×</button></h2>
     <div style="color:var(--muted);font-size:13px;margin:-8px 0 16px">${esc(ME.email)}</div>
     <button class="btn block primary" id="pmTour" style="margin-bottom:10px">${IC.play} Take the product tour</button>
-    <button class="btn block" id="pmHelp" style="margin-bottom:10px">${IC.help} Getting started</button>
-    <button class="btn block" id="pmDev" style="margin-bottom:12px">${IC.skills} Developers &amp; API</button>
+    <button class="btn block" id="pmHelp" style="margin-bottom:12px">${IC.help} Getting started</button>
     <div class="side-sub" style="padding-inline:0">Activity</div>
-    <div id="pmActs" style="max-height:230px;overflow:auto"><div class="empty-mini">…</div></div>
+    <div id="pmActs" style="max-height:250px;overflow:auto"><div class="empty-mini">…</div></div>
     <button class="btn block" style="margin-top:14px;border-color:#5a1e26;color:#ff9ba3" id="pmOut">Sign out</button>
   </div>`;
   document.body.appendChild(d);
   d.onclick = () => d.remove(); $("#pmx").onclick = () => d.remove();
   $("#pmTour").onclick = () => window.open(TOUR_URL, "_blank", "noopener");
   $("#pmHelp").onclick = () => { d.remove(); openHelp(); };
-  $("#pmDev").onclick = () => { d.remove(); VIEW = "developers"; renderShell(); };
   $("#pmOut").onclick = async () => { try { await api("POST", "logout"); } catch (e) {} ME = null; d.remove(); renderLogin(); };
   try {
     const r = await api("GET", "activity");

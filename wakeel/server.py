@@ -1418,6 +1418,8 @@ class H(BaseHTTPRequestHandler):
             return self._file("app.js", "application/javascript")
         if p == "/style.css":
             return self._file("style.css", "text/css")
+        if p == "/tour.html":
+            return self._file("tour.html", "text/html; charset=utf-8")
         if p == "/wakeel-mark.svg":
             return self._file("wakeel-mark.svg", "image/svg+xml")
         if p == "/api/health":
