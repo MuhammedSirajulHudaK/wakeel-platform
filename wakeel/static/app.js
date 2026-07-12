@@ -1653,7 +1653,7 @@ async function openReviewQueue(info) {
     card.innerHTML = `<button class="x" id="rqx">×</button>
       <div class="rq-prog"><div class="rq-bar"><i style="width:${Math.round(idx / review.length * 100)}%"></i></div><span>${t("Item")} ${idx + 1} ${t("of")} ${review.length}</span></div>
       <div class="rq-h"><span class="rq-ic">${a.escalate ? "🚩" : (a.body ? "✉️" : "📝")}</span><div><div class="rq-biz">${esc(a.business || ("Row " + a.row))}</div><div class="rq-act">${esc(a.action || "")}</div></div></div>
-      ${a.why ? `<div class="rq-why">${IC.help}<span><b>${t("Why:")}</b> ${esc(a.why)}</span></div>` : ""}
+      ${a.why ? `<div class="rq-why">${IC.help}<span><b>${t("Why:")}</b> ${esc(a.why)}${a.sop_ref ? ` <span class="sop-ref">${t("SOP")} ${esc(a.sop_ref)}</span>` : ""}</span></div>` : ""}
       ${a.summary ? `<div class="rq-summary">↩ ${esc(a.summary)}</div>` : ""}
       ${a.body ? `<div class="rq-email">
         <div class="rl-row"><span class="rl-lab">${t("To")}</span><input class="input sm" id="rqTo" value="${esc(a.to || "")}"></div>
@@ -1704,7 +1704,7 @@ async function openRunLive(info) {
       (acts.length ? acts.map((a, i) => `
       <div class="rl-card" data-i="${i}">
         <div class="rl-ch"><b>${esc(a.business || ("Row " + a.row))}</b><span class="st-pill ${a.escalate ? "bad" : "run"}">${esc(a.action || "")}</span></div>
-        ${a.why ? `<div class="rl-why">${IC.help}<span><b>${t("Why:")}</b> ${esc(a.why)}</span></div>` : ""}
+        ${a.why ? `<div class="rl-why">${IC.help}<span><b>${t("Why:")}</b> ${esc(a.why)}${a.sop_ref ? ` <span class="sop-ref">${t("SOP")} ${esc(a.sop_ref)}</span>` : ""}</span></div>` : ""}
         ${a.summary ? `<div class="rl-note">↩ ${esc(a.summary)}</div>` : ""}
         ${a.body ? `<div class="rl-email">
           <div class="rl-row"><span class="rl-lab">${t("To")}</span><input class="input sm" data-f="to" value="${esc(a.to || "")}"></div>

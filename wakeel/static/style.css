@@ -987,3 +987,6 @@ textarea.input{padding:12px 14px;min-height:auto;resize:none}
 .rl-why,.rq-why{display:flex;align-items:flex-start;gap:8px;font-size:12.5px;color:var(--muted);background:rgba(74,122,214,.08);border:1px solid rgba(74,122,214,.22);border-radius:9px;padding:8px 11px;margin:2px 0 10px;line-height:1.5}
 .rl-why svg,.rq-why svg{width:14px;height:14px;flex:none;margin-top:1px;color:#7fa8f0}
 .rl-why b,.rq-why b{color:var(--text)}
+
+/* SOP reference badge inside the "why" line */
+.sop-ref{display:inline-block;font-size:11px;font-weight:700;color:#7fa8f0;background:rgba(74,122,214,.16);border:1px solid rgba(74,122,214,.4);border-radius:6px;padding:1px 7px;white-space:nowrap;margin-inline-start:4px}

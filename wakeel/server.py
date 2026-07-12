@@ -1108,7 +1108,10 @@ def run_live_plan(sess, url, sop_text="", limit=12):
         "\"note\":\"<one-line note for the tracking sheet>\","
         "\"why\":\"<ONE short line explaining WHY this action: name the current status/date that "
         "triggered it and the SOP rule it follows, e.g. 'Status is Pending Outreach → SOP §1 requires a "
-        "quarterly report request'>\",\"escalate\":true|false}]}\n"
+        "quarterly report request'>\","
+        "\"sop_ref\":\"<the exact SOP section number(s) this action follows, copied verbatim from the "
+        "SOP's own numbering, e.g. '§1.3' or '§2.4, §2.6'; empty string if none apply>\","
+        "\"escalate\":true|false}]}\n"
         "Only include businesses that actually need action now. Keep emails concise."
     )
     user = "SOP & RULES:\n" + (sop_text or "(none provided)")[:6000] + "\n\nREGISTRY (row = position in this list, starting at 1):\n"
@@ -1212,7 +1215,10 @@ def gmail_check_replies(sess, url, sop_text="", limit=20):
         "\"new_status\":\"<one allowed status>\",\"note\":\"<one-line note for the sheet>\","
         "\"why\":\"<ONE short line explaining WHY: what in their reply + which SOP rule drove this, "
         "e.g. 'Report complete and meets 2% target → SOP §4.1, mark Completed' or 'Missing WPS "
-        "evidence → SOP §2.6, request it'>\",\"escalate\":true|false}]}"
+        "evidence → SOP §2.6, request it'>\","
+        "\"sop_ref\":\"<the exact SOP section number(s) this follows, copied verbatim from the SOP's "
+        "numbering, e.g. '§2.6' or '§4.1'; empty string if none>\","
+        "\"escalate\":true|false}]}"
     )
     user = "SOP & RULES:\n" + (sop_text or "(none)")[:5000] + "\n\nREPLIES:\n"
     for r in found:
