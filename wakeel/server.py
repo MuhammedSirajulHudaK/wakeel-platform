@@ -327,6 +327,12 @@ def design_to_instruction(d):
         lines.append("\nTriggers: " + "; ".join(d["triggers"]))
     if d.get("guardrails"):
         lines.append("\nGuardrails: " + "; ".join(d["guardrails"]))
+    sop = (d.get("sop") or {}).get("text", "").strip()
+    if sop:
+        name = (d.get("sop") or {}).get("name", "SOP & rules")
+        lines.append(f"\nOFFICIAL SOP / RULES the agent MUST evaluate responses against ({name}). "
+                     "Use these exact rules to judge completeness and compliance, quote the relevant rule "
+                     "when flagging a gap, and never invent rules beyond these:\n" + sop[:8000])
     return "\n".join(lines).strip()
 
 
@@ -603,6 +609,37 @@ def service_connect(sess, service, connect=True):
         pass
     log_act(sess, "connect", service + ("" if connect else " (disconnected)"))
     return {"ok": True, "service": service, "connected": connect}
+
+
+# ---- Uploaded SOP / rules (so the agent evaluates against REAL policy text) ----
+SOP_FILE = os.path.join(HERE, "sops.json")
+
+
+def _sop_all():
+    try:
+        with open(SOP_FILE) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def sop_save(sess, key, name, text):
+    key = (key or "").strip()
+    if not key or not (text or "").strip():
+        return {"error": "missing key or text"}
+    allc = _sop_all()
+    allc.setdefault(sess["email"], {})[key] = {"name": name or "SOP & rules", "text": text[:20000], "ts": int(time.time())}
+    try:
+        with open(SOP_FILE, "w") as f:
+            json.dump(allc, f)
+    except OSError:
+        pass
+    log_act(sess, "data", "SOP · " + (name or key)[:50])
+    return {"ok": True, "key": key, "name": name, "chars": len(text)}
+
+
+def sop_get(sess, key):
+    return _sop_all().get(sess["email"], {}).get((key or "").strip(), {})
 
 
 # ==== REAL Google OAuth (per-service scopes) ====
@@ -2174,6 +2211,9 @@ class H(BaseHTTPRequestHandler):
                 return self._send(200, google_oauth_start(sess, urllib.parse.unquote(q.get("service", ""))))
             if p == "/api/google/verify":
                 return self._send(200, google_verify(sess))
+            if p == "/api/sop":
+                q = dict(x.split("=", 1) for x in (self.path.split("?", 1) + [""])[1].split("&") if "=" in x)
+                return self._send(200, sop_get(sess, urllib.parse.unquote(q.get("key", ""))))
             if p == "/api/tasks":
                 return self._send(200, tasks_list(sess))
             if p == "/api/task":
@@ -2331,6 +2371,8 @@ class H(BaseHTTPRequestHandler):
                 return self._send(200, team_run(sess, b.get("id", ""), b.get("input", "")))
             if p == "/api/service-connect":
                 return self._send(200, service_connect(sess, b.get("service", ""), b.get("connect", True)))
+            if p == "/api/sop-save":
+                return self._send(200, sop_save(sess, b.get("key", ""), b.get("name", ""), b.get("text", "")))
             if p == "/api/oauth/config":
                 return self._send(200, oauth_config_set(b.get("client_id", ""), b.get("client_secret", "")))
             if p == "/api/security-role":

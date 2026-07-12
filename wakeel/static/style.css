@@ -849,3 +849,13 @@ textarea.input{padding:12px 14px;min-height:auto;resize:none}
 .gs-copy{display:flex;gap:8px;align-items:center;padding-inline-start:34px;margin-bottom:9px}
 .gs-copy .input{flex:1;font-family:var(--mono);font-size:12.5px}
 .gs-modal code{font-size:.85em}
+
+/* ---- SOP / rules upload ---- */
+.sop-btn{background:transparent;border:1px dashed var(--line);color:var(--muted);font-weight:600}
+.sop-btn:hover{border-color:var(--wakeel);color:var(--text)}
+.sop-btn svg{width:14px;height:14px}
+.sop-drop{display:flex;align-items:center;gap:13px;padding:15px 16px;border:1.5px dashed var(--line);border-radius:12px;background:var(--panel-2);cursor:pointer;margin-bottom:14px;transition:.15s}
+.sop-drop:hover,.sop-drop.over{border-color:var(--wakeel);background:rgba(0,168,98,.06)}
+.sop-drop>svg{width:24px;height:24px;color:var(--wakeel);flex:none}
+.sop-drop b{font-size:14px}
+.sop-hint{font-size:11.5px;color:var(--faint);margin-top:2px}

@@ -669,11 +669,18 @@ function designCard(m) {
   const svcBtn = (s) => isConn(s)
     ? `<span class="cn-tag ok">${IC.check} ${esc(s)} ${t("connected")}</span>`
     : `<button class="btn xs cn-inline" data-connect="${esc(s)}"><span class="cn-glg">${L[LOGO_MAP[s]] || IC.plus}</span> ${t("Connect")} ${esc(s)}</button>`;
+  // steps that check responses against rules/SOPs also let you UPLOAD the SOP itself
+  const DOC_SVCS = new Set(["Google Drive", "Google Docs", "Microsoft SharePoint", "OneDrive"]);
+  const isSopStep = (text, svc) => DOC_SVCS.has(svc) || /\bsop\b|policy|policies|\brule|checklist|guideline|instruction/i.test(text || "");
+  const sopBtn = () => (d.sop && d.sop.text)
+    ? `<span class="cn-tag ok" data-sopview="1" style="cursor:pointer">${IC.check} ${t("Rules uploaded")}: ${esc((d.sop.name || "SOP").slice(0, 28))}</span>`
+    : `<button class="btn xs sop-btn" data-sop="1">${IC.upload} ${t("Upload SOP & rules")}</button>`;
   function connectSummary() {
-    if (!need.length) return "";
-    const n = need.filter(isConn).length, all = n === need.length;
-    const rows = need.map(s => `<div class="cn-sumrow"><span class="cn-schip ${isConn(s) ? "on" : ""}">${brandLogo(s, 18)}${esc(s)}</span>${svcBtn(s)}</div>`).join("");
-    return `<details class="cn-summary" ${all ? "" : "open"}><summary><span class="cn-plug">${IC.integrations}</span>${all ? t("All services connected") : t("Connect your services")}<span class="cn-count ${all ? "ok" : ""}">${n}/${need.length}</span></summary><div class="cn-sumlist">${rows}</div></details>`;
+    if (!need.length && !(d.sop && d.sop.text)) return "";
+    const n = need.filter(isConn).length, all = need.length ? n === need.length : true;
+    let rows = need.map(s => `<div class="cn-sumrow"><span class="cn-schip ${isConn(s) ? "on" : ""}">${brandLogo(s, 18)}${esc(s)}</span>${svcBtn(s)}</div>`).join("");
+    rows += `<div class="cn-sumrow"><span class="cn-schip ${d.sop && d.sop.text ? "on" : ""}">${IC.book} ${t("SOP & rules")}</span>${sopBtn()}</div>`;
+    return `<details class="cn-summary" ${all && d.sop && d.sop.text ? "" : "open"}><summary><span class="cn-plug">${IC.integrations}</span>${t("Connect your services")}<span class="cn-count ${all ? "ok" : ""}">${n}/${need.length}</span></summary><div class="cn-sumlist">${rows}</div></details>`;
   }
   function syncPlain() {
     const host = el.querySelector(".ds-plain-host"); if (!host) return;
@@ -681,10 +688,12 @@ function designCard(m) {
       <div class="ds-plain">
         <div class="ds-plain-h"><span class="dpl-badge">${IC.spark}</span><div><div class="dpl-t">${t("Here's what I'll do for you")}</div>${pl.intro ? `<div class="dpl-intro">${esc(pl.intro)}</div>` : ""}</div></div>
         ${connectSummary()}
-        <div class="dpl-steps">${pl.steps.map((s, i) => { const svc = svcForStep(s.text); return `<div class="dpl-step"><span class="dpl-ico">${esc(s.icon || "•")}</span><span class="dpl-n">${i + 1}</span><div class="dpl-body"><span class="dpl-x">${esc(s.text || "")}</span>${svc ? `<div class="dpl-cn">${svcBtn(svc)}</div>` : ""}</div></div>`; }).join("")}</div>
+        <div class="dpl-steps">${pl.steps.map((s, i) => { const svc = svcForStep(s.text); const sop = isSopStep(s.text, svc); return `<div class="dpl-step"><span class="dpl-ico">${esc(s.icon || "•")}</span><span class="dpl-n">${i + 1}</span><div class="dpl-body"><span class="dpl-x">${esc(s.text || "")}</span>${(svc || sop) ? `<div class="dpl-cn">${svc ? svcBtn(svc) : ""}${sop ? sopBtn() : ""}</div>` : ""}</div></div>`; }).join("")}</div>
         ${pl.reassurance ? `<div class="dpl-safe">${IC.shield} ${esc(pl.reassurance)}</div>` : ""}
       </div>` : "";
     host.querySelectorAll("[data-connect]").forEach(b => b.onclick = () => connectSvc(b.dataset.connect, () => syncPlain()));
+    host.querySelectorAll("[data-sop]").forEach(b => b.onclick = () => openSopUpload(d, () => syncPlain()));
+    host.querySelectorAll("[data-sopview]").forEach(b => b.onclick = () => openSopUpload(d, () => syncPlain()));
   }
   el.innerHTML = `
     <div class="ds-intro">${t("Here's what I'll set up for your")} <b>${esc(d.name)}</b>${t(". Have a look, and tell me if you'd like anything changed before I build it.")}</div>
@@ -845,6 +854,43 @@ function openGoogleSetup(onSaved) {
     catch (e) { $("#gsErr").textContent = e.message; $("#gsSave").disabled = false; }
   };
 }
+// upload the SOP / rules the agent must evaluate responses against (real policy text)
+function openSopUpload(d, onDone) {
+  const cur = d.sop || {};
+  const back = document.createElement("div"); back.className = "modal-back";
+  back.innerHTML = `<div class="modal fade" style="width:560px" onclick="event.stopPropagation()">
+    <div style="display:flex;align-items:center"><h2 style="flex:1">${IC.book} ${t("Upload SOP & rules")}</h2><button class="x" id="spx">×</button></div>
+    <p class="page-sub" style="margin-top:-4px">${t("Give the agent the actual policy it must check responses against — upload a file or paste the rules. The agent will quote these exact rules when it flags a gap.")}</p>
+    <div class="sop-drop" id="spDrop">${IC.upload}<div><b>${t("Choose a file")}</b> <span style="color:var(--muted-2)">${t("or drag it here")}</span><div class="sop-hint">${t(".txt, .md, .csv — or just paste below")}</div></div></div>
+    <input type="file" id="spFile" accept=".txt,.md,.markdown,.csv,.json,.text" hidden>
+    <div class="field"><label>${t("SOP name")}</label><input class="input" id="spName" value="${esc(cur.name || "Emiratization SOP & rules")}"></div>
+    <div class="field"><label>${t("Rules / SOP text")}</label><textarea class="input" id="spText" rows="9" placeholder="${t("Paste the SOP or the checklist of rules the agent must evaluate against…")}">${esc(cur.text || "")}</textarea></div>
+    <button class="btn primary block" id="spSave">${IC.check} ${t("Save rules")}</button>
+    <div class="err" id="spErr"></div></div>`;
+  document.body.appendChild(back); back.onclick = () => back.remove(); $("#spx").onclick = () => back.remove();
+  const drop = $("#spDrop"), file = $("#spFile");
+  const readFile = (f) => {
+    if (!f) return;
+    if (f.size > 2 * 1024 * 1024) { $("#spErr").textContent = "File too large (max 2 MB) — paste the text instead."; return; }
+    const r = new FileReader();
+    r.onload = () => { $("#spText").value = String(r.result || "").slice(0, 20000); if (!$("#spName").value.trim()) $("#spName").value = f.name.replace(/\.[^.]+$/, ""); $("#spErr").textContent = ""; };
+    r.readAsText(f);
+  };
+  drop.onclick = () => file.click();
+  file.onchange = () => readFile(file.files[0]);
+  ["dragover", "dragenter"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
+  ["dragleave"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
+  drop.addEventListener("drop", e => { e.preventDefault(); drop.classList.remove("over"); const f = e.dataTransfer.files[0]; if (f) readFile(f); });
+  $("#spSave").onclick = async () => {
+    const name = $("#spName").value.trim() || "SOP & rules", text = $("#spText").value.trim();
+    if (!text) { $("#spErr").textContent = "Paste or upload the SOP text first."; return; }
+    $("#spSave").disabled = true;
+    d.sop = { name, text };
+    try { await api("POST", "sop-save", { key: d.name || name, name, text }); } catch (e) {}
+    back.remove(); toast("Rules saved — the agent will evaluate against them"); onDone && onDone();
+  };
+}
+
 // figure out exactly which real services an agent design needs (skip AI models)
 function neededServices(d) {
   const known = Object.keys(LOGO_MAP);
