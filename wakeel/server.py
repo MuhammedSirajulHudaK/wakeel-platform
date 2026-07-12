@@ -1015,17 +1015,22 @@ def _col_letter(i):
 
 
 def gmail_send(sess, to, subject, body):
-    """Send a REAL email from the connected Gmail account."""
+    """Send a REAL email from the connected Gmail account. Builds the MIME message
+    with Python's email library so non-ASCII (Arabic, en-dashes) is properly
+    RFC 2047 header-encoded and UTF-8 body-encoded — no mojibake."""
     import base64
+    from email.mime.text import MIMEText
+    from email.header import Header
     if not to or "@" not in to:
         return {"ok": False, "error": "No valid recipient address."}
     try:
         at = google_access_token(sess)
     except Exception:
         return {"ok": False, "error": "Connect Gmail first."}
-    mime = ("To: %s\r\nSubject: %s\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n%s"
-            % (to, subject or "", body or ""))
-    raw = base64.urlsafe_b64encode(mime.encode("utf-8")).decode()
+    msg = MIMEText(body or "", "plain", "utf-8")
+    msg["To"] = to
+    msg["Subject"] = Header(subject or "", "utf-8")
+    raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
     data = json.dumps({"raw": raw}).encode()
     req = urllib.request.Request("https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
                                  data=data, headers={"Authorization": "Bearer " + at,
