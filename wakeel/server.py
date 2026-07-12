@@ -267,6 +267,49 @@ def _layout_vertical(graph, v_gap=240, h_gap=380, top=80, cx=420):
         nd["position"] = {"x": x, "y": y}
         if "positionAbsolute" in nd:
             nd["positionAbsolute"] = {"x": x, "y": y}
+        # clear any selected/dragging flags so the canvas opens clean (no node panel auto-open)
+        nd["selected"] = False
+        if isinstance(nd.get("data"), dict):
+            nd["data"].pop("selected", None)
+    for e in graph.get("edges") or []:
+        e["selected"] = False
+    return graph
+
+
+def _simplify_nodes(graph):
+    """Rewrite each node's title + description into PLAIN, non-technical language a
+    citizen understands — so the diagram reads like a simple flowchart, not a dev
+    tool. Only display fields change; the graph the Dify backend runs is untouched."""
+    nodes = graph.get("nodes") or []
+    items = [{"id": n.get("id"), "title": (n.get("data") or {}).get("title", ""),
+              "type": (n.get("data") or {}).get("type", "")} for n in nodes if n.get("id")]
+    if not items:
+        return graph
+    sys_p = (
+        "You relabel steps of a government assistant's workflow so a NON-TECHNICAL person "
+        "understands them at a glance (like Beam AI's simple step cards). For each step return a "
+        "short human 'title' (2-4 words, Title Case, no jargon) and a 'desc' (ONE short plain "
+        "sentence, max 12 words, first person, e.g. 'I email the business for their report'). "
+        "NEVER use words like node, LLM, model, tool, API, variable, prompt, schema, JSON, workflow, "
+        "if/else, classifier. Keep the meaning of the original title. "
+        "Return ONLY JSON mapping each id to {\"title\":...,\"desc\":...}."
+    )
+    try:
+        raw = _openai_chat([{"role": "system", "content": sys_p},
+                            {"role": "user", "content": json.dumps(items)[:6000]}])
+        mp = _extract_json(raw)
+    except Exception:
+        return graph
+    if not isinstance(mp, dict):
+        return graph
+    for n in nodes:
+        info = mp.get(n.get("id"))
+        if isinstance(info, dict):
+            d = n.setdefault("data", {})
+            if info.get("title"):
+                d["title"] = str(info["title"])[:40]
+            if info.get("desc"):
+                d["desc"] = str(info["desc"])[:100]
     return graph
 
 
@@ -276,7 +319,7 @@ def generate(sess, mode, instruction, current_graph=None):
     if current_graph:
         payload["current_graph"] = current_graph
     res = dify(sess, "POST", "/workflow-generate", payload)
-    graph = _layout_vertical(res.get("graph") or {})
+    graph = _simplify_nodes(_layout_vertical(res.get("graph") or {}))
     nodes = [{"type": (n.get("data") or {}).get("type"), "title": (n.get("data") or {}).get("title")}
              for n in graph.get("nodes", [])]
     return {"graph": graph, "message": res.get("message", ""), "nodes": nodes, "error": res.get("error") or ""}
@@ -285,7 +328,7 @@ def generate(sess, mode, instruction, current_graph=None):
 def relayout_agent(sess, app_id):
     """Re-lay-out an EXISTING agent's diagram vertically and republish."""
     draft = dify(sess, "GET", f"/apps/{app_id}/workflows/draft")
-    graph = _layout_vertical(draft.get("graph") or {})
+    graph = _simplify_nodes(_layout_vertical(draft.get("graph") or {}))
     dify(sess, "POST", f"/apps/{app_id}/workflows/draft", {
         "graph": graph, "features": draft.get("features") or {},
         "environment_variables": draft.get("environment_variables") or [],

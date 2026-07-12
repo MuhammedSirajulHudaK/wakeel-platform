@@ -161,6 +161,17 @@
     var tries = 0;
     var iv = setInterval(function () { if (hideChrome() || tries++ > 30) clearInterval(iv); }, 400);
     new MutationObserver(function () { hideChrome(); }).observe(document.documentElement, { childList: true, subtree: true });
+    // fit the whole flow into view (Dify uses custom controls, so try several selectors).
+    // The auto-opening node panel is handled server-side by clearing node selection.
+    function fit() {
+      var b = document.querySelector(".react-flow__controls-fitview") ||
+              document.querySelector('[data-testid="rf__controls-fitview"]') ||
+              document.querySelector('[aria-label*="fit" i],[title*="fit view" i]');
+      if (b) { try { b.click(); } catch (e) {} }
+    }
+    var fitN = 0;
+    var fitIv = setInterval(function () { fit(); if (++fitN > 6) clearInterval(fitIv); }, 500);
+    window.addEventListener("resize", fit);
   }
 
   // ---- Build Assistant on app pages ----
