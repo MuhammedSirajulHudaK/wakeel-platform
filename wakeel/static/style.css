@@ -901,3 +901,4 @@ textarea.input{padding:12px 14px;min-height:auto;resize:none}
 .rl-acts{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
 .rl-msg{font-size:12.5px}
 .input.sm{min-height:34px}
+.rl-btns{display:flex;gap:9px;margin:10px 0 4px}

@@ -1116,10 +1116,114 @@ def run_live_plan(sess, url, sop_text="", limit=12):
         plan = _extract_json(raw)
     except Exception as e:
         return {"ok": False, "error": "Couldn't plan: " + str(e)[:140]}
+    actions = (plan.get("actions") or [])[:limit]
+    for a in actions:
+        a["updates"] = {"Compliance Status": a.get("new_status", ""), "Last Outreach Date": today,
+                        "Next Action": a.get("action", ""), "Notes": a.get("note", "")}
     log_act(sess, "run", "live plan · %d businesses" % len(records))
     return {"ok": True, "sheet_title": data.get("sheet_title"), "url": data.get("url"),
-            "total": data.get("total"), "columns": cols,
-            "actions": (plan.get("actions") or [])[:limit]}
+            "total": data.get("total"), "columns": cols, "actions": actions}
+
+
+def _gmail_text(payload):
+    """Extract the plain-text body from a Gmail message payload."""
+    import base64
+    import re
+
+    def walk(p):
+        mt = p.get("mimeType", "")
+        body = (p.get("body") or {}).get("data")
+        if mt == "text/plain" and body:
+            return base64.urlsafe_b64decode(body + "===").decode("utf-8", "ignore")
+        for sub in p.get("parts") or []:
+            r = walk(sub)
+            if r:
+                return r
+        if mt == "text/html" and body:
+            html = base64.urlsafe_b64decode(body + "===").decode("utf-8", "ignore")
+            return re.sub(r"<[^>]+>", " ", html)
+        return ""
+    return walk(payload or {})
+
+
+def gmail_check_replies(sess, url, sop_text="", limit=20):
+    """The INBOUND half of the cycle: find replies in Gmail from the registry
+    businesses, evaluate each against the SOP, and draft the update + acknowledgment
+    / request-for-missing / escalation. Advisory — the officer approves each."""
+    import re
+    data = sheets_read(sess, url, preview=500)
+    if not data.get("ok"):
+        return data
+    cols, rows = data["columns"], data["rows"]
+    email_idx = next((i for i, c in enumerate(cols) if "email" in c.lower()), 1)
+    reg = {}
+    for i, r in enumerate(rows, 1):
+        em = (r[email_idx].strip().lower() if len(r) > email_idx and r[email_idx] else "")
+        if em:
+            reg[em] = {"row": i, "rec": dict(zip(cols, r))}
+    if not reg:
+        return {"ok": False, "error": "No contact emails found in the sheet."}
+    try:
+        at = google_access_token(sess)
+    except Exception:
+        return {"ok": False, "error": "Connect Gmail first."}
+
+    def g(u):
+        req = urllib.request.Request(u, headers={"Authorization": "Bearer " + at})
+        return json.loads(urllib.request.urlopen(req, timeout=25).read())
+
+    q = urllib.parse.quote("in:inbox newer_than:60d")
+    try:
+        lst = g(f"https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=40&q={q}").get("messages", []) or []
+    except Exception as e:
+        return {"ok": False, "error": "Couldn't read Gmail: " + str(e)[:140]}
+    found, seen = [], set()
+    for m in lst:
+        try:
+            msg = g(f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{m['id']}?format=full")
+        except Exception:
+            continue
+        hdrs = {h["name"].lower(): h["value"] for h in (msg.get("payload") or {}).get("headers", [])}
+        mm = re.search(r"[\w.+-]+@[\w.-]+", hdrs.get("from", ""))
+        fem = mm.group(0).lower() if mm else ""
+        if fem in reg and fem not in seen:
+            seen.add(fem)
+            found.append({"email": fem, "row": reg[fem]["row"], "rec": reg[fem]["rec"],
+                          "subject": hdrs.get("subject", ""), "body": _gmail_text(msg.get("payload"))[:2500]})
+        if len(found) >= limit:
+            break
+    if not found:
+        return {"ok": True, "actions": [], "replies_found": 0, "url": data["url"], "total": data.get("total"),
+                "note": "No new replies from registry businesses were found in your inbox."}
+    today = time.strftime("%Y-%m-%d", time.gmtime())
+    sys_p = (
+        "You are a MoHRE Emiratization compliance assistant (advisory only). For each business "
+        "REPLY, evaluate it against the SOP: what did they submit, what (if anything) is missing, "
+        "are they compliant? Allowed statuses: Response Received, Incomplete Submission, Under Review, "
+        "Follow-up Sent, Escalation Required, Completed.\n"
+        f"Today is {today}.\n"
+        "Return ONLY JSON: {\"actions\":[{\"row\":<the row given>,\"business\":\"\",\"to\":\"<their email>\","
+        "\"action\":\"<short: Acknowledge / Request missing info / Escalate / Mark complete>\","
+        "\"summary\":\"<1 line: what they sent>\",\"subject\":\"<reply subject>\","
+        "\"body\":\"<the reply email in MoHRE tone (English + Arabic), or empty if none needed>\","
+        "\"new_status\":\"<one allowed status>\",\"note\":\"<one-line note for the sheet>\","
+        "\"escalate\":true|false}]}"
+    )
+    user = "SOP & RULES:\n" + (sop_text or "(none)")[:5000] + "\n\nREPLIES:\n"
+    for r in found:
+        user += (f"row={r['row']} business={r['rec'].get('Business Name','')} from={r['email']}\n"
+                 f"subject: {r['subject']}\nmessage:\n{r['body'][:1500]}\n---\n")
+    try:
+        raw = _openai_chat([{"role": "system", "content": sys_p}, {"role": "user", "content": user[:9000]}])
+        plan = _extract_json(raw)
+    except Exception as e:
+        return {"ok": False, "error": "Couldn't evaluate replies: " + str(e)[:140]}
+    actions = (plan.get("actions") or [])[:limit]
+    for a in actions:
+        a["updates"] = {"Compliance Status": a.get("new_status", ""), "Last Response Date": today,
+                        "Next Action": a.get("action", ""), "Notes": a.get("note", "")}
+    log_act(sess, "run", "checked replies · %d found" % len(found))
+    return {"ok": True, "replies_found": len(found), "url": data["url"], "total": data.get("total"), "actions": actions}
 
 
 def models_list(sess):
@@ -2702,6 +2806,8 @@ class H(BaseHTTPRequestHandler):
                 return self._send(200, sheets_read(sess, b.get("url", "")))
             if p == "/api/run-live-plan":
                 return self._send(200, run_live_plan(sess, b.get("url", ""), b.get("sop", "")))
+            if p == "/api/gmail-check-replies":
+                return self._send(200, gmail_check_replies(sess, b.get("url", ""), b.get("sop", "")))
             if p == "/api/gmail-send":
                 return self._send(200, gmail_send(sess, b.get("to", ""), b.get("subject", ""), b.get("body", "")))
             if p == "/api/sheet-update":
