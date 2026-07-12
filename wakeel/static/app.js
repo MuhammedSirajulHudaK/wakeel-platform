@@ -675,6 +675,11 @@ function designCard(m) {
   const sopBtn = () => (d.sop && d.sop.text)
     ? `<span class="cn-tag ok" data-sopview="1" style="cursor:pointer">${IC.check} ${t("Rules uploaded")}: ${esc((d.sop.name || "SOP").slice(0, 28))}</span>`
     : `<button class="btn xs sop-btn" data-sop="1">${IC.upload} ${t("Upload SOP & rules")}</button>`;
+  // once a spreadsheet service is connected, point it at the SPECIFIC sheet (paste the link)
+  const SHEET_SVCS = new Set(["Google Sheets", "Excel on SharePoint"]);
+  const sheetBtn = (s) => !isConn(s) ? "" : ((d.sheet && d.sheet.url)
+    ? `<span class="cn-tag ok" data-sheetview="1" style="cursor:pointer">${IC.projects} ${t("Sheet")}: ${esc((d.sheet.title || "linked").slice(0, 24))}</span>`
+    : `<button class="btn xs sop-btn" data-sheet="1">${IC.projects} ${t("Link your sheet")}</button>`);
   function connectSummary() {
     if (!need.length && !(d.sop && d.sop.text)) return "";
     const n = need.filter(isConn).length, all = need.length ? n === need.length : true;
@@ -688,12 +693,13 @@ function designCard(m) {
       <div class="ds-plain">
         <div class="ds-plain-h"><span class="dpl-badge">${IC.spark}</span><div><div class="dpl-t">${t("Here's what I'll do for you")}</div>${pl.intro ? `<div class="dpl-intro">${esc(pl.intro)}</div>` : ""}</div></div>
         ${connectSummary()}
-        <div class="dpl-steps">${pl.steps.map((s, i) => { const svc = svcForStep(s.text); const sop = isSopStep(s.text, svc); return `<div class="dpl-step"><span class="dpl-ico">${esc(s.icon || "•")}</span><span class="dpl-n">${i + 1}</span><div class="dpl-body"><span class="dpl-x">${esc(s.text || "")}</span>${(svc || sop) ? `<div class="dpl-cn">${svc ? svcBtn(svc) : ""}${sop ? sopBtn() : ""}</div>` : ""}</div></div>`; }).join("")}</div>
+        <div class="dpl-steps">${pl.steps.map((s, i) => { const svc = svcForStep(s.text); const sop = isSopStep(s.text, svc); const sheet = svc && SHEET_SVCS.has(svc); return `<div class="dpl-step"><span class="dpl-ico">${esc(s.icon || "•")}</span><span class="dpl-n">${i + 1}</span><div class="dpl-body"><span class="dpl-x">${esc(s.text || "")}</span>${(svc || sop) ? `<div class="dpl-cn">${svc ? svcBtn(svc) : ""}${sheet ? sheetBtn(svc) : ""}${sop ? sopBtn() : ""}</div>` : ""}</div></div>`; }).join("")}</div>
         ${pl.reassurance ? `<div class="dpl-safe">${IC.shield} ${esc(pl.reassurance)}</div>` : ""}
       </div>` : "";
     host.querySelectorAll("[data-connect]").forEach(b => b.onclick = () => connectSvc(b.dataset.connect, () => syncPlain()));
     host.querySelectorAll("[data-sop]").forEach(b => b.onclick = () => openSopUpload(d, () => syncPlain()));
     host.querySelectorAll("[data-sopview]").forEach(b => b.onclick = () => openSopUpload(d, () => syncPlain()));
+    host.querySelectorAll("[data-sheet],[data-sheetview]").forEach(b => b.onclick = () => openSheetLink(d, () => syncPlain()));
   }
   el.innerHTML = `
     <div class="ds-intro">${t("Here's what I'll set up for your")} <b>${esc(d.name)}</b>${t(". Have a look, and tell me if you'd like anything changed before I build it.")}</div>
@@ -917,6 +923,41 @@ function openSopUpload(d, onDone) {
     try { await api("POST", "sop-save", { key: d.name || name, name, text }); } catch (e) {}
     back.remove(); toast("Rules saved — the agent will evaluate against them"); onDone && onDone();
   };
+}
+
+// point the agent at the SPECIFIC Google Sheet and read it LIVE (real rows)
+function openSheetLink(d, onDone) {
+  const cur = d.sheet || {};
+  const back = document.createElement("div"); back.className = "modal-back";
+  back.innerHTML = `<div class="modal fade" style="width:620px" onclick="event.stopPropagation()">
+    <div style="display:flex;align-items:center"><h2 style="flex:1">${IC.projects} ${t("Link your registry sheet")}</h2><button class="x" id="shx">×</button></div>
+    <p class="page-sub" style="margin-top:-4px">${t("Paste the link to your Google Sheet (the business registry). Wakeel reads it live with the Google access you connected — no upload, no copy.")}</p>
+    <div class="field"><label>${t("Google Sheet link")}</label>
+      <div class="gs-copy"><input class="input" id="shUrl" value="${esc(cur.url || "")}" placeholder="https://docs.google.com/spreadsheets/d/…"><button class="btn" id="shRead">${IC.search} ${t("Read it")}</button></div></div>
+    <div id="shPreview"></div>
+    <div class="err" id="shErr"></div></div>`;
+  document.body.appendChild(back); back.onclick = () => back.remove(); $("#shx").onclick = () => back.remove();
+  const doRead = async () => {
+    const url = $("#shUrl").value.trim(); if (!url) { $("#shErr").textContent = "Paste your Google Sheet link first."; return; }
+    $("#shErr").textContent = ""; $("#shRead").disabled = true; $("#shRead").innerHTML = `<span class="spin"></span> ${t("Reading…")}`;
+    $("#shPreview").innerHTML = `<div class="empty-mini" style="padding:14px">${t("Opening your sheet…")}</div>`;
+    try {
+      const r = await api("POST", "sheets-read", { url });
+      $("#shRead").disabled = false; $("#shRead").innerHTML = `${IC.search} ${t("Read it")}`;
+      if (!r.ok) { $("#shPreview").innerHTML = ""; $("#shErr").textContent = r.error || "Couldn't read that sheet."; return; }
+      const cols = r.columns || [], rows = r.rows || [];
+      $("#shPreview").innerHTML = `
+        <div class="sh-head">${IC.check} <b>${esc(r.sheet_title || "Sheet")}</b> <span>· ${t("tab")} ${esc(r.tab || "")} · <b>${r.total}</b> ${t("rows")}</span></div>
+        <div class="sh-tblwrap"><table class="sh-tbl"><thead><tr>${cols.map(c => `<th>${esc(c)}</th>`).join("")}</tr></thead>
+          <tbody>${rows.map(row => `<tr>${cols.map((_, i) => `<td>${esc((row[i] != null ? String(row[i]) : "")).slice(0, 40)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
+        <div class="sh-note">${t("Showing the first")} ${rows.length} ${t("of")} ${r.total} ${t("rows — read live from your Google account.")}</div>
+        <button class="btn primary block" id="shUse" style="margin-top:12px">${IC.check} ${t("Use this sheet")}</button>`;
+      $("#shUse").onclick = () => { d.sheet = { url: r.url, title: r.sheet_title, tab: r.tab, columns: cols }; back.remove(); toast("Registry sheet linked"); onDone && onDone(); };
+    } catch (e) { $("#shRead").disabled = false; $("#shRead").innerHTML = `${IC.search} ${t("Read it")}`; $("#shErr").textContent = e.message; $("#shPreview").innerHTML = ""; }
+  };
+  $("#shRead").onclick = doRead;
+  $("#shUrl").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); doRead(); } });
+  setTimeout(() => $("#shUrl").focus(), 60);
 }
 
 // figure out exactly which real services an agent design needs (skip AI models)

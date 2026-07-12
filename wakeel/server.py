@@ -327,6 +327,11 @@ def design_to_instruction(d):
         lines.append("\nTriggers: " + "; ".join(d["triggers"]))
     if d.get("guardrails"):
         lines.append("\nGuardrails: " + "; ".join(d["guardrails"]))
+    sheet = d.get("sheet") or {}
+    if sheet.get("url"):
+        lines.append(f"\nLive Google Sheet registry to read and update: {sheet['url']}"
+                     + (f" (tab: {sheet.get('tab')})" if sheet.get("tab") else "")
+                     + (f"; columns: {', '.join(sheet.get('columns', []))}" if sheet.get("columns") else ""))
     sop = (d.get("sop") or {}).get("text", "").strip()
     if sop:
         name = (d.get("sop") or {}).get("name", "SOP & rules")
@@ -798,6 +803,55 @@ def oauth_config_set(client_id, client_secret):
         return {"ok": True, "configured": bool(client_id.strip())}
     except OSError as e:
         return {"error": str(e)}
+
+
+def _sheet_id(url):
+    import re
+    u = (url or "").strip()
+    m = re.search(r"/spreadsheets/d/([a-zA-Z0-9_-]+)", u)
+    if m:
+        return m.group(1)
+    if re.match(r"^[a-zA-Z0-9_-]{20,}$", u):
+        return u
+    return ""
+
+
+def sheets_read(sess, url, preview=8):
+    """LIVE read of the user's real Google Sheet using their connected token."""
+    sid = _sheet_id(url)
+    if not sid:
+        return {"ok": False, "error": "That doesn't look like a Google Sheet link. Open your sheet and copy the URL from the browser bar."}
+    try:
+        at = google_access_token(sess)
+    except Exception:
+        return {"ok": False, "error": "Connect Google Sheets first, then paste the link."}
+
+    def g(u):
+        req = urllib.request.Request(u, headers={"Authorization": "Bearer " + at})
+        return json.loads(urllib.request.urlopen(req, timeout=25).read())
+
+    try:
+        meta = g(f"https://sheets.googleapis.com/v4/spreadsheets/{sid}?fields=properties.title,sheets.properties.title")
+    except urllib.error.HTTPError as e:
+        if e.code in (401, 403):
+            return {"ok": False, "error": "This Google account can't open that sheet. Check it's the right link and that the account you connected has access."}
+        if e.code == 404:
+            return {"ok": False, "error": "No sheet found at that link."}
+        return {"ok": False, "error": f"Couldn't open the sheet (HTTP {e.code})."}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:160]}
+    title = meta.get("properties", {}).get("title", "")
+    tab = (meta.get("sheets") or [{}])[0].get("properties", {}).get("title", "Sheet1")
+    try:
+        vals = g(f"https://sheets.googleapis.com/v4/spreadsheets/{sid}/values/{urllib.parse.quote(tab + '!A1:Z2000')}").get("values", [])
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:160]}
+    cols = vals[0] if vals else []
+    rows = vals[1:] if len(vals) > 1 else []
+    log_act(sess, "data", "read sheet · " + title[:40])
+    return {"ok": True, "sheet_title": title, "tab": tab, "columns": cols,
+            "rows": [r[:len(cols) or 26] for r in rows[:preview]], "total": len(rows),
+            "sheet_id": sid, "url": (url or "").strip()}
 
 
 def models_list(sess):
@@ -2373,6 +2427,8 @@ class H(BaseHTTPRequestHandler):
                 return self._send(200, service_connect(sess, b.get("service", ""), b.get("connect", True)))
             if p == "/api/sop-save":
                 return self._send(200, sop_save(sess, b.get("key", ""), b.get("name", ""), b.get("text", "")))
+            if p == "/api/sheets-read":
+                return self._send(200, sheets_read(sess, b.get("url", "")))
             if p == "/api/oauth/config":
                 return self._send(200, oauth_config_set(b.get("client_id", ""), b.get("client_secret", "")))
             if p == "/api/security-role":
