@@ -217,25 +217,35 @@ def dify_sse(sess, path, body):
 
 # ---------------- platform actions ----------------
 
-def _layout_vertical(graph, v_gap=240, h_gap=380, top=80, cx=420):
-    """Lay the workflow out TOP-TO-BOTTOM with generous spacing so nodes never
-    overlap. Levels come from the longest path from the start node; branches at
-    the same level spread horizontally."""
-    from collections import deque, defaultdict
-    nodes = graph.get("nodes") or []
+def _layout_vertical(graph, v_gap=170, h_gap=320, top=60, left=80):
+    """Lay the workflow out as a clean TOP-TO-BOTTOM TREE: parents centered over
+    their children, a linear chain stays in one straight column, and branches
+    spread horizontally — so it reads like a flowchart, top to bottom."""
+    from collections import deque
+    all_nodes = graph.get("nodes") or []
     edges = graph.get("edges") or []
-    if not nodes:
+    if not all_nodes:
         return graph
+    # only lay out TOP-LEVEL nodes; nodes inside an iteration/loop container keep
+    # their positions (which are relative to the parent container).
+    def _nested(n):
+        d = n.get("data") or {}
+        return bool(n.get("parentId") or d.get("isInIteration") or d.get("isInLoop") or d.get("iteration_id") or d.get("loop_id"))
+    nodes = [n for n in all_nodes if not _nested(n)]
+    if not nodes:
+        nodes = all_nodes
     ids = [n.get("id") for n in nodes]
     idset = set(ids)
     children = {i: [] for i in ids}
     indeg = {i: 0 for i in ids}
     for e in edges:
         s, t = e.get("source"), e.get("target")
-        if s in idset and t in idset:
+        if s in idset and t in idset and t not in children[s]:
             children[s].append(t)
             indeg[t] += 1
     roots = [i for i in ids if indeg[i] == 0] or [ids[0]]
+
+    # depth (level) = longest path from a root, so a node sits below all its parents
     level = {i: 0 for i in ids}
     indeg2 = dict(indeg)
     q = deque(roots)
@@ -248,31 +258,60 @@ def _layout_vertical(graph, v_gap=240, h_gap=380, top=80, cx=420):
             indeg2[v] -= 1
             if indeg2[v] == 0:
                 q.append(v)
-    # cyclic / unreached nodes: stack them below the deepest level
     maxlv = max(level.values()) if level else 0
     for i in ids:
         if i not in ordered:
             maxlv += 1
             level[i] = maxlv
-    by_level = defaultdict(list)
-    for i in ids:
-        by_level[level[i]].append(i)
+
+    # x via DFS leaf-slotting: each leaf gets the next column; a parent centers
+    # over its children. Linear chains collapse to a single column (straight line).
+    xslot = {}
+    counter = [0]
+    placed = set()
+
+    def assign(u, guard=0):
+        if u in placed or guard > len(ids) + 2:
+            return xslot.get(u, 0.0)
+        placed.add(u)
+        kids = [c for c in children[u] if level[c] > level[u] and c not in placed]
+        if not kids:
+            xslot[u] = counter[0]
+            counter[0] += 1
+        else:
+            cs = [assign(c, guard + 1) for c in kids]
+            xslot[u] = sum(cs) / len(cs)
+        return xslot[u]
+
+    for r in roots:
+        assign(r)
+    for i in ids:  # anything left (cycles / shared children)
+        if i not in xslot:
+            xslot[i] = counter[0]
+            counter[0] += 1
+
     for nd in nodes:
         i = nd.get("id")
-        row = by_level[level[i]]
-        n = len(row)
-        idx = row.index(i)
-        x = round(cx + (idx - (n - 1) / 2.0) * h_gap)
+        x = round(left + xslot.get(i, 0.0) * h_gap)
         y = round(top + level[i] * v_gap)
         nd["position"] = {"x": x, "y": y}
         if "positionAbsolute" in nd:
             nd["positionAbsolute"] = {"x": x, "y": y}
-        # clear any selected/dragging flags so the canvas opens clean (no node panel auto-open)
+    # clear selection/drag flags on EVERY node (incl. nested) so the canvas opens clean
+    for nd in all_nodes:
         nd["selected"] = False
+        nd["dragging"] = False
         if isinstance(nd.get("data"), dict):
             nd["data"].pop("selected", None)
-    for e in graph.get("edges") or []:
+    for e in edges:
         e["selected"] = False
+    # open the canvas from the TOP: stamp a viewport that shows the first node,
+    # centered, at a zoom that keeps the tree readable.
+    xs = [nd["position"]["x"] for nd in nodes]
+    span = (max(xs) - min(xs)) if xs else 0
+    zoom = 0.7 if span < 900 else (0.55 if span < 1500 else 0.42)
+    root_x = xs[ids.index(roots[0])] if roots and roots[0] in ids else (min(xs) if xs else 0)
+    graph["viewport"] = {"x": round(360 - (root_x + 120) * zoom), "y": 40, "zoom": zoom}
     return graph
 
 
