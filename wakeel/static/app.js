@@ -1457,13 +1457,15 @@ function renderFlowStudio(info) {
       <div class="ctrls">
         <button class="draft-btn ghost" id="tidyBtn" title="Lay it out left-to-right, spread apart, with plain-language steps">${IC.flow} Tidy diagram</button>
         <button class="draft-btn ghost" id="simpleBtn" title="Simplified card view">${IC.views} Simple view</button>
-        <button class="draft-btn run" id="studioRun">${IC.play} Run</button>
+        <button class="draft-btn ghost" id="studioRun" title="Test the flow logic through Dify">${IC.play} Test run</button>
+        <button class="draft-btn run" id="studioLive" title="Run on your real Google Sheet — read rows, draft emails, send & update on your approval">${IC.bolt} Run live</button>
         <button class="btn primary sm" id="studioPub">Publish</button>
       </div>
     </div>
     <div class="studio-embed"><iframe id="studioFrame" src="/app/${AGENT}/workflow?embed=wakeel" title="Flow"></iframe></div>`;
   $("#simpleBtn").onclick = () => { ASUB = "simple"; viewAgent(); };
   $("#studioRun").onclick = () => openRunModal(info);
+  $("#studioLive").onclick = () => openRunLive(info);
   $("#studioPub").onclick = () => publishAgent($("#studioPub"));
   $("#tidyBtn").onclick = async () => {
     const b = $("#tidyBtn"); b.disabled = true; b.innerHTML = `<span class="spin"></span> Tidying…`;
@@ -1557,6 +1559,79 @@ function renderFlow(info) {
 }
 
 /* ---------- live run (task execution over the flow) ---------- */
+/* Run live = the REAL compliance cycle on the user's Google Sheet: read rows →
+   draft emails & recommend statuses against the SOP → officer approves each
+   send / sheet update (real Gmail + real Sheets writes). */
+async function openRunLive(info) {
+  let sop = "";
+  try { const s = await api("GET", "sop?key=" + encodeURIComponent(info.name || "")); sop = (s && s.text) || ""; } catch (e) {}
+  const prefill = localStorage.getItem("wk_sheet_" + AGENT) || "";
+  const d = document.createElement("div"); d.className = "modal-back";
+  d.innerHTML = `<div class="modal fade" style="width:720px;max-width:95vw" onclick="event.stopPropagation()">
+    <div style="display:flex;align-items:center"><h2 style="flex:1">${IC.bolt} ${t("Run live on your Google Sheet")}</h2><button class="x" id="rlx">×</button></div>
+    <p class="page-sub" style="margin-top:-4px">${t("Reads your real rows, drafts the MoHRE emails and recommends the next status against your SOP. Nothing is sent or changed until you approve each action.")}</p>
+    <div class="gs-copy"><input class="input" id="rlUrl" value="${esc(prefill)}" placeholder="https://docs.google.com/spreadsheets/d/…"><button class="btn primary" id="rlGo">${IC.play} ${t("Read & plan")}</button></div>
+    ${sop ? `<div class="rl-sopok">${IC.check} ${t("Using your uploaded SOP")}</div>` : `<div class="rl-sopwarn">${IC.help} ${t("No SOP uploaded — it will use general rules. Upload one on the build screen for exact evaluation.")}</div>`}
+    <div id="rlOut"></div><div class="err" id="rlErr"></div></div>`;
+  document.body.appendChild(d); d.onclick = () => d.remove(); $("#rlx").onclick = () => d.remove();
+  const today = new Date().toISOString().slice(0, 10);
+  const plan = async () => {
+    const url = $("#rlUrl").value.trim(); if (!url) { $("#rlErr").textContent = "Paste your Google Sheet link."; return; }
+    localStorage.setItem("wk_sheet_" + AGENT, url);
+    $("#rlErr").textContent = ""; $("#rlGo").disabled = true; $("#rlGo").innerHTML = `<span class="spin"></span> ${t("Reading & planning…")}`;
+    $("#rlOut").innerHTML = `<div class="empty-mini" style="padding:16px">${t("Reading your sheet and drafting actions…")}</div>`;
+    try {
+      const r = await api("POST", "run-live-plan", { url, sop });
+      $("#rlGo").disabled = false; $("#rlGo").innerHTML = `${IC.play} ${t("Re-plan")}`;
+      if (!r.ok) { $("#rlOut").innerHTML = ""; $("#rlErr").textContent = r.error || "Couldn't plan."; return; }
+      const acts = r.actions || [];
+      $("#rlOut").innerHTML = `<div class="rl-head">${IC.check} <b>${esc(r.sheet_title || "Sheet")}</b> · ${r.total} ${t("businesses")} · <b>${acts.length}</b> ${t("need action")}</div>` +
+        (acts.length ? acts.map((a, i) => `
+        <div class="rl-card" data-i="${i}">
+          <div class="rl-ch"><b>${esc(a.business || ("Row " + a.row))}</b><span class="st-pill ${a.escalate ? "bad" : "run"}">${esc(a.action || "")}</span></div>
+          ${a.body ? `<div class="rl-email">
+            <div class="rl-row"><span class="rl-lab">${t("To")}</span><input class="input sm" data-f="to" value="${esc(a.to || "")}"></div>
+            <div class="rl-row"><span class="rl-lab">${t("Subject")}</span><input class="input sm" data-f="subject" value="${esc(a.subject || "")}"></div>
+            <textarea class="input" data-f="body" rows="5">${esc(a.body || "")}</textarea></div>` : `<div class="rl-note">${t("No email needed for this one.")}</div>`}
+          <div class="rl-status">${t("Proposed status")}: <b>${esc(a.new_status || "")}</b>${a.note ? ` · ${esc(a.note)}` : ""}</div>
+          <div class="rl-acts">
+            ${a.body ? `<button class="btn sm primary" data-a="send">${IC.send} ${t("Send email")}</button>` : ""}
+            <button class="btn sm" data-a="update">${IC.check} ${t("Update sheet")}</button>
+            <span class="rl-msg"></span>
+          </div>
+        </div>`).join("") : `<div class="empty-mini" style="padding:14px">${t("Nothing needs action right now — all businesses are up to date.")}</div>`);
+      wireCards(r, acts);
+    } catch (e) { $("#rlGo").disabled = false; $("#rlGo").innerHTML = `${IC.play} ${t("Read & plan")}`; $("#rlErr").textContent = e.message; }
+  };
+  function wireCards(r, acts) {
+    $("#rlOut").querySelectorAll(".rl-card").forEach(card => {
+      const i = +card.dataset.i, a = acts[i];
+      const val = (f) => { const el = card.querySelector(`[data-f="${f}"]`); return el ? el.value : ""; };
+      const msg = card.querySelector(".rl-msg");
+      const sendBtn = card.querySelector('[data-a="send"]');
+      if (sendBtn) sendBtn.onclick = async () => {
+        sendBtn.disabled = true; sendBtn.innerHTML = `<span class="spin"></span>`;
+        try { const res = await api("POST", "gmail-send", { to: val("to"), subject: val("subject"), body: val("body") });
+          msg.innerHTML = res.ok ? `<span class="cn-tag ok">${IC.check} ${t("Email sent")}</span>` : `<span style="color:#ff8b8b">${esc(res.error)}</span>`;
+        } catch (e) { msg.textContent = e.message; }
+        sendBtn.disabled = false; sendBtn.innerHTML = `${IC.send} ${t("Send email")}`;
+      };
+      const upBtn = card.querySelector('[data-a="update"]');
+      if (upBtn) upBtn.onclick = async () => {
+        upBtn.disabled = true; upBtn.innerHTML = `<span class="spin"></span>`;
+        const updates = { "Compliance Status": a.new_status || "", "Notes": a.note || "", "Next Action": a.action || "", "Last Outreach Date": today };
+        try { const res = await api("POST", "sheet-update", { url: r.url, row: a.row, updates });
+          msg.innerHTML = res.ok ? `<span class="cn-tag ok">${IC.check} ${t("Sheet updated")}</span>` : `<span style="color:#ff8b8b">${esc(res.error)}</span>`;
+        } catch (e) { msg.textContent = e.message; }
+        upBtn.disabled = false; upBtn.innerHTML = `${IC.check} ${t("Update sheet")}`;
+      };
+    });
+  }
+  $("#rlGo").onclick = plan;
+  $("#rlUrl").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); plan(); } });
+  setTimeout(() => $("#rlUrl").focus(), 60);
+}
+
 function openRunModal(info) {
   const v = (info.vars || [])[0];
   const d = document.createElement("div"); d.className = "modal-back";

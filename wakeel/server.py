@@ -1005,6 +1005,118 @@ def sheets_read(sess, url, preview=8):
             "sheet_id": sid, "url": (url or "").strip()}
 
 
+def _col_letter(i):
+    s = ""
+    i += 1
+    while i:
+        i, r = divmod(i - 1, 26)
+        s = chr(65 + r) + s
+    return s
+
+
+def gmail_send(sess, to, subject, body):
+    """Send a REAL email from the connected Gmail account."""
+    import base64
+    if not to or "@" not in to:
+        return {"ok": False, "error": "No valid recipient address."}
+    try:
+        at = google_access_token(sess)
+    except Exception:
+        return {"ok": False, "error": "Connect Gmail first."}
+    mime = ("To: %s\r\nSubject: %s\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n%s"
+            % (to, subject or "", body or ""))
+    raw = base64.urlsafe_b64encode(mime.encode("utf-8")).decode()
+    data = json.dumps({"raw": raw}).encode()
+    req = urllib.request.Request("https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
+                                 data=data, headers={"Authorization": "Bearer " + at,
+                                                     "Content-Type": "application/json"}, method="POST")
+    try:
+        r = json.loads(urllib.request.urlopen(req, timeout=25).read())
+    except urllib.error.HTTPError as e:
+        return {"ok": False, "error": "Gmail refused the send (HTTP %d). %s" % (e.code, e.read()[:120].decode("utf-8", "ignore"))}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:160]}
+    log_act(sess, "run", "sent email · " + to[:40])
+    return {"ok": True, "id": r.get("id")}
+
+
+def sheet_update(sess, url, row, updates):
+    """Write real cell values into the sheet. `row` is the 1-based DATA row (row 1 in
+    the sheet is the header). `updates` maps column NAME -> new value."""
+    sid = _sheet_id(url)
+    if not sid:
+        return {"ok": False, "error": "Bad sheet link."}
+    try:
+        at = google_access_token(sess)
+    except Exception:
+        return {"ok": False, "error": "Connect Google Sheets first."}
+
+    def gget(u):
+        req = urllib.request.Request(u, headers={"Authorization": "Bearer " + at})
+        return json.loads(urllib.request.urlopen(req, timeout=25).read())
+
+    meta = gget(f"https://sheets.googleapis.com/v4/spreadsheets/{sid}?fields=sheets.properties.title")
+    tab = (meta.get("sheets") or [{}])[0].get("properties", {}).get("title", "Sheet1")
+    headers = gget(f"https://sheets.googleapis.com/v4/spreadsheets/{sid}/values/{urllib.parse.quote(tab + '!A1:Z1')}").get("values", [[]])
+    headers = headers[0] if headers else []
+    sheet_row = int(row) + 1  # +1 for the header row
+    wrote = []
+    for col_name, val in (updates or {}).items():
+        if col_name not in headers:
+            continue
+        a1 = f"{tab}!{_col_letter(headers.index(col_name))}{sheet_row}"
+        body = json.dumps({"values": [[val]]}).encode()
+        u = (f"https://sheets.googleapis.com/v4/spreadsheets/{sid}/values/"
+             f"{urllib.parse.quote(a1)}?valueInputOption=USER_ENTERED")
+        req = urllib.request.Request(u, data=body, headers={"Authorization": "Bearer " + at,
+                                                            "Content-Type": "application/json"}, method="PUT")
+        try:
+            urllib.request.urlopen(req, timeout=25).read()
+            wrote.append(col_name)
+        except Exception as e:
+            return {"ok": False, "error": "Write failed on %s: %s" % (col_name, str(e)[:120])}
+    log_act(sess, "run", "updated sheet row %s" % row)
+    return {"ok": True, "updated": wrote, "row": row}
+
+
+def run_live_plan(sess, url, sop_text="", limit=12):
+    """The REAL compliance cycle (advisory): read the sheet, and for every business
+    that needs action, draft the MoHRE email + recommend the next status against the
+    SOP. Nothing is sent or written here — the officer approves each action."""
+    data = sheets_read(sess, url, preview=limit)
+    if not data.get("ok"):
+        return data
+    cols, rows = data["columns"], data["rows"]
+    records = [dict(zip(cols, r)) for r in rows]
+    today = time.strftime("%Y-%m-%d", time.gmtime())
+    sys_p = (
+        "You are a MoHRE Emiratization compliance assistant (advisory only — you never make "
+        "final legal/enforcement decisions). Given a registry of businesses and the SOP, decide "
+        "which businesses need action now and, for each, draft what to do. Use a professional "
+        "MoHRE tone. Allowed statuses: Pending Outreach, Report Requested, Response Received, "
+        "Incomplete Submission, Under Review, Follow-up Sent, Escalation Required, Completed.\n"
+        f"Today is {today}.\n"
+        "Return ONLY JSON: {\"actions\":[{\"row\":<1-based index in the given list>,"
+        "\"business\":\"\",\"to\":\"<contact email>\",\"action\":\"<short: e.g. Send outreach / "
+        "Send reminder / Request missing info / Review submission / Escalate>\",\"subject\":\"\","
+        "\"body\":\"<the email, or empty if no email needed>\",\"new_status\":\"<one allowed status>\","
+        "\"note\":\"<one-line note for the tracking sheet>\",\"escalate\":true|false}]}\n"
+        "Only include businesses that actually need action now. Keep emails concise."
+    )
+    user = "SOP & RULES:\n" + (sop_text or "(none provided)")[:6000] + "\n\nREGISTRY (row = position in this list, starting at 1):\n"
+    for i, rec in enumerate(records, 1):
+        user += f"{i}. " + json.dumps(rec, ensure_ascii=False)[:400] + "\n"
+    try:
+        raw = _openai_chat([{"role": "system", "content": sys_p}, {"role": "user", "content": user[:9000]}])
+        plan = _extract_json(raw)
+    except Exception as e:
+        return {"ok": False, "error": "Couldn't plan: " + str(e)[:140]}
+    log_act(sess, "run", "live plan · %d businesses" % len(records))
+    return {"ok": True, "sheet_title": data.get("sheet_title"), "url": data.get("url"),
+            "total": data.get("total"), "columns": cols,
+            "actions": (plan.get("actions") or [])[:limit]}
+
+
 def models_list(sess):
     res = dify(sess, "GET", "/workspaces/current/models/model-types/llm")
     out = []
@@ -2583,6 +2695,12 @@ class H(BaseHTTPRequestHandler):
                 return self._send(200, sop_save(sess, b.get("key", ""), b.get("name", ""), b.get("text", "")))
             if p == "/api/sheets-read":
                 return self._send(200, sheets_read(sess, b.get("url", "")))
+            if p == "/api/run-live-plan":
+                return self._send(200, run_live_plan(sess, b.get("url", ""), b.get("sop", "")))
+            if p == "/api/gmail-send":
+                return self._send(200, gmail_send(sess, b.get("to", ""), b.get("subject", ""), b.get("body", "")))
+            if p == "/api/sheet-update":
+                return self._send(200, sheet_update(sess, b.get("url", ""), b.get("row", 0), b.get("updates", {})))
             if p == "/api/oauth/config":
                 return self._send(200, oauth_config_set(b.get("client_id", ""), b.get("client_secret", "")))
             if p == "/api/security-role":
