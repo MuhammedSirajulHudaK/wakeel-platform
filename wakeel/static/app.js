@@ -1487,7 +1487,7 @@ function renderOverview(info) {
         <div class="ov-items">${d.approvals && d.approvals.length ? list(d.approvals, "appr") : `<div class="ov-empty">${t("Nothing needs your approval right now. 🎉")}</div>`}</div>
         ${d.approvals && d.approvals.length ? `<div class="ov-cta"><button class="btn primary" id="ovReview">${IC.play} ${t("Review & approve")}</button><span class="ov-note">${t("Opens each item so you can send or update with one tap.")}</span></div>` : ""}
       </div>`}`;
-    if ($("#ovReview")) $("#ovReview").onclick = () => openRunLive(info);
+    if ($("#ovReview")) $("#ovReview").onclick = () => openReviewQueue(info);
     if ($("#ovLink")) $("#ovLink").onclick = () => { const ph = { name: info.name }; openSheetLink(ph, () => { if (ph.sheet && ph.sheet.url) localStorage.setItem("wk_sheet_" + AGENT, ph.sheet.url); renderOverview(info); }); };
   }).catch(e => { $("#ovBody").innerHTML = `<div class="empty-mini">⚠️ ${esc(e.message)}</div>`; });
 }
@@ -1603,6 +1603,82 @@ function renderFlow(info) {
 }
 
 /* ---------- live run (task execution over the flow) ---------- */
+/* Guided review queue — the simple path: gather everything that needs approval,
+   then walk the officer through it ONE item at a time (approve / skip), with an
+   "always do this automatically" option. Escalations never auto-approve. */
+async function execAction(url, a) {
+  try { await api("POST", "sheet-update", { url, row: a.row, updates: a.updates || {} }); } catch (e) {}
+  if (a.body) { try { await api("POST", "gmail-send", { to: a.to, subject: a.subject, body: a.body }); } catch (e) {} }
+}
+async function openReviewQueue(info) {
+  const url = localStorage.getItem("wk_sheet_" + AGENT) || "";
+  if (!url) { openRunLive(info); return; }
+  let sop = ""; try { const s = await api("GET", "sop?key=" + encodeURIComponent(info.name || "")); sop = (s && s.text) || ""; } catch (e) {}
+  const back = document.createElement("div"); back.className = "modal-back";
+  back.innerHTML = `<div class="modal fade rq-modal" onclick="event.stopPropagation()"><div class="rq-load"><span class="spin"></span> ${t("Gathering everything that needs your approval…")}</div></div>`;
+  document.body.appendChild(back); back.onclick = () => back.remove();
+  const card = back.firstElementChild;
+  let actions = [];
+  try {
+    const [o, r] = await Promise.all([
+      api("POST", "run-live-plan", { url, sop }).catch(() => ({})),
+      api("POST", "gmail-check-replies", { url, sop }).catch(() => ({})),
+    ]);
+    const byRow = {};
+    (o.actions || []).forEach(a => { byRow[a.row] = a; });
+    (r.actions || []).forEach(a => { byRow[a.row] = a; }); // a real reply overrides a status guess
+    actions = Object.values(byRow);
+  } catch (e) { card.innerHTML = `<button class="x" id="rqx">×</button><div class="empty-mini" style="padding:24px">⚠️ ${esc(e.message)}</div>`; back.querySelector("#rqx").onclick = () => back.remove(); return; }
+
+  const prefKey = "wk_autoapprove_" + AGENT;
+  let prefs = []; try { prefs = JSON.parse(localStorage.getItem(prefKey) || "[]"); } catch (e) {}
+  const auto = actions.filter(a => !a.escalate && prefs.includes(a.action));
+  const review = actions.filter(a => a.escalate || !prefs.includes(a.action));
+  let autoDone = 0;
+  for (const a of auto) { await execAction(url, a); autoDone++; }
+
+  let idx = 0, approved = 0, skipped = 0;
+  function finish() {
+    card.innerHTML = `<button class="x" id="rqx">×</button>
+      <div class="rq-fin"><div class="rq-badge">${IC.check}</div>
+        <h2>${t("All caught up!")} 🎉</h2>
+        <p>${approved} ${t("approved & done")}${skipped ? `, ${skipped} ${t("skipped")}` : ""}${autoDone ? `, ${autoDone} ${t("auto-approved")}` : ""}.</p>
+        <button class="btn primary block" id="rqClose">${t("Back to overview")}</button></div>`;
+    const close = () => { back.remove(); renderOverview(info); };
+    back.querySelector("#rqx").onclick = close; back.querySelector("#rqClose").onclick = close;
+  }
+  function render() {
+    if (idx >= review.length) { finish(); return; }
+    const a = review[idx];
+    card.innerHTML = `<button class="x" id="rqx">×</button>
+      <div class="rq-prog"><div class="rq-bar"><i style="width:${Math.round(idx / review.length * 100)}%"></i></div><span>${t("Item")} ${idx + 1} ${t("of")} ${review.length}</span></div>
+      <div class="rq-h"><span class="rq-ic">${a.escalate ? "🚩" : (a.body ? "✉️" : "📝")}</span><div><div class="rq-biz">${esc(a.business || ("Row " + a.row))}</div><div class="rq-act">${esc(a.action || "")}</div></div></div>
+      ${a.summary ? `<div class="rq-summary">↩ ${esc(a.summary)}</div>` : ""}
+      ${a.body ? `<div class="rq-email">
+        <div class="rl-row"><span class="rl-lab">${t("To")}</span><input class="input sm" id="rqTo" value="${esc(a.to || "")}"></div>
+        <div class="rl-row"><span class="rl-lab">${t("Subject")}</span><input class="input sm" id="rqSubj" value="${esc(a.subject || "")}"></div>
+        <textarea class="input" id="rqBody" rows="6">${esc(a.body || "")}</textarea></div>` : `<div class="rq-noemail">${t("No email — this just updates the sheet.")}</div>`}
+      <div class="rq-status">${t("New status")}: <b>${esc(a.new_status || "")}</b>${a.note ? ` · ${esc(a.note)}` : ""}</div>
+      ${a.escalate ? `<div class="rq-esc">${IC.help} ${t("This is an escalation — it always needs your review, never automatic.")}</div>`
+        : `<label class="rq-auto"><input type="checkbox" id="rqRemember"><span>${t("From now on, do")} “${esc(a.action || "this")}” ${t("automatically (no need to ask me)")}</span></label>`}
+      <div class="rq-btns">
+        <button class="btn" id="rqSkip">${t("Skip")}</button>
+        <button class="btn primary" id="rqOk">${IC.check} ${a.body ? t("Approve & send") : t("Approve & update")}</button>
+      </div>`;
+    back.querySelector("#rqx").onclick = () => { back.remove(); renderOverview(info); };
+    back.querySelector("#rqSkip").onclick = () => { skipped++; idx++; render(); };
+    back.querySelector("#rqOk").onclick = async () => {
+      const ok = back.querySelector("#rqOk"); ok.disabled = true; ok.innerHTML = `<span class="spin"></span> ${t("Doing it…")}`;
+      if (a.body) { a.to = back.querySelector("#rqTo").value; a.subject = back.querySelector("#rqSubj").value; a.body = back.querySelector("#rqBody").value; }
+      const rem = back.querySelector("#rqRemember");
+      if (rem && rem.checked && !prefs.includes(a.action)) { prefs.push(a.action); localStorage.setItem(prefKey, JSON.stringify(prefs)); }
+      await execAction(url, a);
+      approved++; idx++; render();
+    };
+  }
+  if (!review.length) finish(); else render();
+}
+
 /* Run live = the REAL compliance cycle on the user's Google Sheet: read rows →
    draft emails & recommend statuses against the SOP → officer approves each
    send / sheet update (real Gmail + real Sheets writes). */
