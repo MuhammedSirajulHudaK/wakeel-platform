@@ -217,16 +217,83 @@ def dify_sse(sess, path, body):
 
 # ---------------- platform actions ----------------
 
+def _layout_vertical(graph, v_gap=240, h_gap=380, top=80, cx=420):
+    """Lay the workflow out TOP-TO-BOTTOM with generous spacing so nodes never
+    overlap. Levels come from the longest path from the start node; branches at
+    the same level spread horizontally."""
+    from collections import deque, defaultdict
+    nodes = graph.get("nodes") or []
+    edges = graph.get("edges") or []
+    if not nodes:
+        return graph
+    ids = [n.get("id") for n in nodes]
+    idset = set(ids)
+    children = {i: [] for i in ids}
+    indeg = {i: 0 for i in ids}
+    for e in edges:
+        s, t = e.get("source"), e.get("target")
+        if s in idset and t in idset:
+            children[s].append(t)
+            indeg[t] += 1
+    roots = [i for i in ids if indeg[i] == 0] or [ids[0]]
+    level = {i: 0 for i in ids}
+    indeg2 = dict(indeg)
+    q = deque(roots)
+    ordered = set()
+    while q:
+        u = q.popleft()
+        ordered.add(u)
+        for v in children[u]:
+            level[v] = max(level[v], level[u] + 1)
+            indeg2[v] -= 1
+            if indeg2[v] == 0:
+                q.append(v)
+    # cyclic / unreached nodes: stack them below the deepest level
+    maxlv = max(level.values()) if level else 0
+    for i in ids:
+        if i not in ordered:
+            maxlv += 1
+            level[i] = maxlv
+    by_level = defaultdict(list)
+    for i in ids:
+        by_level[level[i]].append(i)
+    for nd in nodes:
+        i = nd.get("id")
+        row = by_level[level[i]]
+        n = len(row)
+        idx = row.index(i)
+        x = round(cx + (idx - (n - 1) / 2.0) * h_gap)
+        y = round(top + level[i] * v_gap)
+        nd["position"] = {"x": x, "y": y}
+        if "positionAbsolute" in nd:
+            nd["positionAbsolute"] = {"x": x, "y": y}
+    return graph
+
+
 def generate(sess, mode, instruction, current_graph=None):
     gen_mode = "advanced-chat" if mode == "agent" else "workflow"
     payload = {"mode": gen_mode, "instruction": instruction, "model_config": get_model()}
     if current_graph:
         payload["current_graph"] = current_graph
     res = dify(sess, "POST", "/workflow-generate", payload)
-    graph = res.get("graph") or {}
+    graph = _layout_vertical(res.get("graph") or {})
     nodes = [{"type": (n.get("data") or {}).get("type"), "title": (n.get("data") or {}).get("title")}
              for n in graph.get("nodes", [])]
     return {"graph": graph, "message": res.get("message", ""), "nodes": nodes, "error": res.get("error") or ""}
+
+
+def relayout_agent(sess, app_id):
+    """Re-lay-out an EXISTING agent's diagram vertically and republish."""
+    draft = dify(sess, "GET", f"/apps/{app_id}/workflows/draft")
+    graph = _layout_vertical(draft.get("graph") or {})
+    dify(sess, "POST", f"/apps/{app_id}/workflows/draft", {
+        "graph": graph, "features": draft.get("features") or {},
+        "environment_variables": draft.get("environment_variables") or [],
+        "conversation_variables": draft.get("conversation_variables") or [], "hash": draft.get("hash", ""),
+    })
+    dify(sess, "POST", f"/apps/{app_id}/workflows/publish", {})
+    log_act(sess, "edit", "vertical layout")
+    return {"ok": True, "nodes": len(graph.get("nodes") or [])}
 
 
 def _extract_json(text):
@@ -2373,6 +2440,8 @@ class H(BaseHTTPRequestHandler):
                            b.get("graph", {}), b.get("icon", "🏛️"))
                 log_act(sess, "build", b.get("name", ""))
                 return self._send(200, r)
+            if p == "/api/relayout":
+                return self._send(200, relayout_agent(sess, b.get("app_id", "")))
             if p == "/api/install":
                 g = generate(sess, b.get("mode", "workflow"), b.get("instruction", ""))
                 if not g["graph"].get("nodes"):

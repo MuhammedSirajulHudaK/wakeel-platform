@@ -1455,6 +1455,7 @@ function renderFlowStudio(info) {
     <div class="flow-head">
       <div><h1>Flow</h1><p>${esc(info.name || "Your agent")} · ${(info.nodes || []).length} steps · <span style="color:var(--wakeel)">edit it by chatting with the assistant →</span></p></div>
       <div class="ctrls">
+        <button class="draft-btn ghost" id="tidyBtn" title="Lay the diagram out top-to-bottom, spread apart">${IC.flow} Vertical layout</button>
         <button class="draft-btn ghost" id="simpleBtn" title="Simplified card view">${IC.views} Simple view</button>
         <button class="draft-btn run" id="studioRun">${IC.play} Run</button>
         <button class="btn primary sm" id="studioPub">Publish</button>
@@ -1464,6 +1465,12 @@ function renderFlowStudio(info) {
   $("#simpleBtn").onclick = () => { ASUB = "simple"; viewAgent(); };
   $("#studioRun").onclick = () => openRunModal(info);
   $("#studioPub").onclick = () => publishAgent($("#studioPub"));
+  $("#tidyBtn").onclick = async () => {
+    const b = $("#tidyBtn"); b.disabled = true; b.innerHTML = `<span class="spin"></span> Tidying…`;
+    try { await api("POST", "relayout", { app_id: AGENT }); const f = $("#studioFrame"); if (f) f.src = f.src; toast("Diagram laid out top-to-bottom"); }
+    catch (e) { toast(e.message, true); }
+    finally { b.disabled = false; b.innerHTML = `${IC.flow} Vertical layout`; }
+  };
 }
 /* Publish = make the current draft the live version (Beam-style "publish/deploy"),
    so triggers, the API and the automation engine all run this version. */
