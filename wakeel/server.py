@@ -2048,8 +2048,9 @@ class H(BaseHTTPRequestHandler):
         except FileNotFoundError:
             return self._send(404, {"error": "not found"})
         v = self._asset_version()
-        html = (html.replace('href="style.css"', f'href="style.css?v={v}"')
-                    .replace('src="app.js"', f'src="app.js?v={v}"'))
+        html = html.replace('href="style.css"', f'href="style.css?v={v}"')
+        html = html.replace('<script src="app.js"></script>',
+                            f'<script>window.__WV="{v}"</script>\n<script src="app.js?v={v}"></script>')
         self._send(200, html.encode(), "text/html; charset=utf-8",
                    extra={"Cache-Control": "no-cache, must-revalidate"})
 
@@ -2217,7 +2218,7 @@ class H(BaseHTTPRequestHandler):
         if p == "/wakeel-mark.svg":
             return self._file("wakeel-mark.svg", "image/svg+xml")
         if p == "/api/health":
-            return self._send(200, {"ok": True, "sessions": len(SESSIONS)})
+            return self._send(200, {"ok": True, "sessions": len(SESSIONS), "asset_v": self._asset_version()})
         if p == "/api/oauth/google/callback":
             # top-level redirect back from Google — no session guard (uses signed state)
             q = dict(x.split("=", 1) for x in (self.path.split("?", 1) + [""])[1].split("&") if "=" in x)

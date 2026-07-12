@@ -2563,5 +2563,24 @@ async function boot() {
   if (!ME) return renderLogin();
   try { await api("GET", "sso"); } catch (e) {}
   renderShell();
+  startVersionWatch();
+}
+// detect when a newer build is deployed and prompt a reload (fixes stale-cache confusion)
+let __updBar = false;
+function startVersionWatch() {
+  const check = async () => {
+    try {
+      const h = await api("GET", "health");
+      if (h && h.asset_v && window.__WV && String(h.asset_v) !== String(window.__WV) && !__updBar) {
+        __updBar = true;
+        const b = document.createElement("div"); b.className = "upd-bar";
+        b.innerHTML = `${IC.spark} <span>${t("Wakeel was updated — reload to get the latest.")}</span><button class="btn sm" id="updReload">${t("Reload")}</button>`;
+        document.body.appendChild(b);
+        $("#updReload").onclick = () => location.reload(true);
+      }
+    } catch (e) {}
+  };
+  setInterval(check, 45000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) check(); });
 }
 boot();
