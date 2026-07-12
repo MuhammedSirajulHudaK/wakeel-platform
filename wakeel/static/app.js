@@ -1588,8 +1588,9 @@ async function openRunLive(info) {
           <textarea class="input" data-f="body" rows="5">${esc(a.body || "")}</textarea></div>` : `<div class="rl-note">${t("No email needed for this one.")}</div>`}
         <div class="rl-status">${t("Proposed status")}: <b>${esc(a.new_status || "")}</b>${a.note ? ` · ${esc(a.note)}` : ""}</div>
         <div class="rl-acts">
-          ${a.body ? `<button class="btn sm primary" data-a="send">${IC.send} ${t("Send email")}</button>` : ""}
-          <button class="btn sm" data-a="update">${IC.check} ${t("Update sheet")}</button>
+          <button class="btn sm primary" data-a="approve">${IC.check} ${a.body ? t("Approve — update & send") : t("Approve — update sheet")}</button>
+          ${a.body ? `<button class="btn sm" data-a="send">${t("Send only")}</button>` : ""}
+          <button class="btn sm" data-a="update">${t("Update only")}</button>
           <span class="rl-msg"></span>
         </div>
       </div>`).join("") : `<div class="empty-mini" style="padding:14px">${emptyMsg}</div>`);
@@ -1614,6 +1615,17 @@ async function openRunLive(info) {
       const i = +card.dataset.i, a = acts[i];
       const val = (f) => { const el = card.querySelector(`[data-f="${f}"]`); return el ? el.value : ""; };
       const msg = card.querySelector(".rl-msg");
+      const upd = () => a.updates || { "Compliance Status": a.new_status || "", "Notes": a.note || "", "Next Action": a.action || "", "Last Outreach Date": today };
+      // one-click: update the sheet AND send the email (the full "reply → update + acknowledge" step)
+      const approveBtn = card.querySelector('[data-a="approve"]');
+      if (approveBtn) approveBtn.onclick = async () => {
+        approveBtn.disabled = true; approveBtn.innerHTML = `<span class="spin"></span> ${t("Working…")}`;
+        const errs = [];
+        try { const u = await api("POST", "sheet-update", { url: r.url, row: a.row, updates: upd() }); if (!u.ok) errs.push(u.error); } catch (e) { errs.push(e.message); }
+        if (a.body) { try { const s = await api("POST", "gmail-send", { to: val("to"), subject: val("subject"), body: val("body") }); if (!s.ok) errs.push(s.error); } catch (e) { errs.push(e.message); } }
+        msg.innerHTML = errs.length ? `<span style="color:#ff8b8b">${esc(errs.join("; "))}</span>` : `<span class="cn-tag ok">${IC.check} ${a.body ? t("Sheet updated & email sent") : t("Sheet updated")}</span>`;
+        approveBtn.disabled = errs.length ? false : true; approveBtn.innerHTML = errs.length ? `${IC.check} ${t("Retry")}` : `${IC.check} ${t("Done")}`;
+      };
       const sendBtn = card.querySelector('[data-a="send"]');
       if (sendBtn) sendBtn.onclick = async () => {
         sendBtn.disabled = true; sendBtn.innerHTML = `<span class="spin"></span>`;
