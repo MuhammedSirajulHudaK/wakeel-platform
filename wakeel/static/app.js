@@ -1455,7 +1455,7 @@ function renderFlowStudio(info) {
     <div class="flow-head">
       <div><h1>Flow</h1><p>${esc(info.name || "Your agent")} · ${(info.nodes || []).length} steps · <span style="color:var(--wakeel)">edit it by chatting with the assistant →</span></p></div>
       <div class="ctrls">
-        <button class="draft-btn ghost" id="tidyBtn" title="Lay it out top-to-bottom, spread apart, with plain-language steps">${IC.flow} Tidy diagram</button>
+        <button class="draft-btn ghost" id="tidyBtn" title="Lay it out left-to-right, spread apart, with plain-language steps">${IC.flow} Tidy diagram</button>
         <button class="draft-btn ghost" id="simpleBtn" title="Simplified card view">${IC.views} Simple view</button>
         <button class="draft-btn run" id="studioRun">${IC.play} Run</button>
         <button class="btn primary sm" id="studioPub">Publish</button>

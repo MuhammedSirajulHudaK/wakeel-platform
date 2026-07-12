@@ -217,10 +217,12 @@ def dify_sse(sess, path, body):
 
 # ---------------- platform actions ----------------
 
-def _layout_vertical(graph, v_gap=170, h_gap=320, top=60, left=80):
-    """Lay the workflow out as a clean TOP-TO-BOTTOM TREE: parents centered over
-    their children, a linear chain stays in one straight column, and branches
-    spread horizontally — so it reads like a flowchart, top to bottom."""
+def _layout_flow(graph, h_gap=600, v_gap=280, top=120, left=140):
+    """Lay the workflow out LEFT-TO-RIGHT (Dify's native handle direction) as a
+    clean tree with BIG gaps and long connectors, so nodes never overlap and the
+    whole flow is clear without dragging anything. Levels advance left→right;
+    a parent is centered vertically over its children; a linear chain forms one
+    straight horizontal row."""
     from collections import deque
     all_nodes = graph.get("nodes") or []
     edges = graph.get("edges") or []
@@ -292,8 +294,8 @@ def _layout_vertical(graph, v_gap=170, h_gap=320, top=60, left=80):
 
     for nd in nodes:
         i = nd.get("id")
-        x = round(left + xslot.get(i, 0.0) * h_gap)
-        y = round(top + level[i] * v_gap)
+        x = round(left + level[i] * h_gap)          # left → right by level (long connectors)
+        y = round(top + xslot.get(i, 0.0) * v_gap)  # spread siblings vertically (no overlap)
         nd["position"] = {"x": x, "y": y}
         if "positionAbsolute" in nd:
             nd["positionAbsolute"] = {"x": x, "y": y}
@@ -305,13 +307,13 @@ def _layout_vertical(graph, v_gap=170, h_gap=320, top=60, left=80):
             nd["data"].pop("selected", None)
     for e in edges:
         e["selected"] = False
-    # open the canvas from the TOP: stamp a viewport that shows the first node,
-    # centered, at a zoom that keeps the tree readable.
+    # open at the top-left so the first node is in view at a comfortable, clear zoom
     xs = [nd["position"]["x"] for nd in nodes]
-    span = (max(xs) - min(xs)) if xs else 0
-    zoom = 0.7 if span < 900 else (0.55 if span < 1500 else 0.42)
-    root_x = xs[ids.index(roots[0])] if roots and roots[0] in ids else (min(xs) if xs else 0)
-    graph["viewport"] = {"x": round(360 - (root_x + 120) * zoom), "y": 40, "zoom": zoom}
+    ys = [nd["position"]["y"] for nd in nodes]
+    minx = min(xs) if xs else 0
+    miny = min(ys) if ys else 0
+    zoom = 0.75
+    graph["viewport"] = {"x": round(60 - minx * zoom), "y": round(60 - miny * zoom), "zoom": zoom}
     return graph
 
 
@@ -358,7 +360,7 @@ def generate(sess, mode, instruction, current_graph=None):
     if current_graph:
         payload["current_graph"] = current_graph
     res = dify(sess, "POST", "/workflow-generate", payload)
-    graph = _simplify_nodes(_layout_vertical(res.get("graph") or {}))
+    graph = _simplify_nodes(_layout_flow(res.get("graph") or {}))
     nodes = [{"type": (n.get("data") or {}).get("type"), "title": (n.get("data") or {}).get("title")}
              for n in graph.get("nodes", [])]
     return {"graph": graph, "message": res.get("message", ""), "nodes": nodes, "error": res.get("error") or ""}
@@ -367,7 +369,7 @@ def generate(sess, mode, instruction, current_graph=None):
 def relayout_agent(sess, app_id):
     """Re-lay-out an EXISTING agent's diagram vertically and republish."""
     draft = dify(sess, "GET", f"/apps/{app_id}/workflows/draft")
-    graph = _simplify_nodes(_layout_vertical(draft.get("graph") or {}))
+    graph = _simplify_nodes(_layout_flow(draft.get("graph") or {}))
     dify(sess, "POST", f"/apps/{app_id}/workflows/draft", {
         "graph": graph, "features": draft.get("features") or {},
         "environment_variables": draft.get("environment_variables") or [],
