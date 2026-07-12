@@ -859,3 +859,11 @@ textarea.input{padding:12px 14px;min-height:auto;resize:none}
 .sop-drop>svg{width:24px;height:24px;color:var(--wakeel);flex:none}
 .sop-drop b{font-size:14px}
 .sop-hint{font-size:11.5px;color:var(--faint);margin-top:2px}
+
+/* ---- connect help (plain-language fix-it) ---- */
+.ch-list{display:flex;flex-direction:column;gap:10px;margin:6px 0 16px}
+.ch-item{border:1px solid var(--line);border-radius:11px;padding:12px 14px;background:var(--panel-2)}
+.ch-t{font-size:13.5px;font-weight:650;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ch-code{font-size:11px;font-weight:700;color:#e6b02e;background:rgba(230,176,46,.12);border:1px solid rgba(230,176,46,.3);border-radius:6px;padding:1px 7px}
+.ch-d{font-size:12.5px;color:var(--muted);line-height:1.55;margin:6px 0 9px}
+.ch-item .gs-open,.ch-item .btn{margin:0}

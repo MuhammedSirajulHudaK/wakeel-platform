@@ -793,6 +793,8 @@ async function connectSvc(service, onDone) {
     const w = window.open(r.url, "wkoauth", "width=520,height=680");
     await waitForConnect(service, w);
     await refreshServices(); onDone && onDone();
+    // if Google blocked it (403 not-verified, closed window, etc.), guide the user in plain language
+    if (!CONNECTED.has(service)) openConnectHelp(service, () => connectSvc(service, onDone));
   } else {
     mark(`<span class="spin"></span>`);
     await sleep(600); try { await api("POST", "service-connect", { service }); } catch (e) {} CONNECTED.add(service); onDone && onDone();
@@ -854,6 +856,32 @@ function openGoogleSetup(onSaved) {
     catch (e) { $("#gsErr").textContent = e.message; $("#gsSave").disabled = false; }
   };
 }
+// plain-language help when Google blocks the sign-in — for non-technical users
+function openConnectHelp(service, retry) {
+  const gopen = (label) => `<a class="btn xs gs-open" href="https://console.cloud.google.com/auth/audience" target="_blank" rel="noopener">${label} ↗</a>`;
+  const d = document.createElement("div"); d.className = "modal-back";
+  d.innerHTML = `<div class="modal fade" style="width:520px" onclick="event.stopPropagation()">
+    <div style="display:flex;align-items:center"><h2 style="flex:1">${IC.help} ${t("Google didn't finish connecting")}</h2><button class="x" id="chx">×</button></div>
+    <p class="page-sub" style="margin-top:-4px">${t("No problem — this is almost always a one-time Google setting, not a Wakeel issue. Pick what you saw on the Google screen:")}</p>
+    <div class="ch-list">
+      <div class="ch-item"><div class="ch-t">🔒 ${t("“App isn’t verified” or “you’re not a tester”")} <span class="ch-code">Error 403</span></div>
+        <div class="ch-d">${t("Google is only letting approved people in. The easiest fix: open your Google settings and click")} <b>${t("Publish app")}</b> ${t("— then anyone can sign in. (Or add your email under")} <b>${t("Test users")}</b>${t(".)")}</div>
+        ${gopen(t("Open Google settings"))}</div>
+      <div class="ch-item"><div class="ch-t">⚠️ ${t("“invalid_client” or “missing project id”")}</div>
+        <div class="ch-d">${t("The Client ID or secret was wrong. Re-enter them from Google → Credentials.")}</div>
+        <button class="btn xs" id="chReenter">${t("Re-enter credentials")}</button></div>
+      <div class="ch-item"><div class="ch-t">🔁 ${t("“500. That’s an error” (a Google hiccup)")}</div>
+        <div class="ch-d">${t("Usually temporary — often right after publishing. Wait a minute and press Try again. If it keeps happening, set your app back to")} <b>${t("Testing")}</b> ${t("and add your email under")} <b>${t("Test users")}</b> ${t("— that’s the most reliable setup for Gmail/Drive access.")}</div>
+        ${gopen(t("Open Google settings"))}</div>
+      <div class="ch-item"><div class="ch-t">↩️ ${t("I closed the window by mistake")}</div>
+        <div class="ch-d">${t("Nothing’s wrong — just try again below.")}</div></div>
+    </div>
+    <button class="btn primary block" id="chRetry">${IC.play} ${t("Try connecting again")}</button></div>`;
+  document.body.appendChild(d); d.onclick = () => d.remove(); $("#chx").onclick = () => d.remove();
+  $("#chReenter").onclick = () => { d.remove(); openGoogleSetup(() => retry && retry()); };
+  $("#chRetry").onclick = () => { d.remove(); retry && retry(); };
+}
+
 // upload the SOP / rules the agent must evaluate responses against (real policy text)
 function openSopUpload(d, onDone) {
   const cur = d.sop || {};
