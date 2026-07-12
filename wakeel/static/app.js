@@ -1076,9 +1076,9 @@ async function openConnectServices(services, agentName, onDone) {
 }
 
 /* ---------- AGENT / FLOW ---------- */
-function openAgent(id, sub) { LASTDESIGN = null; AGENT = id; ASUB = sub || "flow"; VIEW = "agent"; COPILOT = true; CFGNODE = null; location.hash = "agent/" + id; renderShell(); }
+function openAgent(id, sub) { LASTDESIGN = null; AGENT = id; ASUB = sub || "overview"; VIEW = "agent"; COPILOT = (sub && sub !== "overview"); CFGNODE = null; location.hash = "agent/" + id; renderShell(); }
 
-const ATABS = [["flow", "Flow"], ["triggers", "Triggers"], ["automation", "Automation"], ["records", "Records"], ["evaluate", "Evaluate"], ["memory", "Memory"], ["governance", "Governance"], ["instructions", "Instructions"]];
+const ATABS = [["overview", "Overview"], ["flow", "Flow"], ["triggers", "Triggers"], ["automation", "Automation"], ["records", "Records"], ["evaluate", "Evaluate"], ["memory", "Memory"], ["governance", "Governance"], ["instructions", "Instructions"]];
 async function viewAgent() {
   const app = APPS.find(a => a.id === AGENT) || { name: "Agent" };
   const cur = ASUB === "config" ? "flow" : ASUB;
@@ -1092,7 +1092,8 @@ async function viewAgent() {
   try {
     const info = await api("GET", "app-info?id=" + AGENT);
     window.__agentInfo = info;
-    if (ASUB === "triggers") renderTriggers(info);
+    if (ASUB === "overview") renderOverview(info);
+    else if (ASUB === "triggers") renderTriggers(info);
     else if (ASUB === "automation") renderAutomation(info);
     else if (ASUB === "records") renderRecords(info);
     else if (ASUB === "evaluate") renderEvaluate(info);
@@ -1448,6 +1449,49 @@ function graphRemove(g, id) {
 }
 async function saveGraph() { await api("POST", "save-draft", { app_id: AGENT, graph: window.__graph }); }
 
+/* Overview = the plain-language agent dashboard: what it can access, what it did
+   today, what's planned, and what needs the officer's approval. */
+function renderOverview(info) {
+  const url = localStorage.getItem("wk_sheet_" + AGENT) || "";
+  $("#flowWrap").innerHTML = `<div class="content"><div class="pad" style="max-width:920px">
+    <h1 class="page-h">${esc(info.name || "Your assistant")}</h1>
+    <p class="page-sub">${t("A simple picture of what this assistant can touch, what it has done, and what it needs from you.")}</p>
+    <div id="ovBody"><div class="empty-mini" style="padding:20px">${t("Loading…")}</div></div>
+  </div></div>`;
+  const sec = (icon, title, sub) => `<div class="ov-sec-h">${icon}<div><div class="ov-t">${title}</div>${sub ? `<div class="ov-sub">${sub}</div>` : ""}</div></div>`;
+  api("POST", "agent-overview", { app_id: AGENT, url }).then(d => {
+    const a = d.access || { services: [], files: [] };
+    const list = (arr, cls) => arr.map(x => `<div class="ov-item ${cls || ""}"><span class="ov-ic">${x.icon}</span><div class="ov-x"><div class="ov-lab">${esc(x.label || x.text)}${x.count != null ? ` <span class="ov-badge">${x.count}</span>` : ""}</div>${x.examples && x.examples.length ? `<div class="ov-ex">${x.examples.map(esc).join(" · ")}</div>` : ""}</div></div>`).join("");
+    $("#ovBody").innerHTML = `
+      <div class="ov-card access">
+        ${sec(IC.lock, t("1 · What it can access"), t("These are the only things this assistant can reach — nothing else."))}
+        <div class="ov-chips">${a.services.map(s => `<span class="ov-chip on">${IC.check} ${esc(s)}</span>`).join("") || `<span class="ov-chip">${t("Not connected yet")}</span>`}</div>
+        ${a.files && a.files.length ? `<div class="ov-files">${a.files.map(f => `<div class="ov-file"><span class="ov-fic">${f.icon}</span><div><div class="ov-fn">${esc(f.name)}</div><div class="ov-fd">${esc(f.detail || "")}</div></div></div>`).join("")}</div>` : ""}
+      </div>
+
+      ${d.needs_sheet ? `<div class="ov-card"><div class="ov-linkrow">${IC.projects} <div style="flex:1"><b>${t("Link your registry sheet")}</b><div class="ov-sub">${t("So it can show what it did, what's planned and what needs your approval.")}</div></div><button class="btn primary sm" id="ovLink">${t("Link sheet")}</button></div></div>` : `
+      <div class="ov-grid">
+        <div class="ov-card">
+          ${sec(IC.check, t("2 · What it did today"))}
+          <div class="ov-items">${d.did_today && d.did_today.length ? list(d.did_today) : `<div class="ov-empty">${t("Nothing yet today.")}</div>`}</div>
+          ${d.done_count ? `<div class="ov-done">${IC.check} ${d.done_count} ${t("businesses fully completed")}</div>` : ""}
+        </div>
+        <div class="ov-card">
+          ${sec(IC.tasks, t("3 · What's planned"))}
+          <div class="ov-items">${d.planned && d.planned.length ? list(d.planned) : `<div class="ov-empty">${t("Nothing waiting right now.")}</div>`}</div>
+        </div>
+      </div>
+
+      <div class="ov-card approvals">
+        ${sec(IC.thumb, t("4 · Approvals you need to give"), t("The assistant prepared these and is waiting for your OK before it acts."))}
+        <div class="ov-items">${d.approvals && d.approvals.length ? list(d.approvals, "appr") : `<div class="ov-empty">${t("Nothing needs your approval right now. 🎉")}</div>`}</div>
+        ${d.approvals && d.approvals.length ? `<div class="ov-cta"><button class="btn primary" id="ovReview">${IC.play} ${t("Review & approve")}</button><span class="ov-note">${t("Opens each item so you can send or update with one tap.")}</span></div>` : ""}
+      </div>`}`;
+    if ($("#ovReview")) $("#ovReview").onclick = () => openRunLive(info);
+    if ($("#ovLink")) $("#ovLink").onclick = () => { const ph = { name: info.name }; openSheetLink(ph, () => { if (ph.sheet && ph.sheet.url) localStorage.setItem("wk_sheet_" + AGENT, ph.sheet.url); renderOverview(info); }); };
+  }).catch(e => { $("#ovBody").innerHTML = `<div class="empty-mini">⚠️ ${esc(e.message)}</div>`; });
+}
+
 function renderFlowStudio(info) {
   window.__flowInfo = info;
   window.__graph = info.graph || { nodes: [], edges: [] };
@@ -1572,6 +1616,8 @@ async function openRunLive(info) {
     <p class="page-sub" style="margin-top:-4px">${t("Reads your real rows, drafts the MoHRE emails and recommends the next status against your SOP. Nothing is sent or changed until you approve each action.")}</p>
     <div class="gs-copy"><input class="input" id="rlUrl" value="${esc(prefill)}" placeholder="https://docs.google.com/spreadsheets/d/…"></div>
     <div class="rl-btns"><button class="btn primary" id="rlGo">${IC.send} ${t("Plan outreach")}</button><button class="btn" id="rlReplies">${IC.inbox} ${t("Check replies")}</button></div>
+    <label class="rl-auto"><input type="checkbox" id="rlAuto"><span class="rl-autolab">${IC.bolt} ${t("Fully automatic")}</span><span class="rl-autohint">${t("— send emails & update the sheet on its own, no approvals")}</span></label>
+    <div class="rl-autowarn" id="rlAutoWarn" hidden>${IC.help} ${t("Heads up: in this mode the assistant acts by itself — real emails are sent and rows updated immediately, without asking you first. Escalations are still flagged.")}</div>
     ${sop ? `<div class="rl-sopok">${IC.check} ${t("Using your uploaded SOP")}</div>` : `<div class="rl-sopwarn">${IC.help} ${t("No SOP uploaded — it will use general rules. Upload one on the build screen for exact evaluation.")}</div>`}
     <div id="rlOut"></div><div class="err" id="rlErr"></div></div>`;
   document.body.appendChild(d); d.onclick = () => d.remove(); $("#rlx").onclick = () => d.remove();
@@ -1604,10 +1650,29 @@ async function openRunLive(info) {
     try {
       const r = await api("POST", endpoint, { url, sop });
       if (!r.ok) { $("#rlOut").innerHTML = ""; $("#rlErr").textContent = r.error || "Something went wrong."; return; }
-      renderActions(r, r.actions || [], r.note || empty);
+      const acts = r.actions || [];
+      if ($("#rlAuto") && $("#rlAuto").checked && acts.length) await autoExecute(r, acts);
+      else renderActions(r, acts, r.note || empty);
     } catch (e) { $("#rlErr").textContent = e.message; }
     finally { btn.disabled = false; btn.innerHTML = orig; }
   };
+  async function autoExecute(r, acts) {
+    $("#rlOut").innerHTML = `<div class="rl-head">${IC.bolt} <b>${t("Running automatically…")}</b></div><div class="rl-auto-log" id="rlLog"></div>`;
+    const log = $("#rlLog"); let sent = 0, updated = 0, fail = 0;
+    for (const a of acts) {
+      const row = document.createElement("div"); row.className = "rl-logrow";
+      row.innerHTML = `<span class="spin"></span> ${esc(a.business || ("Row " + a.row))} — ${esc(a.action || "")}`;
+      log.appendChild(row);
+      let ok = true; const errs = [];
+      try { const u = await api("POST", "sheet-update", { url: r.url, row: a.row, updates: a.updates || {} }); if (u.ok) updated++; else { ok = false; errs.push(u.error); } } catch (e) { ok = false; errs.push(e.message); }
+      if (a.body) { try { const s = await api("POST", "gmail-send", { to: a.to, subject: a.subject, body: a.body }); if (s.ok) sent++; else { ok = false; errs.push(s.error); } } catch (e) { ok = false; errs.push(e.message); } }
+      if (!ok) fail++;
+      row.innerHTML = `<span class="rl-tick ${ok ? "ok" : "bad"}">${ok ? IC.check : "✕"}</span> ${esc(a.business || ("Row " + a.row))} — ${esc(a.action || "")}${ok ? "" : ` <span style="color:#ff8b8b">${esc(errs.join("; "))}</span>`}`;
+    }
+    const s = document.createElement("div"); s.className = "rl-autosum";
+    s.innerHTML = `${IC.check} <b>${t("Done")}</b> — ${sent} ${t("emails sent")}, ${updated} ${t("rows updated")}${fail ? `, <span style="color:#ff8b8b">${fail} ${t("failed")}</span>` : ""}.`;
+    log.appendChild(s);
+  }
   const plan = () => runAction($("#rlGo"), "run-live-plan", t("Reading your sheet and drafting actions…"), t("Nothing needs outreach right now — all businesses are up to date."));
   const checkReplies = () => runAction($("#rlReplies"), "gmail-check-replies", t("Checking Gmail for business replies…"), t("No new replies from your businesses were found in the inbox."));
   function wireCards(r, acts) {
@@ -1647,6 +1712,7 @@ async function openRunLive(info) {
   }
   $("#rlGo").onclick = plan;
   $("#rlReplies").onclick = checkReplies;
+  $("#rlAuto").onchange = () => { $("#rlAutoWarn").hidden = !$("#rlAuto").checked; $("#rlGo").innerHTML = $("#rlAuto").checked ? `${IC.bolt} ${t("Run outreach automatically")}` : `${IC.send} ${t("Plan outreach")}`; $("#rlReplies").innerHTML = $("#rlAuto").checked ? `${IC.bolt} ${t("Handle replies automatically")}` : `${IC.inbox} ${t("Check replies")}`; };
   $("#rlUrl").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); plan(); } });
   setTimeout(() => $("#rlUrl").focus(), 60);
 }
@@ -2653,12 +2719,12 @@ async function boot() {
   const rn = q.match(/[?&]run=([^&]+)/); if (rn) window.__autorun = decodeURIComponent(rn[1]);
   const nd = q.match(/[?&]node=(\d+)/); if (nd) window.__autonode = parseInt(nd[1]);
   const tl = q.match(/[?&]tool=(\d+)/); if (tl) window.__autotool = parseInt(tl[1]);
-  const sb = q.match(/[?&]sub=(triggers|automation|records|evaluate|memory|governance|instructions|simple)/); if (sb) window.__autosub = sb[1];
+  const sb = q.match(/[?&]sub=(overview|triggers|automation|records|evaluate|memory|governance|instructions|simple)/); if (sb) window.__autosub = sb[1];
   if (q.match(/[?&]m365=1/)) { window.__autom365 = true; window.__autosub = "triggers"; }
   const cf = q.match(/[?&]config=([^&]+)/); if (cf) { window.__autoconfig = decodeURIComponent(cf[1]); VIEW = "integrations"; }
   if (m) history.replaceState(null, "", location.pathname + location.hash);
   const h = location.hash.replace("#", "");
-  if (h.startsWith("agent/")) { AGENT = h.split("/")[1]; VIEW = "agent"; COPILOT = true; if (window.__autosub) { ASUB = window.__autosub; window.__autosub = null; } }
+  if (h.startsWith("agent/")) { AGENT = h.split("/")[1]; VIEW = "agent"; ASUB = window.__autosub || "overview"; COPILOT = ASUB !== "overview"; window.__autosub = null; }
   else if (["home", "skills", "teams", "governance", "security", "projects", "inbox", "tasks", "templates", "integrations", "automations", "views", "developers"].includes(h)) VIEW = h;
   try { ME = await api("GET", "me"); } catch (e) { ME = null; }
   if (!ME) return renderLogin();

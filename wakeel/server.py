@@ -1226,6 +1226,74 @@ def gmail_check_replies(sess, url, sop_text="", limit=20):
     return {"ok": True, "replies_found": len(found), "url": data["url"], "total": data.get("total"), "actions": actions}
 
 
+def agent_overview(sess, app_id, url=""):
+    """A plain-language dashboard for ONE agent: what it can access, what it did
+    today, what it plans next, and what needs the officer's approval — all derived
+    from the connected services + the live registry sheet."""
+    today = time.strftime("%Y-%m-%d", time.gmtime())
+    gservices = google_connected(sess)
+    name = ""
+    try:
+        name = (app_info(sess, app_id) or {}).get("name", "")
+    except Exception:
+        pass
+    sop = sop_get(sess, name)
+    did, approvals, planned, done_count, sheet = [], [], [], 0, None
+    if url:
+        data = sheets_read(sess, url, preview=500)
+        if data.get("ok"):
+            cols, rows = data["columns"], data["rows"]
+            sheet = {"title": data["sheet_title"], "url": data["url"], "total": data["total"]}
+
+            def idx(key):
+                for i, c in enumerate(cols):
+                    if key in c.lower():
+                        return i
+                return -1
+
+            def cell(r, i):
+                return (r[i].strip() if 0 <= i < len(r) and r[i] else "")
+            si, bi, oi, ri = idx("status"), idx("business name"), idx("last outreach"), idx("last response")
+            groups, out_today, resp_today = {}, [], []
+            for r in rows:
+                st = cell(r, si) or "—"
+                bn = cell(r, bi) or "A business"
+                groups.setdefault(st, []).append(bn)
+                if oi >= 0 and cell(r, oi) == today:
+                    out_today.append(bn)
+                if ri >= 0 and cell(r, ri) == today:
+                    resp_today.append(bn)
+            if out_today:
+                did.append({"icon": "✉️", "text": "Sent outreach to %d business%s today" % (len(out_today), "" if len(out_today) == 1 else "es"), "examples": out_today[:4]})
+            if resp_today:
+                did.append({"icon": "📩", "text": "Handled %d repl%s today" % (len(resp_today), "y" if len(resp_today) == 1 else "ies"), "examples": resp_today[:4]})
+
+            def bucket(label, statuses, icon, target):
+                names = []
+                for stt in statuses:
+                    names += groups.get(stt, [])
+                if names:
+                    target.append({"icon": icon, "label": label, "count": len(names), "examples": names[:4]})
+            bucket("Send the first outreach email", ["Pending Outreach"], "📤", approvals)
+            bucket("Review a submitted report", ["Response Received"], "🔎", approvals)
+            bucket("Ask a business for missing information", ["Incomplete Submission"], "⚠️", approvals)
+            bucket("Escalate a case to an officer", ["Escalation Required"], "🚩", approvals)
+            bucket("Waiting for the business to reply", ["Report Requested", "Follow-up Sent"], "⏳", planned)
+            bucket("A report is being reviewed", ["Under Review"], "👀", planned)
+            done_count = len(groups.get("Completed", []))
+    svc = {"Gmail": "Gmail — send & read emails", "Google Sheets": "Google Sheets — your business registry",
+           "Google Drive": "Google Drive — your documents"}
+    files = []
+    if sheet:
+        files.append({"icon": "📊", "name": sheet["title"], "detail": "%s businesses" % sheet["total"]})
+    if sop and sop.get("name"):
+        files.append({"icon": "📄", "name": sop["name"], "detail": "your rules / SOP"})
+    return {"ok": True, "agent": name, "sheet": sheet,
+            "access": {"services": [svc.get(s, s) for s in gservices], "files": files},
+            "did_today": did, "planned": planned, "approvals": approvals, "done_count": done_count,
+            "needs_sheet": not bool(url)}
+
+
 def models_list(sess):
     res = dify(sess, "GET", "/workspaces/current/models/model-types/llm")
     out = []
@@ -2808,6 +2876,8 @@ class H(BaseHTTPRequestHandler):
                 return self._send(200, run_live_plan(sess, b.get("url", ""), b.get("sop", "")))
             if p == "/api/gmail-check-replies":
                 return self._send(200, gmail_check_replies(sess, b.get("url", ""), b.get("sop", "")))
+            if p == "/api/agent-overview":
+                return self._send(200, agent_overview(sess, b.get("app_id", ""), b.get("url", "")))
             if p == "/api/gmail-send":
                 return self._send(200, gmail_send(sess, b.get("to", ""), b.get("subject", ""), b.get("body", "")))
             if p == "/api/sheet-update":
