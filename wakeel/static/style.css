@@ -990,3 +990,23 @@ textarea.input{padding:12px 14px;min-height:auto;resize:none}
 
 /* SOP reference badge inside the "why" line */
 .sop-ref{display:inline-block;font-size:11px;font-weight:700;color:#7fa8f0;background:rgba(74,122,214,.16);border:1px solid rgba(74,122,214,.4);border-radius:6px;padding:1px 7px;white-space:nowrap;margin-inline-start:4px}
+
+/* ---- Drawflow flow canvas (Beam-like nodes, replaces the Dify iframe) ---- */
+.df-canvas{position:relative;flex:1;min-height:0;margin:0 20px 20px;border:1px solid var(--line);border-radius:14px;overflow:hidden;
+  background:radial-gradient(circle, rgba(120,140,170,.14) 1px, transparent 1px) 0 0/22px 22px, var(--bg)}
+.df-canvas .parent-drawflow{border-radius:14px}
+.df-canvas .drawflow-node{background:transparent!important;border:none!important;box-shadow:none!important;padding:0!important;border-radius:12px}
+.df-canvas .drawflow-node.selected .wk-node{outline:2px solid #3ee08a;outline-offset:2px}
+.df-canvas .drawflow .connection .main-path{stroke:var(--muted-2);stroke-width:2px;fill:none}
+.df-canvas .drawflow-node .input,.df-canvas .drawflow-node .output{background:#3ee08a;border:2px solid var(--bg);width:12px;height:12px}
+.df-canvas .drawflow-delete{background:var(--panel);color:#ff8b8b;border:1px solid var(--line)}
+.wk-node.beam{width:196px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:11px 13px;box-shadow:0 12px 28px -16px rgba(0,0,0,.6)}
+.wk-node.beam .wk-type2{font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#3ee08a}
+.wk-node.beam.acc-purple .wk-type2{color:#a78bfa}.wk-node.beam.acc-blue .wk-type2{color:#5f9be0}
+.wk-node.beam.acc-gold .wk-type2{color:#e6b02e}.wk-node.beam.acc-red .wk-type2{color:#ec5a5a}.wk-node.beam.acc-amber .wk-type2{color:#e0a33a}
+.wk-node.beam .wk-title2{font-size:14px;font-weight:750;margin-top:3px;display:flex;gap:7px;align-items:center;color:var(--text)}
+.df-zoom{position:absolute;bottom:22px;left:22px;display:flex;gap:6px;z-index:5}
+.df-zoom button{width:34px;height:34px;border-radius:9px;background:var(--panel);border:1px solid var(--line);color:var(--text);font-size:16px;cursor:pointer}
+.df-zoom button#dfzf{width:auto;padding:0 13px;font-size:13px;font-weight:600}
+.df-zoom button:hover{background:var(--panel-3)}
+.df-canvas .drawflow-node .input,.df-canvas .drawflow-node .output{background:#3ee08a !important;box-shadow:none !important;border:2px solid var(--bg) !important}

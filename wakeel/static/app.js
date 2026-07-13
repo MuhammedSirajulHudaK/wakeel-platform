@@ -1492,6 +1492,78 @@ function renderOverview(info) {
   }).catch(e => { $("#ovBody").innerHTML = `<div class="empty-mini">⚠️ ${esc(e.message)}</div>`; });
 }
 
+// map a Dify node type/data to a Wakeel display node (Beam-like)
+const NODE_KIND = {
+  start: { icon: "📥", acc: "green", type: "Trigger" },
+  "question-classifier": { icon: "🔀", acc: "gold", type: "Router" },
+  "if-else": { icon: "🔀", acc: "gold", type: "Decision" },
+  llm: { icon: "🤖", acc: "purple", type: "AI step" },
+  agent: { icon: "🤖", acc: "purple", type: "AI agent" },
+  tool: { icon: "🔧", acc: "blue", type: "Tool" },
+  "http-request": { icon: "🌐", acc: "blue", type: "Request" },
+  code: { icon: "💻", acc: "amber", type: "Code" },
+  "knowledge-retrieval": { icon: "📚", acc: "blue", type: "Knowledge" },
+  "template-transform": { icon: "🧩", acc: "amber", type: "Format" },
+  "variable-assigner": { icon: "🔗", acc: "amber", type: "Variables" },
+  "variable-aggregator": { icon: "🔗", acc: "amber", type: "Variables" },
+  "parameter-extractor": { icon: "🔍", acc: "blue", type: "Extract" },
+  iteration: { icon: "🔁", acc: "purple", type: "Loop" },
+  loop: { icon: "🔁", acc: "purple", type: "Loop" },
+  "answer": { icon: "✅", acc: "green", type: "Reply" },
+  "end": { icon: "✅", acc: "green", type: "End" },
+};
+function dfKind(t) { return NODE_KIND[t] || { icon: "●", acc: "blue", type: (t || "Step").replace(/-/g, " ") }; }
+function dfNodeHTML(meta, title) {
+  return `<div class="wk-node beam acc-${meta.acc}"><div class="wk-type2">${esc(meta.type)}</div><div class="wk-title2">${meta.icon} ${esc(title || "Step")}</div></div>`;
+}
+// build the Drawflow editor from the agent's real graph (Beam-like nodes, our positions)
+function buildAgentFlow(containerId, graph) {
+  const el = document.getElementById(containerId); if (!el || typeof Drawflow === "undefined") return null;
+  const ed = new Drawflow(el); ed.reroute = true; ed.editor_mode = "edit"; ed.start();
+  const isNested = (n) => { const d = n.data || {}; return !!(n.parentId || d.isInIteration || d.isInLoop || d.iteration_id || d.loop_id); };
+  const nodes = (graph.nodes || []).filter(n => !isNested(n));
+  const idset = new Set(nodes.map(n => n.id));
+  const edges = (graph.edges || []).filter(e => idset.has(e.source) && idset.has(e.target));
+  // per-node: inputs (1 unless start), outputs (# distinct source handles)
+  const outHandles = {}; // nodeId -> [handle,...]
+  const hasIn = {};
+  edges.forEach(e => {
+    hasIn[e.target] = true;
+    const h = e.sourceHandle || "source";
+    (outHandles[e.source] = outHandles[e.source] || []);
+    if (!outHandles[e.source].includes(h)) outHandles[e.source].push(h);
+  });
+  const dfId = {}; const outIdx = {}; // outIdx[node][handle] = 1-based port
+  nodes.forEach((n, i) => {
+    const d = n.data || {}; const t = d.type || "";
+    const meta = dfKind(t);
+    const title = d.title || t || "Step";
+    const outs = (outHandles[n.id] || []).length || (t === "answer" || t === "end" ? 0 : 1);
+    const ins = hasIn[n.id] ? 1 : (t === "start" ? 0 : 1);
+    const pos = n.position || { x: 60 + i * 300, y: 120 };
+    // Dify layout uses wide gaps (for its canvas); tighten for our 196px nodes
+    const px = Math.round(pos.x * 0.5), py = Math.round(pos.y * 0.72);
+    (outHandles[n.id] || []).forEach((h, k) => { (outIdx[n.id] = outIdx[n.id] || {})[h] = k + 1; });
+    dfId[n.id] = ed.addNode("n", ins, outs, px, py, "wk", { id: n.id }, dfNodeHTML(meta, title));
+  });
+  edges.forEach(e => {
+    const oi = (outIdx[e.source] && outIdx[e.source][e.sourceHandle || "source"]) || 1;
+    try { ed.addConnection(dfId[e.source], dfId[e.target], "output_" + oi, "input_1"); } catch (err) {}
+  });
+  return ed;
+}
+function fitFlow(ed, containerId) {
+  if (!ed) return;
+  const nodes = Object.values((ed.drawflow.drawflow.Home || {}).data || {});
+  if (!nodes.length) return;
+  const xs = nodes.map(n => n.pos_x), ys = nodes.map(n => n.pos_y);
+  const minx = Math.min(...xs), miny = Math.min(...ys), maxx = Math.max(...xs), maxy = Math.max(...ys);
+  const el = document.getElementById(containerId); const w = el.clientWidth - 60, h = el.clientHeight - 60;
+  const z = Math.max(0.45, Math.min(0.9, Math.min(w / ((maxx - minx) + 240), h / ((maxy - miny) + 180))));
+  ed.zoom = z; ed.zoom_refresh();
+  const canvas = el.querySelector(".drawflow");
+  if (canvas) { const tx = 30 - minx * z, ty = 30 - miny * z; ed.canvas_x = tx; ed.canvas_y = ty; canvas.style.transform = `translate(${tx}px,${ty}px) scale(${z})`; }
+}
 function renderFlowStudio(info) {
   window.__flowInfo = info;
   window.__graph = info.graph || { nodes: [], edges: [] };
@@ -1501,19 +1573,26 @@ function renderFlowStudio(info) {
       <div class="ctrls">
         <button class="draft-btn ghost" id="tidyBtn" title="Lay it out left-to-right, spread apart, with plain-language steps">${IC.flow} Tidy diagram</button>
         <button class="draft-btn ghost" id="simpleBtn" title="Simplified card view">${IC.views} Simple view</button>
-        <button class="draft-btn ghost" id="studioRun" title="Test the flow logic through Dify">${IC.play} Test run</button>
+        <button class="draft-btn ghost" id="studioRun" title="Test the flow logic">${IC.play} Test run</button>
         <button class="draft-btn run" id="studioLive" title="Run on your real Google Sheet — read rows, draft emails, send & update on your approval">${IC.bolt} Run live</button>
         <button class="btn primary sm" id="studioPub">Publish</button>
       </div>
     </div>
-    <div class="studio-embed"><iframe id="studioFrame" src="/app/${AGENT}/workflow?embed=wakeel" title="Flow"></iframe></div>`;
+    <div class="df-canvas" id="dfCanvas"></div>
+    <div class="df-zoom"><button id="dfzi">+</button><button id="dfzo">–</button><button id="dfzf">Fit</button></div>`;
+  const ed = buildAgentFlow("dfCanvas", window.__graph);
+  window.__dfEditor = ed;
+  setTimeout(() => fitFlow(ed, "dfCanvas"), 40);
+  $("#dfzi").onclick = () => ed && ed.zoom_in();
+  $("#dfzo").onclick = () => ed && ed.zoom_out();
+  $("#dfzf").onclick = () => fitFlow(ed, "dfCanvas");
   $("#simpleBtn").onclick = () => { ASUB = "simple"; viewAgent(); };
   $("#studioRun").onclick = () => openRunModal(info);
   $("#studioLive").onclick = () => openRunLive(info);
   $("#studioPub").onclick = () => publishAgent($("#studioPub"));
   $("#tidyBtn").onclick = async () => {
     const b = $("#tidyBtn"); b.disabled = true; b.innerHTML = `<span class="spin"></span> Tidying…`;
-    try { await api("POST", "relayout", { app_id: AGENT }); const f = $("#studioFrame"); if (f) f.src = f.src; toast("Diagram tidied — top-to-bottom, plain steps"); }
+    try { await api("POST", "relayout", { app_id: AGENT }); const fresh = await api("GET", "app-info?id=" + AGENT); window.__graph = fresh.graph || window.__graph; const e2 = buildAgentFlow("dfCanvas", window.__graph); window.__dfEditor = e2; setTimeout(() => fitFlow(e2, "dfCanvas"), 40); $("#dfzi").onclick = () => e2.zoom_in(); $("#dfzo").onclick = () => e2.zoom_out(); $("#dfzf").onclick = () => fitFlow(e2, "dfCanvas"); toast("Diagram tidied — plain-language steps"); }
     catch (e) { toast(e.message, true); }
     finally { b.disabled = false; b.innerHTML = `${IC.flow} Tidy diagram`; }
   };
@@ -2797,7 +2876,7 @@ async function boot() {
   const rn = q.match(/[?&]run=([^&]+)/); if (rn) window.__autorun = decodeURIComponent(rn[1]);
   const nd = q.match(/[?&]node=(\d+)/); if (nd) window.__autonode = parseInt(nd[1]);
   const tl = q.match(/[?&]tool=(\d+)/); if (tl) window.__autotool = parseInt(tl[1]);
-  const sb = q.match(/[?&]sub=(overview|triggers|automation|records|evaluate|memory|governance|instructions|simple)/); if (sb) window.__autosub = sb[1];
+  const sb = q.match(/[?&]sub=(overview|flow|triggers|automation|records|evaluate|memory|governance|instructions|simple)/); if (sb) window.__autosub = sb[1];
   if (q.match(/[?&]m365=1/)) { window.__autom365 = true; window.__autosub = "triggers"; }
   const cf = q.match(/[?&]config=([^&]+)/); if (cf) { window.__autoconfig = decodeURIComponent(cf[1]); VIEW = "integrations"; }
   if (m) history.replaceState(null, "", location.pathname + location.hash);

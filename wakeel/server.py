@@ -2664,6 +2664,10 @@ class H(BaseHTTPRequestHandler):
             return self._nocache("app.js", "application/javascript")
         if p == "/style.css":
             return self._nocache("style.css", "text/css")
+        if p == "/drawflow.min.js":
+            return self._file("drawflow.min.js", "application/javascript")
+        if p == "/drawflow.min.css":
+            return self._file("drawflow.min.css", "text/css")
         if p == "/tour.html":
             return self._file("tour.html", "text/html; charset=utf-8")
         if p == "/wakeel-mark.svg":
