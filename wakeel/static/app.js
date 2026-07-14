@@ -1087,7 +1087,9 @@ async function viewAgent() {
       <div class="agent-tabs">${ATABS.map(([id, l]) => `<button class="${cur === id ? "active" : ""}" data-s="${id}">${t(l)}</button>`).join("")}</div>
       <div class="top-actions"><button class="icn-btn" id="copToggle" title="Copilot">${IC.chat}</button></div></div>
     <div class="flow-wrap" id="flowWrap"><div class="empty-state"><div class="spin" style="margin:0 auto"></div></div></div>`;
-  document.querySelectorAll(".agent-tabs button").forEach(b => b.onclick = () => { ASUB = b.dataset.s; CFGNODE = null; viewAgent(); });
+  // Switching tabs re-renders the shell so the Build Assistant panel shows beside
+  // editable tabs (flow/triggers/…) and hides on Overview. renderShell() re-runs viewAgent().
+  document.querySelectorAll(".agent-tabs button").forEach(b => b.onclick = () => { ASUB = b.dataset.s; CFGNODE = null; COPILOT = (ASUB !== "overview"); renderShell(); });
   $("#copToggle").onclick = () => { COPILOT = !COPILOT; renderShell(); };
   try {
     const info = await api("GET", "app-info?id=" + AGENT);
@@ -1100,7 +1102,7 @@ async function viewAgent() {
     else if (ASUB === "memory") renderMemory(info);
     else if (ASUB === "governance") renderGovernance(info);
     else if (ASUB === "instructions") renderInstructions(info);
-    else if (ASUB === "simple") renderFlow(info); // simplified card view (alternative)
+    else if (ASUB === "simple") renderFlowStudio(info); // legacy alias → the (already simple) Railway flow
     else renderFlowStudio(info); // default "flow" = the real Dify diagram, cleaned, + chatbot
     // show a persistent "connect your services" prompt on the flow view
     if (ASUB === "flow" || ASUB === "config" || ASUB === "simple") maybeShowConnectBanner(info, app.name);
@@ -1586,13 +1588,25 @@ function buildRailwayFlow(stageId, worldId, wiresId, graph) {
     scale = Math.max(.3, Math.min(vw / (c - a), vh / (dd - b), 1.1));
     tx = (vw - (c - a) * scale) / 2 - a * scale; ty = (vh - (dd - b) * scale) / 2 - b * scale; apply();
   }
+  // start zoomed in on the first column (readable), left-aligned & vertically centered
+  function initial() {
+    if (!nodes.length) return;
+    scale = 0.95;
+    const first = cols[Object.keys(cols).map(Number).sort((a, b) => a - b)[0]] || nodes;
+    let cy0 = 1e9, cy1 = -1e9;
+    first.forEach(n => { cy0 = Math.min(cy0, pos[n.id].y); cy1 = Math.max(cy1, pos[n.id].y + nodeH[n.id]); });
+    const cy = (cy0 + cy1) / 2, minx = PADX;
+    tx = 44 - minx * scale;
+    ty = stage.clientHeight / 2 - cy * scale;
+    apply();
+  }
   let drag = false, px, py;
   stage.onmousedown = (e) => { drag = true; px = e.clientX; py = e.clientY; stage.classList.add("drag"); };
   stage.onmousemove = (e) => { if (!drag) return; tx += e.clientX - px; ty += e.clientY - py; px = e.clientX; py = e.clientY; apply(); };
   const up = () => { drag = false; stage.classList.remove("drag"); };
   stage.onmouseup = up; stage.onmouseleave = up;
   stage.onwheel = (e) => { e.preventDefault(); const f = e.deltaY < 0 ? 1.1 : 1 / 1.1; const ns = Math.max(.3, Math.min(1.6, scale * f)); const rc = stage.getBoundingClientRect(); const rx = e.clientX - rc.left, ry = e.clientY - rc.top; tx = rx - (rx - tx) * (ns / scale); ty = ry - (ry - ty) * (ns / scale); scale = ns; apply(); };
-  setTimeout(fit, 30);
+  setTimeout(initial, 30);
   return { fit, zoom: (f) => { scale = Math.max(.3, Math.min(1.6, scale * f)); apply(); } };
 }
 function renderFlowStudio(info) {
@@ -1603,7 +1617,6 @@ function renderFlowStudio(info) {
       <div><h1>Flow</h1><p>${esc(info.name || "Your agent")} · ${(info.nodes || []).length} steps · <span style="color:var(--wakeel)">edit it by chatting with the assistant →</span></p></div>
       <div class="ctrls">
         <button class="draft-btn ghost" id="tidyBtn" title="Lay it out left-to-right, spread apart, with plain-language steps">${IC.flow} Tidy diagram</button>
-        <button class="draft-btn ghost" id="simpleBtn" title="Simplified card view">${IC.views} Simple view</button>
         <button class="draft-btn ghost" id="studioRun" title="Test the flow logic">${IC.play} Test run</button>
         <button class="draft-btn run" id="studioLive" title="Run on your real Google Sheet — read rows, draft emails, send & update on your approval">${IC.bolt} Run live</button>
         <button class="btn primary sm" id="studioPub">Publish</button>
@@ -1617,7 +1630,6 @@ function renderFlowStudio(info) {
   window.__rfCtl = ctl;
   const wireZoom = () => { $("#dfzi").onclick = () => ctl.zoom(1.15); $("#dfzo").onclick = () => ctl.zoom(1 / 1.15); $("#dfzf").onclick = () => ctl.fit(); };
   wireZoom();
-  $("#simpleBtn").onclick = () => { ASUB = "simple"; viewAgent(); };
   $("#studioRun").onclick = () => openRunModal(info);
   $("#studioLive").onclick = () => openRunLive(info);
   $("#studioPub").onclick = () => publishAgent($("#studioPub"));
@@ -2631,7 +2643,7 @@ async function openTask(id) {
       <div class="side-sub" style="padding-inline:0">Steps</div>
       <div class="rowlist" style="border-radius:12px">${(t.nodes || []).map((n, i) => `<div class="lrow" style="padding:11px 14px"><div class="ic" style="width:26px;height:26px">${i + 1}</div><div class="info"><div class="t" style="font-size:13.5px">${esc(n.title || "step")}</div></div>${statusPill(n.status)}<span style="font-size:11px;color:var(--faint);margin-inline-start:10px">${n.ms ? (n.ms / 1000).toFixed(1) + "s" : ""}</span></div>`).join("")}</div>
       ${t.output ? `<div style="display:flex;align-items:center;gap:10px"><div class="side-sub" style="padding-inline:0;flex:1">Output</div><div class="rate" id="rate"><span class="rate-l">Rate this output</span><button class="rbtn up" data-r="up" title="Good">${IC.thumb}</button><button class="rbtn down" data-r="down" title="Needs work">${IC.thumb}</button></div></div><div class="rl-out" style="background:var(--panel-2);color:var(--text);border-color:var(--line)">${esc(t.output).slice(0, 3000)}</div>` : ""}`;
-    if ($("#rerunBtn")) $("#rerunBtn").onclick = () => { window.__autorun = t.input || ""; d.remove(); openAgent(t.app_id, "simple"); };
+    if ($("#rerunBtn")) $("#rerunBtn").onclick = () => { window.__autorun = t.input || ""; d.remove(); openAgent(t.app_id, "flow"); };
     if (t.output) {
       const rateEl = $("#rate");
       rateEl.querySelectorAll(".rbtn").forEach(b => b.onclick = async () => {
