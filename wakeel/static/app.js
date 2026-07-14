@@ -1513,56 +1513,87 @@ const NODE_KIND = {
   "end": { icon: "✅", acc: "green", type: "End" },
 };
 function dfKind(t) { return NODE_KIND[t] || { icon: "●", acc: "blue", type: (t || "Step").replace(/-/g, " ") }; }
-function dfNodeHTML(meta, title) {
-  return `<div class="wk-node beam acc-${meta.acc}"><div class="wk-type2">${esc(meta.type)}</div><div class="wk-title2">${meta.icon} ${esc(title || "Step")}</div></div>`;
+// Railway-style card colors per accent
+const ACC_COLOR = { green: "#3ee08a", gold: "#e6b02e", purple: "#a78bfa", blue: "#63a0e6", amber: "#e0a33a", red: "#ec6a6a", teal: "#19c07d" };
+function rfStatus(meta, d) {
+  let sc = "green";
+  if (meta.acc === "red") sc = "red"; else if (meta.acc === "gold" || meta.acc === "amber") sc = "amber";
+  const txt = (d.desc || "").trim();
+  return { sc, txt: txt ? (txt.length > 46 ? txt.slice(0, 44) + "…" : txt) : meta.type };
 }
-// build the Drawflow editor from the agent's real graph (Beam-like nodes, our positions)
-function buildAgentFlow(containerId, graph) {
-  const el = document.getElementById(containerId); if (!el || typeof Drawflow === "undefined") return null;
-  const ed = new Drawflow(el); ed.reroute = true; ed.editor_mode = "edit"; ed.start();
+// Railway-style flow: our own SVG/CSS renderer (no library). Draws the agent's
+// real graph as service cards + dashed connectors on a dot-grid, with pan/zoom.
+const RF_W = 238;
+function buildRailwayFlow(stageId, worldId, wiresId, graph) {
+  const stage = document.getElementById(stageId), world = document.getElementById(worldId), wires = document.getElementById(wiresId);
+  if (!stage || !world || !wires) return { fit() {}, zoom() {} };
+  Array.from(world.querySelectorAll(".rf-node,.rf-wlabel")).forEach(n => n.remove());
+  wires.innerHTML = "";
   const isNested = (n) => { const d = n.data || {}; return !!(n.parentId || d.isInIteration || d.isInLoop || d.iteration_id || d.loop_id); };
   const nodes = (graph.nodes || []).filter(n => !isNested(n));
   const idset = new Set(nodes.map(n => n.id));
   const edges = (graph.edges || []).filter(e => idset.has(e.source) && idset.has(e.target));
-  // per-node: inputs (1 unless start), outputs (# distinct source handles)
-  const outHandles = {}; // nodeId -> [handle,...]
-  const hasIn = {};
+  // layered (longest-path) layout — guarantees no overlap, clean left-to-right tree
+  const rank = {}; nodes.forEach(n => rank[n.id] = 0);
+  let ch = true, guard = 0;
+  while (ch && guard++ < 400) { ch = false; edges.forEach(e => { if (rank[e.target] < rank[e.source] + 1) { rank[e.target] = rank[e.source] + 1; ch = true; } }); }
+  const cols = {}; nodes.forEach(n => { (cols[rank[n.id]] = cols[rank[n.id]] || []).push(n); });
+  const COLW = 300, ROWH = 152, PADX = 48, PADY = 56;
+  const maxRows = Math.max(1, ...Object.values(cols).map(a => a.length));
+  const pos = {};
+  Object.keys(cols).forEach(r => {
+    const arr = cols[r]; const off = PADY + (maxRows * ROWH - arr.length * ROWH) / 2;
+    arr.forEach((n, i) => { pos[n.id] = { x: PADX + r * COLW, y: off + i * ROWH }; });
+  });
+  const nodeH = {};
+  nodes.forEach(n => {
+    const d = n.data || {}; const meta = dfKind(d.type || "");
+    const title = d.title || d.type || "Step"; const s = rfStatus(meta, d);
+    const dotAcc = s.sc === "red" ? "red" : s.sc === "amber" ? "gold" : "green";
+    const el = document.createElement("div"); el.className = "rf-node";
+    el.style.left = pos[n.id].x + "px"; el.style.top = pos[n.id].y + "px";
+    el.innerHTML = `<span class="accent" style="background:${ACC_COLOR[meta.acc] || "#63a0e6"}"></span>
+      <div class="body"><div class="type">${esc(meta.type)}</div>
+      <div class="title"><span class="ic">${meta.icon}</span>${esc(title)}</div>
+      <div class="status"><span class="dot" style="background:${ACC_COLOR[dotAcc]}"></span>${esc(s.txt)}</div></div>`;
+    world.appendChild(el); nodeH[n.id] = el.offsetHeight || 84;
+  });
+  const NS = "http://www.w3.org/2000/svg";
+  function pathd(s, t) {
+    const sx = pos[s].x + RF_W, sy = pos[s].y + nodeH[s] / 2, tx = pos[t].x, ty = pos[t].y + nodeH[t] / 2;
+    if (tx <= sx) { const my = (sy + ty) / 2; return `M ${sx} ${sy} L ${sx + 18} ${sy} L ${sx + 18} ${my} L ${tx - 18} ${my} L ${tx - 18} ${ty} L ${tx} ${ty}`; }
+    const r = 13, mx = Math.round((sx + tx) / 2), vd = ty > sy ? 1 : -1;
+    if (Math.abs(ty - sy) < 2) return `M ${sx} ${sy} L ${tx} ${ty}`;
+    return `M ${sx} ${sy} L ${mx - r} ${sy} Q ${mx} ${sy} ${mx} ${sy + vd * r} L ${mx} ${ty - vd * r} Q ${mx} ${ty} ${mx + r} ${ty} L ${tx} ${ty}`;
+  }
+  function elabel(h) { if (!h) return ""; const m = String(h).toLowerCase(); if (m === "true" || m === "yes") return "Yes"; if (m === "false" || m === "no") return "No"; if (/^[a-z0-9 _-]{1,14}$/i.test(h) && !/^[0-9a-f]{8}/i.test(h)) return h; return ""; }
   edges.forEach(e => {
-    hasIn[e.target] = true;
-    const h = e.sourceHandle || "source";
-    (outHandles[e.source] = outHandles[e.source] || []);
-    if (!outHandles[e.source].includes(h)) outHandles[e.source].push(h);
+    const p = document.createElementNS(NS, "path"); p.setAttribute("d", pathd(e.source, e.target)); p.setAttribute("class", "rf-wire flow"); wires.appendChild(p);
+    const lab = elabel(e.sourceHandle);
+    if (lab) {
+      const sx = pos[e.source].x + RF_W, tx = pos[e.target].x, mx = (sx + tx) / 2, my = (pos[e.source].y + nodeH[e.source] / 2 + pos[e.target].y + nodeH[e.target] / 2) / 2;
+      const el = document.createElement("div"); el.className = "rf-wlabel"; el.textContent = lab; el.style.left = mx + "px"; el.style.top = my + "px"; world.appendChild(el);
+    }
   });
-  const dfId = {}; const outIdx = {}; // outIdx[node][handle] = 1-based port
-  nodes.forEach((n, i) => {
-    const d = n.data || {}; const t = d.type || "";
-    const meta = dfKind(t);
-    const title = d.title || t || "Step";
-    const outs = (outHandles[n.id] || []).length || (t === "answer" || t === "end" ? 0 : 1);
-    const ins = hasIn[n.id] ? 1 : (t === "start" ? 0 : 1);
-    const pos = n.position || { x: 60 + i * 300, y: 120 };
-    // Dify layout uses wide gaps (for its canvas); tighten for our 196px nodes
-    const px = Math.round(pos.x * 0.5), py = Math.round(pos.y * 0.72);
-    (outHandles[n.id] || []).forEach((h, k) => { (outIdx[n.id] = outIdx[n.id] || {})[h] = k + 1; });
-    dfId[n.id] = ed.addNode("n", ins, outs, px, py, "wk", { id: n.id }, dfNodeHTML(meta, title));
-  });
-  edges.forEach(e => {
-    const oi = (outIdx[e.source] && outIdx[e.source][e.sourceHandle || "source"]) || 1;
-    try { ed.addConnection(dfId[e.source], dfId[e.target], "output_" + oi, "input_1"); } catch (err) {}
-  });
-  return ed;
-}
-function fitFlow(ed, containerId) {
-  if (!ed) return;
-  const nodes = Object.values((ed.drawflow.drawflow.Home || {}).data || {});
-  if (!nodes.length) return;
-  const xs = nodes.map(n => n.pos_x), ys = nodes.map(n => n.pos_y);
-  const minx = Math.min(...xs), miny = Math.min(...ys), maxx = Math.max(...xs), maxy = Math.max(...ys);
-  const el = document.getElementById(containerId); const w = el.clientWidth - 60, h = el.clientHeight - 60;
-  const z = Math.max(0.45, Math.min(0.9, Math.min(w / ((maxx - minx) + 240), h / ((maxy - miny) + 180))));
-  ed.zoom = z; ed.zoom_refresh();
-  const canvas = el.querySelector(".drawflow");
-  if (canvas) { const tx = 30 - minx * z, ty = 30 - miny * z; ed.canvas_x = tx; ed.canvas_y = ty; canvas.style.transform = `translate(${tx}px,${ty}px) scale(${z})`; }
+  let scale = .8, tx = 0, ty = 0;
+  const apply = () => { world.style.transform = `translate(${tx}px,${ty}px) scale(${scale})`; };
+  function fit() {
+    if (!nodes.length) return;
+    let a = 1e9, b = 1e9, c = -1e9, dd = -1e9;
+    nodes.forEach(n => { a = Math.min(a, pos[n.id].x); b = Math.min(b, pos[n.id].y); c = Math.max(c, pos[n.id].x + RF_W); dd = Math.max(dd, pos[n.id].y + nodeH[n.id]); });
+    a -= 44; b -= 50; c += 44; dd += 40;
+    const vw = stage.clientWidth, vh = stage.clientHeight;
+    scale = Math.max(.3, Math.min(vw / (c - a), vh / (dd - b), 1.1));
+    tx = (vw - (c - a) * scale) / 2 - a * scale; ty = (vh - (dd - b) * scale) / 2 - b * scale; apply();
+  }
+  let drag = false, px, py;
+  stage.onmousedown = (e) => { drag = true; px = e.clientX; py = e.clientY; stage.classList.add("drag"); };
+  stage.onmousemove = (e) => { if (!drag) return; tx += e.clientX - px; ty += e.clientY - py; px = e.clientX; py = e.clientY; apply(); };
+  const up = () => { drag = false; stage.classList.remove("drag"); };
+  stage.onmouseup = up; stage.onmouseleave = up;
+  stage.onwheel = (e) => { e.preventDefault(); const f = e.deltaY < 0 ? 1.1 : 1 / 1.1; const ns = Math.max(.3, Math.min(1.6, scale * f)); const rc = stage.getBoundingClientRect(); const rx = e.clientX - rc.left, ry = e.clientY - rc.top; tx = rx - (rx - tx) * (ns / scale); ty = ry - (ry - ty) * (ns / scale); scale = ns; apply(); };
+  setTimeout(fit, 30);
+  return { fit, zoom: (f) => { scale = Math.max(.3, Math.min(1.6, scale * f)); apply(); } };
 }
 function renderFlowStudio(info) {
   window.__flowInfo = info;
@@ -1578,21 +1609,21 @@ function renderFlowStudio(info) {
         <button class="btn primary sm" id="studioPub">Publish</button>
       </div>
     </div>
-    <div class="df-canvas" id="dfCanvas"></div>
+    <div class="rf-stage" id="rfStage">
+      <div class="rf-world" id="rfWorld"><svg class="rf-wires" id="rfWires"></svg></div>
+    </div>
     <div class="df-zoom"><button id="dfzi">+</button><button id="dfzo">–</button><button id="dfzf">Fit</button></div>`;
-  const ed = buildAgentFlow("dfCanvas", window.__graph);
-  window.__dfEditor = ed;
-  setTimeout(() => fitFlow(ed, "dfCanvas"), 40);
-  $("#dfzi").onclick = () => ed && ed.zoom_in();
-  $("#dfzo").onclick = () => ed && ed.zoom_out();
-  $("#dfzf").onclick = () => fitFlow(ed, "dfCanvas");
+  let ctl = buildRailwayFlow("rfStage", "rfWorld", "rfWires", window.__graph);
+  window.__rfCtl = ctl;
+  const wireZoom = () => { $("#dfzi").onclick = () => ctl.zoom(1.15); $("#dfzo").onclick = () => ctl.zoom(1 / 1.15); $("#dfzf").onclick = () => ctl.fit(); };
+  wireZoom();
   $("#simpleBtn").onclick = () => { ASUB = "simple"; viewAgent(); };
   $("#studioRun").onclick = () => openRunModal(info);
   $("#studioLive").onclick = () => openRunLive(info);
   $("#studioPub").onclick = () => publishAgent($("#studioPub"));
   $("#tidyBtn").onclick = async () => {
     const b = $("#tidyBtn"); b.disabled = true; b.innerHTML = `<span class="spin"></span> Tidying…`;
-    try { await api("POST", "relayout", { app_id: AGENT }); const fresh = await api("GET", "app-info?id=" + AGENT); window.__graph = fresh.graph || window.__graph; const e2 = buildAgentFlow("dfCanvas", window.__graph); window.__dfEditor = e2; setTimeout(() => fitFlow(e2, "dfCanvas"), 40); $("#dfzi").onclick = () => e2.zoom_in(); $("#dfzo").onclick = () => e2.zoom_out(); $("#dfzf").onclick = () => fitFlow(e2, "dfCanvas"); toast("Diagram tidied — plain-language steps"); }
+    try { await api("POST", "relayout", { app_id: AGENT }); const fresh = await api("GET", "app-info?id=" + AGENT); window.__graph = fresh.graph || window.__graph; ctl = buildRailwayFlow("rfStage", "rfWorld", "rfWires", window.__graph); window.__rfCtl = ctl; wireZoom(); toast("Diagram tidied — plain-language steps"); }
     catch (e) { toast(e.message, true); }
     finally { b.disabled = false; b.innerHTML = `${IC.flow} Tidy diagram`; }
   };
