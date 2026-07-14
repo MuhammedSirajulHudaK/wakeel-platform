@@ -317,7 +317,7 @@ function t(s) { return LANG === "ar" ? (T[s] || s) : s; }
 
 /* ---------- state ---------- */
 let ME = null, LANG = localStorage.getItem("wakeel_lang") || "en";
-let VIEW = "home", BUILD = true, AGENT = null, ASUB = "flow", COPILOT = false;
+let VIEW = "home", BUILD = true, AGENT = null, ASUB = "flow", COPILOT = false, COP_HIDDEN = false;
 let APPS = [], THREAD = [], LASTGRAPH = null, LASTDESIGN = null, DEPT = "all", CFGNODE = null, ACTIVE_SKILL = null;
 const TOUR_URL = "/wakeel/tour.html";
 
@@ -432,8 +432,9 @@ const NAV = [["home", "Home", IC.home], ["skills", "Skills", IC.skills], ["templ
 
 function renderShell() {
   applyDir();
-  // Chat-first: the Build Assistant sits beside the Dify flow diagram and config tabs.
-  const showCop = COPILOT && VIEW === "agent" && ASUB !== "config";
+  // Chat-first: the Build Assistant sits beside every editable tab (flow/triggers/…),
+  // hidden only on Overview/Config or when the user explicitly closes it with the toggle.
+  const showCop = VIEW === "agent" && ASUB !== "overview" && ASUB !== "config" && !COP_HIDDEN;
   $("#root").innerHTML = `
   <div class="app">
     <aside class="side">
@@ -1089,8 +1090,8 @@ async function viewAgent() {
     <div class="flow-wrap" id="flowWrap"><div class="empty-state"><div class="spin" style="margin:0 auto"></div></div></div>`;
   // Switching tabs re-renders the shell so the Build Assistant panel shows beside
   // editable tabs (flow/triggers/…) and hides on Overview. renderShell() re-runs viewAgent().
-  document.querySelectorAll(".agent-tabs button").forEach(b => b.onclick = () => { ASUB = b.dataset.s; CFGNODE = null; COPILOT = (ASUB !== "overview"); renderShell(); });
-  $("#copToggle").onclick = () => { COPILOT = !COPILOT; renderShell(); };
+  document.querySelectorAll(".agent-tabs button").forEach(b => b.onclick = () => { ASUB = b.dataset.s; CFGNODE = null; renderShell(); });
+  $("#copToggle").onclick = () => { COP_HIDDEN = !COP_HIDDEN; renderShell(); };
   try {
     const info = await api("GET", "app-info?id=" + AGENT);
     window.__agentInfo = info;
@@ -1523,6 +1524,13 @@ function rfStatus(meta, d) {
   const txt = (d.desc || "").trim();
   return { sc, txt: txt ? (txt.length > 46 ? txt.slice(0, 44) + "…" : txt) : meta.type };
 }
+// canvas control icons (stroke, inherit color)
+const SVGI = {
+  plus: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  minus: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg>',
+  target: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>',
+  expand: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>',
+};
 // Railway-style flow: our own SVG/CSS renderer (no library). Draws the agent's
 // real graph as service cards + dashed connectors on a dot-grid, with pan/zoom.
 const RF_W = 238;
@@ -1591,7 +1599,7 @@ function buildRailwayFlow(stageId, worldId, wiresId, graph) {
   // start zoomed in on the first column (readable), left-aligned & vertically centered
   function initial() {
     if (!nodes.length) return;
-    scale = 0.95;
+    scale = 1.1;
     const first = cols[Object.keys(cols).map(Number).sort((a, b) => a - b)[0]] || nodes;
     let cy0 = 1e9, cy1 = -1e9;
     first.forEach(n => { cy0 = Math.min(cy0, pos[n.id].y); cy1 = Math.max(cy1, pos[n.id].y + nodeH[n.id]); });
@@ -1607,7 +1615,7 @@ function buildRailwayFlow(stageId, worldId, wiresId, graph) {
   stage.onmouseup = up; stage.onmouseleave = up;
   stage.onwheel = (e) => { e.preventDefault(); const f = e.deltaY < 0 ? 1.1 : 1 / 1.1; const ns = Math.max(.3, Math.min(1.6, scale * f)); const rc = stage.getBoundingClientRect(); const rx = e.clientX - rc.left, ry = e.clientY - rc.top; tx = rx - (rx - tx) * (ns / scale); ty = ry - (ry - ty) * (ns / scale); scale = ns; apply(); };
   setTimeout(initial, 30);
-  return { fit, zoom: (f) => { scale = Math.max(.3, Math.min(1.6, scale * f)); apply(); } };
+  return { fit, initial, zoom: (f) => { scale = Math.max(.3, Math.min(1.8, scale * f)); apply(); } };
 }
 function renderFlowStudio(info) {
   window.__flowInfo = info;
@@ -1624,11 +1632,20 @@ function renderFlowStudio(info) {
     </div>
     <div class="rf-stage" id="rfStage">
       <div class="rf-world" id="rfWorld"><svg class="rf-wires" id="rfWires"></svg></div>
-    </div>
-    <div class="df-zoom"><button id="dfzi">+</button><button id="dfzo">–</button><button id="dfzf">Fit</button></div>`;
+      <div class="rf-ctrls" id="rfCtrls">
+        <button id="dfzi" title="Zoom in">${SVGI.plus}</button>
+        <button id="dfzo" title="Zoom out">${SVGI.minus}</button>
+        <button id="dfzc" title="Recenter on the start">${SVGI.target}</button>
+        <button id="dfzf" title="Fit whole flow">${SVGI.expand}</button>
+      </div>
+    </div>`;
   let ctl = buildRailwayFlow("rfStage", "rfWorld", "rfWires", window.__graph);
   window.__rfCtl = ctl;
-  const wireZoom = () => { $("#dfzi").onclick = () => ctl.zoom(1.15); $("#dfzo").onclick = () => ctl.zoom(1 / 1.15); $("#dfzf").onclick = () => ctl.fit(); };
+  const wireZoom = () => {
+    $("#rfCtrls").addEventListener("mousedown", e => e.stopPropagation()); // don't start a pan when clicking a control
+    $("#dfzi").onclick = () => ctl.zoom(1.2); $("#dfzo").onclick = () => ctl.zoom(1 / 1.2);
+    $("#dfzc").onclick = () => ctl.initial(); $("#dfzf").onclick = () => ctl.fit();
+  };
   wireZoom();
   $("#studioRun").onclick = () => openRunModal(info);
   $("#studioLive").onclick = () => openRunLive(info);
