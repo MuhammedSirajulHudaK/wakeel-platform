@@ -170,6 +170,36 @@ def dify_browser_cookies(sess):
     return out
 
 
+# ---- Public / no-login demo mode -------------------------------------------
+# When WAKEEL_PUBLIC is on, every anonymous visitor is auto-attached to ONE
+# shared demo session (the WAKEEL_SVC_EMAIL account) so the app opens straight
+# into the product with no sign-in. Intended for demos — everyone shares the
+# same workspace. Leave it off for real multi-tenant / production use.
+_PUBLIC = {}
+
+
+def public_enabled():
+    return os.environ.get("WAKEEL_PUBLIC", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def public_session():
+    """Return (token, sess) for the shared public demo session, creating it once."""
+    email = os.environ.get("WAKEEL_SVC_EMAIL")
+    pw = os.environ.get("WAKEEL_SVC_PW")
+    if not email or not pw:
+        return None, None
+    tok = _PUBLIC.get("token")
+    sess = SESSIONS.get(tok) if tok else None
+    if not sess:
+        try:
+            tok = new_session(email, pw)
+        except Exception:
+            return None, None
+        _PUBLIC["token"] = tok
+        sess = SESSIONS[tok]
+    return tok, sess
+
+
 def _csrf(sess):
     for c in sess["jar"]:
         if c.name == "csrf_token":
@@ -2502,8 +2532,15 @@ class H(BaseHTTPRequestHandler):
         html = html.replace('href="style.css"', f'href="style.css?v={v}"')
         html = html.replace('<script src="app.js"></script>',
                             f'<script>window.__WV="{v}"</script>\n<script src="app.js?v={v}"></script>')
+        # public mode: hand anonymous visitors the shared demo session so the app
+        # opens with no sign-in screen.
+        cookies = None
+        if public_enabled() and self._sess() is None:
+            tok, sess = public_session()
+            if tok and sess:
+                cookies = [f"wakeel_t={tok}; Path=/; Max-Age=86400; SameSite=Lax"] + dify_browser_cookies(sess)
         self._send(200, html.encode(), "text/html; charset=utf-8",
-                   extra={"Cache-Control": "no-cache, must-revalidate"})
+                   extra={"Cache-Control": "no-cache, must-revalidate"}, cookies=cookies)
 
     def _body(self):
         n = int(self.headers.get("Content-Length", 0))
