@@ -1,0 +1,17 @@
+[Unit]
+Description=Wakeel Platform (host process, proxied by Dify nginx at /wakeel/)
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+# Adjust the path/user to match where you cloned the repo and your VM admin user.
+WorkingDirectory=/opt/wakeel-platform/wakeel
+EnvironmentFile=-/opt/wakeel-platform/wakeel/wakeel.env
+ExecStart=/usr/bin/python3 /opt/wakeel-platform/wakeel/server.py
+Restart=always
+RestartSec=3
+User=azureuser
+
+[Install]
+WantedBy=multi-user.target
