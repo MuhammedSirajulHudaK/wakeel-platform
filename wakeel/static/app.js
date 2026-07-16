@@ -3033,6 +3033,7 @@ async function boot() {
   const sb = q.match(/[?&]sub=(overview|flow|triggers|automation|records|evaluate|memory|governance|instructions|simple)/); if (sb) window.__autosub = sb[1];
   if (q.match(/[?&]m365=1/)) { window.__autom365 = true; window.__autosub = "triggers"; }
   const cf = q.match(/[?&]config=([^&]+)/); if (cf) { window.__autoconfig = decodeURIComponent(cf[1]); VIEW = "integrations"; }
+  if (q.match(/[?&]talk=1/) || location.hash === "#talk") { window.__autotalk = true; VIEW = "home"; }
   if (m) history.replaceState(null, "", location.pathname + location.hash);
   const h = location.hash.replace("#", "");
   if (h.startsWith("agent/")) { AGENT = h.split("/")[1]; VIEW = "agent"; ASUB = window.__autosub || "overview"; COPILOT = ASUB !== "overview"; window.__autosub = null; }
@@ -3041,6 +3042,7 @@ async function boot() {
   if (!ME) return renderLogin();
   try { await api("GET", "sso"); } catch (e) {}
   renderShell();
+  if (window.__autotalk) { window.__autotalk = null; setTimeout(openTalk, 350); }
   startVersionWatch();
 }
 // detect when a newer build is deployed and prompt a reload (fixes stale-cache confusion)
