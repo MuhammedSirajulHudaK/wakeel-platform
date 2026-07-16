@@ -2003,6 +2003,62 @@ def chat(sess, message, history, system=""):
     return {"reply": _openai_chat(msgs)}
 
 
+# ---- Voice "talk to build" : converse, then build the agent live ------------
+TALK_SYS = (
+    "You are Wakeel's voice guide. A non-technical UAE government officer is TALKING to you (out loud) "
+    "to create an AI assistant/automation just by speaking — they cannot read diagrams or fill forms. "
+    "Have a short, warm, natural spoken conversation. Ask ONE simple question at a time in plain "
+    "everyday words. NEVER use technical words (no 'API', 'workflow', 'node', 'trigger', 'integration'). "
+    "Learn just enough to build a useful first version of the assistant:\n"
+    "  1) what it should do (the goal),\n"
+    "  2) where its information lives / what it works on (e.g. a Google Sheet, incoming emails),\n"
+    "  3) what action it should take (e.g. send emails, update the sheet, flag problems),\n"
+    "  4) whether a human should approve before it acts.\n"
+    "Keep EVERY reply to one or two short sentences that sound natural spoken aloud. You do NOT need "
+    "every detail — after 3-5 exchanges, assume sensible defaults and offer to build it.\n\n"
+    "Respond with ONLY a JSON object and nothing else:\n"
+    '{"reply":"<what to say out loud>","ready":<true|false>,'
+    '"brief":"<when ready=true: a full, clear plain-English description of the whole assistant for a '
+    'builder to implement; otherwise empty>"}'
+)
+
+
+def talk(sess, text, state, lang="en"):
+    """One turn of the voice agent-builder conversation. When the model decides it has
+    enough, it builds + deploys the agent using the normal design→generate→deploy pipeline."""
+    state = state or {}
+    turns = state.get("turns", [])
+    sys = TALK_SYS + ("\n\nWrite the spoken 'reply' in ARABIC. Keep 'brief' in English." if lang == "ar" else "")
+    msgs = [{"role": "system", "content": sys}]
+    for t in turns[-16:]:
+        if t.get("role") in ("user", "assistant") and t.get("content"):
+            msgs.append({"role": t["role"], "content": str(t["content"])[:2000]})
+    msgs.append({"role": "user", "content": (text or "")[:2000]})
+    out = _openai_chat(msgs)
+    try:
+        parsed = _extract_json(out)
+    except Exception:
+        parsed = {"reply": (out or "").strip()[:400] or "Sorry, could you say that again?", "ready": False}
+    reply = parsed.get("reply") or "Could you tell me a little more?"
+    turns.append({"role": "user", "content": text})
+    turns.append({"role": "assistant", "content": reply})
+    state["turns"] = turns[-16:]
+    if parsed.get("ready") and (parsed.get("brief") or "").strip():
+        try:
+            d = design(sess, parsed["brief"], lang=lang)
+            g = generate(sess, "workflow", design_to_instruction(d))
+            if not (g.get("graph") or {}).get("nodes"):
+                raise RuntimeError(g.get("error") or "could not build the flow")
+            dep = deploy(sess, "workflow", d.get("name", "Wakeel Agent"), g["graph"])
+            log_act(sess, "build", "voice: " + d.get("name", ""))
+            return {"reply": reply, "phase": "done", "done": True, "agent_id": dep["id"],
+                    "name": d.get("name", "Your assistant"), "design": d, "state": state}
+        except Exception as e:
+            return {"reply": "I had a little trouble building that — let's adjust it. What should change?",
+                    "phase": "collecting", "done": False, "error": str(e)[:160], "state": state}
+    return {"reply": reply, "phase": "collecting", "done": False, "state": state}
+
+
 def knowledge_list(sess):
     res = dify(sess, "GET", "/datasets?page=1&limit=30")
     return {"knowledge": [{"id": d.get("id"), "name": d.get("name"),
@@ -2961,6 +3017,8 @@ class H(BaseHTTPRequestHandler):
                 r = chat(sess, b.get("message", ""), b.get("history", []), b.get("system", ""))
                 log_act(sess, "chat", b.get("message", "")[:60])
                 return self._send(200, r)
+            if p == "/api/talk":
+                return self._send(200, talk(sess, b.get("text", ""), b.get("state"), b.get("lang", "en")))
             if p == "/api/knowledge":
                 r = knowledge_add(sess, b.get("name", ""), b.get("text", ""))
                 log_act(sess, "data", b.get("name", ""))

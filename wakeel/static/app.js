@@ -222,6 +222,13 @@ const T = {
   "What do you want to work on?": "بماذا تريد أن تعمل؟",
   "Ask Wakeel to perform tasks, build an agent, or brainstorm ideas": "اطلب من وكيل تنفيذ المهام أو بناء وكيل أو طرح الأفكار",
   "Build agents": "بناء الوكلاء", "Recommended": "موصى به",
+  "Talk to build an agent": "تحدّث لبناء وكيل", "No typing — just speak": "بلا كتابة — فقط تحدّث",
+  "Talk to build": "تحدّث لتبني", "Just speak — I'll build your assistant as we talk.": "تحدّث فقط — سأبني مساعدك بينما نتكلم.",
+  "Tap and speak": "اضغط وتحدّث", "Type here instead…": "اكتب هنا بدلاً من ذلك…",
+  "Listening…": "أستمع…", "Thinking…": "أفكّر…", "Building your assistant…": "أبني مساعدك…",
+  "Tap the mic to talk": "اضغط الميكروفون للتحدث", "Tap the mic and speak": "اضغط الميكروفون وتحدّث",
+  "Tap the mic and reply": "اضغط الميكروفون وأجب", "Type your answer below": "اكتب إجابتك بالأسفل",
+  "Your assistant": "مساعدك", "ready": "جاهز", "Open it": "افتحه",
   "Review a trade license application": "مراجعة طلب رخصة تجارية",
   "Route a citizen complaint": "توجيه شكوى مواطن",
   "Draft a bilingual approval letter": "صياغة خطاب موافقة ثنائي اللغة",
@@ -517,6 +524,7 @@ function drawComposerHome() {
           <button class="send-btn" id="sendBtn">${IC.up}</button>
         </div>
       </div>
+      <button class="talk-launch" id="talkLaunch"><span class="tl-mic">🎤</span> ${t("Talk to build an agent")}<span class="tl-hint">${t("No typing — just speak")}</span></button>
       <div class="recommend">
         <div class="rh">${IC.spark} ${t("Recommended")}</div>
         <div class="chips">
@@ -533,10 +541,86 @@ function drawComposerHome() {
   document.querySelectorAll("#plusPop a").forEach(a => a.onclick = (e) => { e.stopPropagation(); plusAction(a.dataset.a); });
   document.querySelectorAll(".chip").forEach(c => c.onclick = () => { $("#ins").value = c.textContent; autoGrow($("#ins")); $("#ins").focus(); });
   $("#sendBtn").onclick = onSend;
+  if ($("#talkLaunch")) $("#talkLaunch").onclick = openTalk;
   $("#ins").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); } });
   $("#ins").addEventListener("input", e => autoGrow(e.target));
   $("#ins").focus();
 }
+
+/* ---------- Voice: talk to build an agent (browser Web Speech API) ---------- */
+let TALK = null;
+function openTalk() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const supported = !!SR;
+  const ar = LANG === "ar";
+  const ov = document.createElement("div"); ov.className = "talk-ov"; ov.id = "talkOv";
+  ov.innerHTML = `
+    <div class="talk-card">
+      <button class="talk-x" id="talkX">✕</button>
+      <div class="talk-head"><div class="logo" style="width:34px;height:34px;border-radius:10px"><span>و</span></div>
+        <div><div class="talk-title">${t("Talk to build")}</div>
+        <div class="talk-sub">${t("Just speak — I'll build your assistant as we talk.")}</div></div></div>
+      <div class="talk-log" id="talkLog"></div>
+      <div class="talk-status" id="talkStatus"></div>
+      <div class="talk-controls"><button class="talk-mic" id="talkMic" title="${t("Tap and speak")}">🎤</button></div>
+      ${supported ? "" : `<div class="talk-fallback"><input id="talkType" placeholder="${t("Type here instead…")}"/><button class="btn primary sm" id="talkTypeSend">${t("Send")}</button></div>`}
+      <div class="talk-done" id="talkDone" hidden></div>
+    </div>`;
+  document.body.appendChild(ov);
+  TALK = { state: {}, lang: ar ? "ar" : "en", recog: null, busy: false, speaking: false };
+  const log = ov.querySelector("#talkLog"), status = ov.querySelector("#talkStatus"), mic = ov.querySelector("#talkMic");
+  const setStatus = (s) => { status.textContent = s || ""; };
+  const bubble = (who, txt) => { const d = document.createElement("div"); d.className = "tk-msg " + who; d.textContent = txt; log.appendChild(d); log.scrollTop = log.scrollHeight; };
+  const speak = (text) => new Promise(res => {
+    try {
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = ar ? "ar-SA" : "en-US"; u.onend = res; u.onerror = res;
+      TALK.speaking = true; window.speechSynthesis.speak(u);
+    } catch (e) { res(); }
+  }).then(() => { TALK.speaking = false; });
+  const listen = () => {
+    if (!supported || TALK.busy || TALK.speaking || !TALK) return;
+    const rec = new SR(); TALK.recog = rec;
+    rec.lang = ar ? "ar-AE" : "en-US"; rec.interimResults = false; rec.maxAlternatives = 1;
+    rec.onstart = () => { mic.classList.add("listening"); setStatus(t("Listening…")); };
+    rec.onresult = (e) => { mic.classList.remove("listening"); send(e.results[0][0].transcript); };
+    rec.onerror = () => { mic.classList.remove("listening"); setStatus(t("Tap the mic to talk")); };
+    rec.onend = () => { mic.classList.remove("listening"); };
+    try { rec.start(); } catch (e) {}
+  };
+  const send = async (text) => {
+    if (!text || !TALK || TALK.busy) return;
+    TALK.busy = true; mic.classList.remove("listening"); bubble("me", text); setStatus(t("Thinking…"));
+    try {
+      const r = await api("POST", "talk", { text, state: TALK.state, lang: TALK.lang });
+      if (!TALK) return;
+      TALK.state = r.state || TALK.state;
+      if (r.done) setStatus(t("Building your assistant…"));
+      bubble("ai", r.reply); await speak(r.reply);
+      if (!TALK) return;
+      if (r.done && r.agent_id) {
+        setStatus("");
+        const dn = ov.querySelector("#talkDone"); dn.hidden = false;
+        dn.innerHTML = `<div class="tk-built">✅ ${esc(r.name || t("Your assistant"))} — ${t("ready")}</div>
+          <button class="btn primary" id="talkOpen">${t("Open it")}</button>`;
+        ov.querySelector("#talkOpen").onclick = () => { closeTalk(); openAgent(r.agent_id, "overview"); };
+      } else { setStatus(t("Tap the mic and reply")); setTimeout(listen, 300); }
+    } catch (e) { bubble("ai", "⚠️ " + (e.message || "error")); setStatus(t("Tap the mic to talk")); }
+    finally { if (TALK) TALK.busy = false; }
+  };
+  mic.onclick = () => { if (TALK && TALK.speaking) { window.speechSynthesis.cancel(); TALK.speaking = false; } listen(); };
+  ov.querySelector("#talkX").onclick = closeTalk;
+  if (!supported) {
+    const ti = ov.querySelector("#talkType"), tb = ov.querySelector("#talkTypeSend");
+    const s = () => { const v = ti.value.trim(); if (v) { ti.value = ""; send(v); } };
+    tb.onclick = s; ti.addEventListener("keydown", e => { if (e.key === "Enter") s(); });
+  }
+  const greet = ar ? "مرحباً! أخبرني بما تريد أن يقوم به مساعدك، وسأبنيه بينما نتحدث." : "Hi! Tell me what you'd like your assistant to do, and I'll build it as we talk.";
+  bubble("ai", greet);
+  speak(greet).then(() => setStatus(supported ? t("Tap the mic and speak") : t("Type your answer below")));
+}
+function closeTalk() { try { window.speechSynthesis.cancel(); if (TALK && TALK.recog) TALK.recog.abort(); } catch (e) {} const o = document.getElementById("talkOv"); if (o) o.remove(); TALK = null; }
 // grow the composer to fit its content (up to a max), then scroll — so long prompts stay readable
 function autoGrow(el) {
   if (!el) return;
