@@ -30,7 +30,7 @@ import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 DIFY = os.environ.get("DIFY_BASE", "http://localhost/console/api")
-DEFAULT_MODEL = {"provider": "langgenius/openai/openai", "name": "gpt-5.1", "mode": "chat", "completion_params": {}}
+DEFAULT_MODEL = {"provider": "langgenius/openai/openai", "name": "gpt-4o-mini", "mode": "chat", "completion_params": {}}
 SETTINGS_FILE = None  # set after HERE
 
 
@@ -1979,7 +1979,7 @@ def _openai_chat(messages):
             if not OPENAI_KEY:
                 raise RuntimeError(f"Azure OpenAI unavailable: {e}")
     last_err = None
-    for model in ("gpt-5.1", "gpt-4o-mini"):
+    for model in ("gpt-4o-mini", "gpt-4o"):
         try:
             body = json.dumps({"model": model, "messages": messages, "temperature": 0.4}).encode()
             req = urllib.request.Request("https://api.openai.com/v1/chat/completions", data=body,
@@ -2045,19 +2045,25 @@ def talk(sess, text, state, lang="en"):
     turns.append({"role": "assistant", "content": reply})
     state["turns"] = turns[-16:]
     if parsed.get("ready") and (parsed.get("brief") or "").strip():
-        try:
-            d = design(sess, parsed["brief"], lang=lang)
-            g = generate(sess, "workflow", design_to_instruction(d))
-            if not (g.get("graph") or {}).get("nodes"):
-                raise RuntimeError(g.get("error") or "could not build the flow")
-            dep = deploy(sess, "workflow", d.get("name", "Wakeel Agent"), g["graph"])
-            log_act(sess, "build", "voice: " + d.get("name", ""))
-            return {"reply": reply, "phase": "done", "done": True, "agent_id": dep["id"],
-                    "name": d.get("name", "Your assistant"), "design": d, "state": state}
-        except Exception as e:
-            return {"reply": "I had a little trouble building that — let's adjust it. What should change?",
-                    "phase": "collecting", "done": False, "error": str(e)[:160], "state": state}
+        # Hand the build off to a second call so the user hears "building now" immediately
+        # (the actual build takes ~1-2 min in Dify's graph generator).
+        return {"reply": reply, "phase": "building", "done": False,
+                "brief": parsed["brief"], "state": state}
     return {"reply": reply, "phase": "collecting", "done": False, "state": state}
+
+
+def talk_build(sess, brief, lang="en"):
+    """Do the actual build for the voice flow: design → generate → deploy."""
+    try:
+        d = design(sess, brief, lang=lang)
+        g = generate(sess, "workflow", design_to_instruction(d))
+        if not (g.get("graph") or {}).get("nodes"):
+            return {"done": False, "error": g.get("error") or "could not build the flow"}
+        dep = deploy(sess, "workflow", d.get("name", "Wakeel Agent"), g["graph"])
+        log_act(sess, "build", "voice: " + d.get("name", ""))
+        return {"done": True, "agent_id": dep["id"], "name": d.get("name", "Your assistant"), "design": d}
+    except Exception as e:
+        return {"done": False, "error": str(e)[:200]}
 
 
 def knowledge_list(sess):
@@ -3020,6 +3026,8 @@ class H(BaseHTTPRequestHandler):
                 return self._send(200, r)
             if p == "/api/talk":
                 return self._send(200, talk(sess, b.get("text", ""), b.get("state"), b.get("lang", "en")))
+            if p == "/api/talk-build":
+                return self._send(200, talk_build(sess, b.get("brief", ""), b.get("lang", "en")))
             if p == "/api/knowledge":
                 r = knowledge_add(sess, b.get("name", ""), b.get("text", ""))
                 log_act(sess, "data", b.get("name", ""))

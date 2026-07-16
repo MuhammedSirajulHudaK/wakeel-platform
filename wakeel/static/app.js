@@ -227,6 +227,7 @@ const T = {
   "Tap and speak": "اضغط وتحدّث", "Type here instead…": "اكتب هنا بدلاً من ذلك…",
   "Listening…": "أستمع…", "Thinking…": "أفكّر…", "Building your assistant…": "أبني مساعدك…",
   "Tap the mic to talk": "اضغط الميكروفون للتحدث", "Tap the mic and speak": "اضغط الميكروفون وتحدّث",
+  "Building your assistant… (about a minute)": "أبني مساعدك… (حوالي دقيقة)",
   "Tap the mic and reply": "اضغط الميكروفون وأجب", "Type your answer below": "اكتب إجابتك بالأسفل",
   "Your assistant": "مساعدك", "ready": "جاهز", "Open it": "افتحه",
   "Review a trade license application": "مراجعة طلب رخصة تجارية",
@@ -596,15 +597,24 @@ function openTalk() {
       const r = await api("POST", "talk", { text, state: TALK.state, lang: TALK.lang });
       if (!TALK) return;
       TALK.state = r.state || TALK.state;
-      if (r.done) setStatus(t("Building your assistant…"));
       bubble("ai", r.reply); await speak(r.reply);
       if (!TALK) return;
-      if (r.done && r.agent_id) {
-        setStatus("");
-        const dn = ov.querySelector("#talkDone"); dn.hidden = false;
-        dn.innerHTML = `<div class="tk-built">✅ ${esc(r.name || t("Your assistant"))} — ${t("ready")}</div>
-          <button class="btn primary" id="talkOpen">${t("Open it")}</button>`;
-        ov.querySelector("#talkOpen").onclick = () => { closeTalk(); openAgent(r.agent_id, "overview"); };
+      if (r.phase === "building" && r.brief) {
+        setStatus(t("Building your assistant… (about a minute)"));
+        const dn = ov.querySelector("#talkDone"); dn.hidden = false; dn.innerHTML = `<div class="spin" style="margin:6px auto"></div>`;
+        const bd = await api("POST", "talk-build", { brief: r.brief, lang: TALK.lang });
+        if (!TALK) return;
+        if (bd.done && bd.agent_id) {
+          const line = (TALK.lang === "ar") ? `تم! ${bd.name || ""} جاهز.` : `Done! ${bd.name || "Your assistant"} is ready.`;
+          bubble("ai", line); await speak(line); setStatus("");
+          dn.innerHTML = `<div class="tk-built">✅ ${esc(bd.name || t("Your assistant"))} — ${t("ready")}</div>
+            <button class="btn primary" id="talkOpen">${t("Open it")}</button>`;
+          ov.querySelector("#talkOpen").onclick = () => { closeTalk(); openAgent(bd.agent_id, "overview"); };
+        } else {
+          dn.hidden = true;
+          const msg = (TALK.lang === "ar") ? "واجهت مشكلة بسيطة في البناء — لنعدّل قليلاً. ما الذي تريد تغييره؟" : "I hit a snag building that — let's adjust. What should change?";
+          bubble("ai", msg); await speak(msg); setStatus(t("Tap the mic and reply")); setTimeout(listen, 300);
+        }
       } else { setStatus(t("Tap the mic and reply")); setTimeout(listen, 300); }
     } catch (e) { bubble("ai", "⚠️ " + (e.message || "error")); setStatus(t("Tap the mic to talk")); }
     finally { if (TALK) TALK.busy = false; }
