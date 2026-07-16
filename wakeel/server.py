@@ -701,7 +701,8 @@ def provider_credentials(sess, provider, credentials):
 
 
 def provider_install(sess, name):
-    req = urllib.request.Request(f"https://marketplace.dify.ai/api/v1/plugins/langgenius/{name}")
+    req = urllib.request.Request(f"https://marketplace.dify.ai/api/v1/plugins/langgenius/{name}",
+                                 headers={"User-Agent": "Mozilla/5.0 (Wakeel)", "Accept": "application/json"})
     meta = json.loads(urllib.request.urlopen(req, timeout=30).read())
     plug = meta.get("data", {}).get("plugin", meta.get("data", {}))
     pid = plug.get("latest_package_identifier")
