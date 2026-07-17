@@ -2017,19 +2017,47 @@ TALK_SYS = (
     "  4) whether a human should approve before it acts.\n"
     "Keep EVERY reply to one or two short sentences that sound natural spoken aloud. You do NOT need "
     "every detail — after 3-5 exchanges, assume sensible defaults and offer to build it.\n\n"
-    "As you learn more, GROW a live diagram of the assistant ('sketch'). Reveal more of it each turn "
-    "as you understand more. Node 'kind' must be one of: trigger, agent, knowledge, tool, decision, "
-    "guardrail, approval, output. Early on show just a few nodes (trigger, agent, output); add decision, "
-    "knowledge, tool, then guardrail and approval as the picture fills in. 'stage' is how complete it is "
-    "(1 = just started, 4 = full). Give a short plain title (2-4 words) and a one-line desc per node.\n\n"
+    "Also keep a 'sketch' of the assistant as a set of building blocks — your CURRENT best guess based on "
+    "everything said so far. Provide a block for EACH kind you can reasonably fill in, using these kinds: "
+    "trigger (what starts it), agent (the thinking step), knowledge (rules/SOP it uses), tool (the action it "
+    "takes), decision (a check/branch), guardrail (what it must not do), approval (human sign-off), output "
+    "(the result). Give a short plain title (2-4 words) and a one-line desc for each. Update these as you "
+    "learn more. (The interface reveals them gradually — just give your best full set each turn.)\n\n"
     "Respond with ONLY a JSON object and nothing else:\n"
     '{"reply":"<what to say out loud>","ready":<true|false>,'
     '"brief":"<when ready=true: a full plain-English description of the whole assistant for a builder; else empty>",'
-    '"stage":<1-4>,"confidence":<0-100>,'
-    '"sketch":{"nodes":[{"id":"n1","kind":"trigger","title":"<2-4 words>","desc":"<one short line>"}],'
-    '"edges":[{"source":"n1","target":"n2","label":"<short or empty>"}],'
-    '"integrations":["<systems used, e.g. Google Sheets, Gmail>"],"guardrails":["<what it must not do>"]}}'
+    '"sketch":{"nodes":[{"kind":"trigger","title":"<2-4 words>","desc":"<one short line>"}],'
+    '"integrations":["<systems, e.g. Google Sheets, Gmail>"],"guardrails":["<what it must not do>"]}}'
 )
+
+# Deterministic staged reveal for the live diagram (mirrors a Beam-style agent lab).
+_PROG_KINDS = {
+    1: ["trigger", "agent", "output"],
+    2: ["trigger", "agent", "decision", "output"],
+    3: ["trigger", "agent", "knowledge", "decision", "tool", "output"],
+    4: ["trigger", "agent", "knowledge", "decision", "guardrail", "approval", "tool", "output"],
+}
+_PROG_EDGES = {
+    1: [("trigger", "agent", ""), ("agent", "output", "")],
+    2: [("trigger", "agent", ""), ("agent", "decision", ""), ("decision", "output", "")],
+    3: [("trigger", "agent", ""), ("knowledge", "agent", "grounds"), ("agent", "decision", ""),
+        ("decision", "tool", "acts"), ("tool", "output", "")],
+    4: [("trigger", "agent", ""), ("knowledge", "agent", "grounds"), ("agent", "decision", ""),
+        ("guardrail", "decision", "checks"), ("decision", "approval", "if sensitive"),
+        ("decision", "tool", "acts"), ("approval", "output", ""), ("tool", "output", "")],
+}
+_KIND_DEFAULT = {"trigger": "When it starts", "agent": "Understand the request", "knowledge": "Rules & SOP",
+                 "tool": "Take the action", "decision": "Check the rules", "guardrail": "Safety limits",
+                 "approval": "Officer approves", "output": "Record the result"}
+
+
+def _staged_sketch(full, stage):
+    """Reveal only the blocks for the current stage, wired with a fixed edge template."""
+    kinds = _PROG_KINDS[stage]
+    nodes = [{"id": k, "kind": k, "title": (full.get(k) or {}).get("title") or _KIND_DEFAULT[k],
+              "desc": (full.get(k) or {}).get("desc") or ""} for k in kinds]
+    edges = [{"source": s, "target": tt, "label": lb} for (s, tt, lb) in _PROG_EDGES[stage] if s in kinds and tt in kinds]
+    return {"nodes": nodes, "edges": edges}
 
 
 def talk(sess, text, state, lang="en"):
@@ -2052,16 +2080,26 @@ def talk(sess, text, state, lang="en"):
     turns.append({"role": "user", "content": text})
     turns.append({"role": "assistant", "content": reply})
     state["turns"] = turns[-16:]
-    # carry the evolving diagram forward (keep last good sketch if this turn omitted one)
-    sketch = parsed.get("sketch") if isinstance(parsed.get("sketch"), dict) else None
-    if sketch and sketch.get("nodes"):
-        state["sketch"] = sketch
-    sketch = state.get("sketch") or {"nodes": [], "edges": []}
-    stage = parsed.get("stage") or state.get("stage") or 1
+    # Merge the LLM's building blocks (by kind) into a running "full" picture, then reveal
+    # progressively by stage (stage grows with the number of exchanges).
+    full = state.get("full", {})
+    sk = parsed.get("sketch") if isinstance(parsed.get("sketch"), dict) else {}
+    for n in (sk.get("nodes") or []):
+        k = (n or {}).get("kind")
+        if k in _KIND_DEFAULT and (n.get("title") or n.get("desc")):
+            full[k] = {"title": (n.get("title") or "").strip()[:40], "desc": (n.get("desc") or "").strip()[:90]}
+    if sk.get("integrations"):
+        state["integrations"] = [str(x)[:40] for x in sk["integrations"]][:8]
+    if sk.get("guardrails"):
+        state["guardrails"] = [str(x)[:80] for x in sk["guardrails"]][:6]
+    state["full"] = full
+    nuser = sum(1 for x in state["turns"] if x.get("role") == "user")
+    stage = max(1, min(4, nuser))
     state["stage"] = stage
-    conf = parsed.get("confidence")
-    if conf is None:
-        conf = [0, 30, 55, 75, 92][min(int(stage), 4)]
+    sketch = _staged_sketch(full, stage)
+    sketch["integrations"] = state.get("integrations", []) if stage >= 3 else []
+    sketch["guardrails"] = state.get("guardrails", []) if stage >= 4 else []
+    conf = [0, 36, 56, 76, 92][stage]
     common = {"reply": reply, "sketch": sketch, "stage": stage, "confidence": conf, "state": state}
     if parsed.get("ready") and (parsed.get("brief") or "").strip():
         # Hand the build off to a second call so the user hears "building now" immediately.
