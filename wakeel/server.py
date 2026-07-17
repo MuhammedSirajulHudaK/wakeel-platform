@@ -2017,10 +2017,18 @@ TALK_SYS = (
     "  4) whether a human should approve before it acts.\n"
     "Keep EVERY reply to one or two short sentences that sound natural spoken aloud. You do NOT need "
     "every detail — after 3-5 exchanges, assume sensible defaults and offer to build it.\n\n"
+    "As you learn more, GROW a live diagram of the assistant ('sketch'). Reveal more of it each turn "
+    "as you understand more. Node 'kind' must be one of: trigger, agent, knowledge, tool, decision, "
+    "guardrail, approval, output. Early on show just a few nodes (trigger, agent, output); add decision, "
+    "knowledge, tool, then guardrail and approval as the picture fills in. 'stage' is how complete it is "
+    "(1 = just started, 4 = full). Give a short plain title (2-4 words) and a one-line desc per node.\n\n"
     "Respond with ONLY a JSON object and nothing else:\n"
     '{"reply":"<what to say out loud>","ready":<true|false>,'
-    '"brief":"<when ready=true: a full, clear plain-English description of the whole assistant for a '
-    'builder to implement; otherwise empty>"}'
+    '"brief":"<when ready=true: a full plain-English description of the whole assistant for a builder; else empty>",'
+    '"stage":<1-4>,"confidence":<0-100>,'
+    '"sketch":{"nodes":[{"id":"n1","kind":"trigger","title":"<2-4 words>","desc":"<one short line>"}],'
+    '"edges":[{"source":"n1","target":"n2","label":"<short or empty>"}],'
+    '"integrations":["<systems used, e.g. Google Sheets, Gmail>"],"guardrails":["<what it must not do>"]}}'
 )
 
 
@@ -2044,12 +2052,21 @@ def talk(sess, text, state, lang="en"):
     turns.append({"role": "user", "content": text})
     turns.append({"role": "assistant", "content": reply})
     state["turns"] = turns[-16:]
+    # carry the evolving diagram forward (keep last good sketch if this turn omitted one)
+    sketch = parsed.get("sketch") if isinstance(parsed.get("sketch"), dict) else None
+    if sketch and sketch.get("nodes"):
+        state["sketch"] = sketch
+    sketch = state.get("sketch") or {"nodes": [], "edges": []}
+    stage = parsed.get("stage") or state.get("stage") or 1
+    state["stage"] = stage
+    conf = parsed.get("confidence")
+    if conf is None:
+        conf = [0, 30, 55, 75, 92][min(int(stage), 4)]
+    common = {"reply": reply, "sketch": sketch, "stage": stage, "confidence": conf, "state": state}
     if parsed.get("ready") and (parsed.get("brief") or "").strip():
-        # Hand the build off to a second call so the user hears "building now" immediately
-        # (the actual build takes ~1-2 min in Dify's graph generator).
-        return {"reply": reply, "phase": "building", "done": False,
-                "brief": parsed["brief"], "state": state}
-    return {"reply": reply, "phase": "collecting", "done": False, "state": state}
+        # Hand the build off to a second call so the user hears "building now" immediately.
+        return {**common, "phase": "building", "done": False, "brief": parsed["brief"]}
+    return {**common, "phase": "collecting", "done": False}
 
 
 def talk_build(sess, brief, lang="en"):

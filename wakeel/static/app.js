@@ -229,7 +229,8 @@ const T = {
   "Tap the mic to talk": "اضغط الميكروفون للتحدث", "Tap the mic and speak": "اضغط الميكروفون وتحدّث",
   "Building your assistant… (about a minute)": "أبني مساعدك… (حوالي دقيقة)",
   "Tap the mic and reply": "اضغط الميكروفون وأجب", "Type your answer below": "اكتب إجابتك بالأسفل",
-  "Your assistant": "مساعدك", "ready": "جاهز", "Open it": "افتحه",
+  "Your assistant": "مساعدك", "ready": "جاهز", "Ready": "جاهز", "Open it": "افتحه",
+  "Speak, and I'll sketch it live": "تحدّث، وسأرسمه أمامك مباشرة", "Your agent will appear here as you talk": "سيظهر وكيلك هنا أثناء حديثك",
   "Review a trade license application": "مراجعة طلب رخصة تجارية",
   "Route a citizen complaint": "توجيه شكوى مواطن",
   "Draft a bilingual approval letter": "صياغة خطاب موافقة ثنائي اللغة",
@@ -550,28 +551,92 @@ function drawComposerHome() {
 
 /* ---------- Voice: talk to build an agent (browser Web Speech API) ---------- */
 let TALK = null;
+const TK_KIND = {
+  trigger: { ic: "📥", c: "#3ee08a", label: "Trigger" },
+  agent: { ic: "🤖", c: "#2ee59a", label: "Assistant" },
+  knowledge: { ic: "📚", c: "#63a0e6", label: "Knowledge" },
+  tool: { ic: "🔧", c: "#5f9be0", label: "Action" },
+  decision: { ic: "🔀", c: "#e6b02e", label: "Decision" },
+  guardrail: { ic: "🛡️", c: "#e0a33a", label: "Guardrail" },
+  approval: { ic: "✋", c: "#ec6a6a", label: "Approval" },
+  output: { ic: "✅", c: "#12b76a", label: "Result" },
+};
 function openTalk() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   const supported = !!SR;
   const ar = LANG === "ar";
   const ov = document.createElement("div"); ov.className = "talk-ov"; ov.id = "talkOv";
   ov.innerHTML = `
-    <div class="talk-card">
-      <button class="talk-x" id="talkX">✕</button>
-      <div class="talk-head"><div class="logo" style="width:34px;height:34px;border-radius:10px"><span>و</span></div>
-        <div><div class="talk-title">${t("Talk to build")}</div>
-        <div class="talk-sub">${t("Just speak — I'll build your assistant as we talk.")}</div></div></div>
-      <div class="talk-log" id="talkLog"></div>
-      <div class="talk-status" id="talkStatus"></div>
-      <div class="talk-controls"><button class="talk-mic" id="talkMic" title="${t("Tap and speak")}">🎤</button></div>
-      ${supported ? "" : `<div class="talk-fallback"><input id="talkType" placeholder="${t("Type here instead…")}"/><button class="btn primary sm" id="talkTypeSend">${t("Send")}</button></div>`}
-      <div class="talk-done" id="talkDone" hidden></div>
+    <div class="talk-stage">
+      <div class="talk-canvas" id="talkCanvas">
+        <div class="tc-head">
+          <div><div class="tc-h-title">${t("Your assistant")}</div>
+            <div class="tc-h-sub" id="tcSub">${t("Speak, and I'll sketch it live")}</div></div>
+          <div class="tc-conf"><div class="tc-conf-bar"><i id="tcConfFill"></i></div><span id="tcConfPct">0%</span></div>
+        </div>
+        <div class="tc-scroll" id="tcScroll"><div class="tc-world" id="tcWorld"><svg class="tc-wires" id="tcWires"></svg></div>
+          <div class="tc-empty" id="tcEmpty">🎙️ ${t("Your agent will appear here as you talk")}</div>
+        </div>
+      </div>
+      <aside class="talk-side">
+        <button class="talk-x" id="talkX">✕</button>
+        <div class="talk-head"><div class="logo" style="width:30px;height:30px;border-radius:9px"><span>و</span></div>
+          <div><div class="talk-title">${t("Talk to build")}</div>
+          <div class="talk-sub">${t("Just speak — I'll build your assistant as we talk.")}</div></div></div>
+        <div class="talk-log" id="talkLog"></div>
+        <div class="talk-status" id="talkStatus"></div>
+        <div class="talk-controls"><button class="talk-mic" id="talkMic" title="${t("Tap and speak")}">🎤</button></div>
+        ${supported ? "" : `<div class="talk-fallback"><input id="talkType" placeholder="${t("Type here instead…")}"/><button class="btn primary sm" id="talkTypeSend">${t("Send")}</button></div>`}
+        <div class="talk-done" id="talkDone" hidden></div>
+      </aside>
     </div>`;
   document.body.appendChild(ov);
-  TALK = { state: {}, lang: ar ? "ar" : "en", recog: null, busy: false, speaking: false };
+  TALK = { state: {}, lang: ar ? "ar" : "en", recog: null, busy: false, speaking: false, seen: new Set() };
   const log = ov.querySelector("#talkLog"), status = ov.querySelector("#talkStatus"), mic = ov.querySelector("#talkMic");
+  const scroll = ov.querySelector("#tcScroll"), world = ov.querySelector("#tcWorld"), wires = ov.querySelector("#tcWires");
   const setStatus = (s) => { status.textContent = s || ""; };
   const bubble = (who, txt) => { const d = document.createElement("div"); d.className = "tk-msg " + who; d.textContent = txt; log.appendChild(d); log.scrollTop = log.scrollHeight; };
+  const NS = "http://www.w3.org/2000/svg", CW = 178;
+  const paintSketch = (sk, conf) => {
+    const nodes = (sk && sk.nodes || []).filter(n => n && n.id && TK_KIND[n.kind]);
+    if (!nodes.length) return;
+    ov.querySelector("#tcEmpty").style.display = "none";
+    const ids = new Set(nodes.map(n => n.id));
+    const edges = (sk.edges || []).filter(e => ids.has(e.source) && ids.has(e.target));
+    const rank = {}; nodes.forEach(n => rank[n.id] = 0);
+    let ch = true, g = 0; while (ch && g++ < 40) { ch = false; edges.forEach(e => { if (rank[e.target] < rank[e.source] + 1) { rank[e.target] = rank[e.source] + 1; ch = true; } }); }
+    const cols = {}; nodes.forEach(n => (cols[rank[n.id]] = cols[rank[n.id]] || []).push(n));
+    const COLW = 214, ROWH = 118, PADX = 24, PADY = 20, CH = 74;
+    const maxRows = Math.max(1, ...Object.values(cols).map(a => a.length));
+    const pos = {};
+    Object.keys(cols).forEach(r => { const arr = cols[r]; const off = PADY + (maxRows * ROWH - arr.length * ROWH) / 2; arr.forEach((n, i) => pos[n.id] = { x: PADX + r * COLW, y: off + i * ROWH }); });
+    Array.from(world.querySelectorAll(".tc-node,.tc-elabel")).forEach(x => x.remove()); wires.innerHTML = "";
+    nodes.forEach(n => {
+      const m = TK_KIND[n.kind]; const isNew = !TALK.seen.has(n.id);
+      const el = document.createElement("div"); el.className = "tc-node" + (isNew ? " tc-arrive" : "");
+      el.style.left = pos[n.id].x + "px"; el.style.top = pos[n.id].y + "px"; el.style.setProperty("--nc", m.c);
+      el.innerHTML = `<span class="tc-acc"></span><div class="tc-b"><div class="tc-t">${m.ic} ${esc(m.label)}</div>
+        <div class="tc-ti">${esc(n.title || m.label)}</div>${n.desc ? `<div class="tc-d">${esc(n.desc)}</div>` : ""}</div>`;
+      world.appendChild(el); TALK.seen.add(n.id);
+    });
+    edges.forEach(e => {
+      const s = pos[e.source], tt = pos[e.target]; if (!s || !tt) return;
+      const sx = s.x + CW, sy = s.y + CH / 2, tx = tt.x, ty = tt.y + CH / 2;
+      const mx = Math.round((sx + tx) / 2), r = 12, vd = ty > sy ? 1 : -1;
+      const d = Math.abs(ty - sy) < 2 ? `M ${sx} ${sy} L ${tx} ${ty}`
+        : `M ${sx} ${sy} L ${mx - r} ${sy} Q ${mx} ${sy} ${mx} ${sy + vd * r} L ${mx} ${ty - vd * r} Q ${mx} ${ty} ${mx + r} ${ty} L ${tx} ${ty}`;
+      const p = document.createElementNS(NS, "path"); p.setAttribute("d", d); p.setAttribute("class", "tc-wire"); wires.appendChild(p);
+    });
+    // fit
+    let a = 1e9, b = 1e9, c = -1e9, dd = -1e9;
+    nodes.forEach(n => { a = Math.min(a, pos[n.id].x); b = Math.min(b, pos[n.id].y); c = Math.max(c, pos[n.id].x + CW); dd = Math.max(dd, pos[n.id].y + CH); });
+    a -= 24; b -= 20; c += 24; dd += 20;
+    const vw = scroll.clientWidth, vh = scroll.clientHeight;
+    const sc = Math.max(.4, Math.min(vw / (c - a), vh / (dd - b), 1));
+    const tx2 = (vw - (c - a) * sc) / 2 - a * sc, ty2 = (vh - (dd - b) * sc) / 2 - b * sc;
+    world.style.transform = `translate(${tx2}px,${ty2}px) scale(${sc})`;
+    if (conf != null) { ov.querySelector("#tcConfFill").style.width = Math.max(0, Math.min(100, conf)) + "%"; ov.querySelector("#tcConfPct").textContent = Math.round(conf) + "%"; }
+  };
   const speak = (text) => new Promise(res => {
     try {
       window.speechSynthesis.cancel();
@@ -597,20 +662,25 @@ function openTalk() {
       const r = await api("POST", "talk", { text, state: TALK.state, lang: TALK.lang });
       if (!TALK) return;
       TALK.state = r.state || TALK.state;
+      if (r.sketch) paintSketch(r.sketch, r.confidence);
       bubble("ai", r.reply); await speak(r.reply);
       if (!TALK) return;
       if (r.phase === "building" && r.brief) {
         setStatus(t("Building your assistant… (about a minute)"));
+        scroll.classList.add("is-building"); ov.querySelector("#tcSub").textContent = t("Building your assistant…");
         const dn = ov.querySelector("#talkDone"); dn.hidden = false; dn.innerHTML = `<div class="spin" style="margin:6px auto"></div>`;
         const bd = await api("POST", "talk-build", { brief: r.brief, lang: TALK.lang });
         if (!TALK) return;
+        scroll.classList.remove("is-building");
         if (bd.done && bd.agent_id) {
+          ov.querySelector("#tcSub").textContent = t("Ready");
           const line = (TALK.lang === "ar") ? `تم! ${bd.name || ""} جاهز.` : `Done! ${bd.name || "Your assistant"} is ready.`;
           bubble("ai", line); await speak(line); setStatus("");
           dn.innerHTML = `<div class="tk-built">✅ ${esc(bd.name || t("Your assistant"))} — ${t("ready")}</div>
             <button class="btn primary" id="talkOpen">${t("Open it")}</button>`;
           ov.querySelector("#talkOpen").onclick = () => { closeTalk(); openAgent(bd.agent_id, "overview"); };
         } else {
+          ov.querySelector("#tcSub").textContent = t("Speak, and I'll sketch it live");
           dn.hidden = true;
           const msg = (TALK.lang === "ar") ? "واجهت مشكلة بسيطة في البناء — لنعدّل قليلاً. ما الذي تريد تغييره؟" : "I hit a snag building that — let's adjust. What should change?";
           bubble("ai", msg); await speak(msg); setStatus(t("Tap the mic and reply")); setTimeout(listen, 300);
