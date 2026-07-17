@@ -2004,31 +2004,39 @@ def chat(sess, message, history, system=""):
     return {"reply": _openai_chat(msgs)}
 
 
-# ---- Voice "talk to build" : converse, then build the agent live ------------
-TALK_SYS = (
-    "You are Wakeel's voice guide. A non-technical UAE government officer is TALKING to you (out loud) "
-    "to create an AI assistant/automation just by speaking — they cannot read diagrams or fill forms. "
-    "Have a short, warm, natural spoken conversation. Ask ONE simple question at a time in plain "
-    "everyday words. NEVER use technical words (no 'API', 'workflow', 'node', 'trigger', 'integration'). "
-    "Learn just enough to build a useful first version of the assistant:\n"
-    "  1) what it should do (the goal),\n"
-    "  2) where its information lives / what it works on (e.g. a Google Sheet, incoming emails),\n"
-    "  3) what action it should take (e.g. send emails, update the sheet, flag problems),\n"
-    "  4) whether a human should approve before it acts.\n"
-    "Keep EVERY reply to one or two short sentences that sound natural spoken aloud. You do NOT need "
-    "every detail — after 3-5 exchanges, assume sensible defaults and offer to build it.\n\n"
-    "Also keep a 'sketch' of the assistant as a set of building blocks — your CURRENT best guess based on "
-    "everything said so far. Provide a block for EACH kind you can reasonably fill in, using these kinds: "
-    "trigger (what starts it), agent (the thinking step), knowledge (rules/SOP it uses), tool (the action it "
-    "takes), decision (a check/branch), guardrail (what it must not do), approval (human sign-off), output "
-    "(the result). Give a short plain title (2-4 words) and a one-line desc for each. Update these as you "
-    "learn more. (The interface reveals them gradually — just give your best full set each turn.)\n\n"
-    "Respond with ONLY a JSON object and nothing else:\n"
-    '{"reply":"<what to say out loud>","ready":<true|false>,'
-    '"brief":"<when ready=true: a full plain-English description of the whole assistant for a builder; else empty>",'
-    '"sketch":{"nodes":[{"kind":"trigger","title":"<2-4 words>","desc":"<one short line>"}],'
-    '"integrations":["<systems, e.g. Google Sheets, Gmail>"],"guardrails":["<what it must not do>"]}}'
+# ---- Voice "talk to build" : Responder(gather problem)->Thinker(design)->build --
+# Phase 1: understand & LOCK the problem (fast responder).
+PROBLEM_SYS = (
+    "You are Wakeel, a warm voice guide for a non-technical UAE government officer. Your ONLY job right "
+    "now is to understand the PROBLEM they want an AI assistant to solve — the repetitive or slow work "
+    "they want to hand off. Have a short spoken conversation, ONE simple question at a time, plain words, "
+    "no jargon. Do NOT design a solution yet. As soon as you clearly understand the core problem, LOCK it.\n\n"
+    "Respond with ONLY JSON: {\"reply\":\"<1-2 short spoken sentences>\",\"locked\":<true|false>,"
+    "\"problem\":\"<when locked: ONE clear sentence naming the problem to solve; else empty>\"}\n"
+    "Set locked=true only when the problem is concrete enough to design a solution (usually after 1-3 "
+    "answers). When you lock, your reply should restate the problem in one line and ask if you should work "
+    "out how to solve it."
 )
+# Phase 2: THINK — design the assistant that solves the locked problem.
+THINKER_SYS = (
+    "You are Wakeel's senior solution architect. You are given a LOCKED problem from a UAE government "
+    "officer. Think it through and DESIGN the AI assistant that solves it: what starts it, what it reads "
+    "and understands, which rules/context it uses, what it checks, what action it takes, what a human must "
+    "approve, and the result.\n\n"
+    "Respond with ONLY JSON: {\"reply\":\"<1-2 short spoken sentences summarizing your approach>\","
+    "\"name\":\"<short assistant name>\",\"brief\":\"<full plain-English description for a builder>\","
+    "\"blocks\":[{\"kind\":\"trigger|agent|knowledge|decision|tool|guardrail|approval|output\",\"title\":\"<2-4 words>\",\"desc\":\"<one line>\"}],"
+    "\"integrations\":[\"<systems, e.g. Google Sheets, Gmail>\"],\"guardrails\":[\"<what it must not do>\"]}\n"
+    "Include a block for each relevant kind. Keep titles plain and human."
+)
+_AFFIRM = ("yes", "yeah", "yep", "sure", "ok", "okay", "go", "go ahead", "do it", "build", "proceed",
+           "correct", "right", "sounds good", "let's", "lets", "please do", "نعم", "اجل", "أجل", "تمام",
+           "ابنه", "ابنيه", "ابدأ", "موافق", "هيا")
+
+
+def _affirmative(text):
+    t = (text or "").strip().lower()
+    return any(w in t for w in _AFFIRM)
 
 # Deterministic staged reveal for the live diagram (mirrors a Beam-style agent lab).
 _PROG_KINDS = {
@@ -2060,51 +2068,84 @@ def _staged_sketch(full, stage):
     return {"nodes": nodes, "edges": edges}
 
 
-def talk(sess, text, state, lang="en"):
-    """One turn of the voice agent-builder conversation. When the model decides it has
-    enough, it builds + deploys the agent using the normal design→generate→deploy pipeline."""
-    state = state or {}
-    turns = state.get("turns", [])
-    sys = TALK_SYS + ("\n\nWrite the spoken 'reply' in ARABIC. Keep 'brief' in English." if lang == "ar" else "")
+def _talk_llm(sys_p, turns, text, lang):
+    sys = sys_p + ("\n\nWrite the spoken 'reply' in ARABIC." if lang == "ar" else "")
     msgs = [{"role": "system", "content": sys}]
-    for t in turns[-16:]:
+    for t in (turns or [])[-16:]:
         if t.get("role") in ("user", "assistant") and t.get("content"):
             msgs.append({"role": t["role"], "content": str(t["content"])[:2000]})
-    msgs.append({"role": "user", "content": (text or "")[:2000]})
+    if text is not None:
+        msgs.append({"role": "user", "content": (text or "")[:2000]})
     out = _openai_chat(msgs)
     try:
-        parsed = _extract_json(out)
+        return _extract_json(out)
     except Exception:
-        parsed = {"reply": (out or "").strip()[:400] or "Sorry, could you say that again?", "ready": False}
-    reply = parsed.get("reply") or "Could you tell me a little more?"
-    turns.append({"role": "user", "content": text})
-    turns.append({"role": "assistant", "content": reply})
-    state["turns"] = turns[-16:]
-    # Merge the LLM's building blocks (by kind) into a running "full" picture, then reveal
-    # progressively by stage (stage grows with the number of exchanges).
-    full = state.get("full", {})
-    sk = parsed.get("sketch") if isinstance(parsed.get("sketch"), dict) else {}
-    for n in (sk.get("nodes") or []):
+        return {"reply": (out or "").strip()[:400]}
+
+
+def _full_from_blocks(blocks):
+    full = {}
+    for n in (blocks or []):
         k = (n or {}).get("kind")
         if k in _KIND_DEFAULT and (n.get("title") or n.get("desc")):
             full[k] = {"title": (n.get("title") or "").strip()[:40], "desc": (n.get("desc") or "").strip()[:90]}
-    if sk.get("integrations"):
-        state["integrations"] = [str(x)[:40] for x in sk["integrations"]][:8]
-    if sk.get("guardrails"):
-        state["guardrails"] = [str(x)[:80] for x in sk["guardrails"]][:6]
+    return full
+
+
+def _think(state, lang):
+    """The Thinker: design the assistant that solves the locked problem. Returns the full story."""
+    p = _talk_llm(THINKER_SYS, [], "LOCKED PROBLEM:\n" + state.get("problem", ""), lang)
+    full = _full_from_blocks(p.get("blocks"))
+    if not full:
+        full = {k: {"title": v, "desc": ""} for k, v in _KIND_DEFAULT.items()}
     state["full"] = full
-    nuser = sum(1 for x in state["turns"] if x.get("role") == "user")
-    stage = max(1, min(4, nuser))
-    state["stage"] = stage
-    sketch = _staged_sketch(full, stage)
-    sketch["integrations"] = state.get("integrations", []) if stage >= 3 else []
-    sketch["guardrails"] = state.get("guardrails", []) if stage >= 4 else []
-    conf = [0, 36, 56, 76, 92][stage]
-    common = {"reply": reply, "sketch": sketch, "stage": stage, "confidence": conf, "state": state}
-    if parsed.get("ready") and (parsed.get("brief") or "").strip():
-        # Hand the build off to a second call so the user hears "building now" immediately.
-        return {**common, "phase": "building", "done": False, "brief": parsed["brief"]}
-    return {**common, "phase": "collecting", "done": False}
+    state["integrations"] = [str(x)[:40] for x in (p.get("integrations") or [])][:8]
+    state["guardrails"] = [str(x)[:80] for x in (p.get("guardrails") or [])][:6]
+    state["name"] = ((p.get("name") or "").strip()[:60]) or "Your assistant"
+    state["brief"] = (p.get("brief") or state.get("problem", "")).strip()
+    state["phase"] = "story"
+    state.setdefault("turns", []).append({"role": "assistant", "content": p.get("reply", "")})
+    sketch = _staged_sketch(full, 4)
+    sketch["integrations"] = state["integrations"]
+    sketch["guardrails"] = state["guardrails"]
+    reply = p.get("reply") or "Here's how I'll solve it — shall I build it?"
+    return {"reply": reply, "sketch": sketch, "stage": 4, "confidence": 88, "phase": "story",
+            "name": state["name"], "problem": state.get("problem", ""), "brief": state["brief"],
+            "done": False, "state": state}
+
+
+def talk(sess, text, state, lang="en"):
+    """Responder–Thinker voice flow: gather & LOCK the problem, THINK a solution, then build."""
+    state = state or {}
+    phase = state.get("phase", "problem")
+    turns = state.get("turns", [])
+    turns.append({"role": "user", "content": text}); state["turns"] = turns[-16:]
+
+    if phase in ("problem", "locked") and not (phase == "locked" and _affirmative(text)):
+        p = _talk_llm(PROBLEM_SYS, turns[:-1], text, lang)
+        reply = p.get("reply") or "Tell me a little more about the problem you'd like to solve."
+        turns.append({"role": "assistant", "content": reply}); state["turns"] = turns[-16:]
+        if p.get("locked") and (p.get("problem") or "").strip():
+            state["phase"] = "locked"; state["problem"] = p["problem"].strip()
+            return {"reply": reply, "phase": "locked", "problem": state["problem"], "confidence": 22, "state": state}
+        state["phase"] = "problem"
+        return {"reply": reply, "phase": "problem", "confidence": 8, "state": state}
+
+    if phase == "locked" and _affirmative(text):
+        return _think(state, lang)
+
+    if phase == "story":
+        if _affirmative(text) or "build" in (text or "").lower():
+            reply = ("أبنيه الآن، لحظة من فضلك." if lang == "ar" else (state.get("name", "Your assistant") + " — building it now, one moment."))
+            return {"reply": reply, "phase": "building", "brief": state.get("brief", ""), "confidence": 92,
+                    "sketch": _staged_sketch(state.get("full", {}), 4), "state": state}
+        # refine: fold the new detail into the problem and re-think
+        state["problem"] = (state.get("problem", "") + " Also: " + (text or "")).strip()
+        return _think(state, lang)
+
+    state["phase"] = "problem"
+    return {"reply": ("لنبدأ من جديد — ما المشكلة التي تريد حلّها؟" if lang == "ar" else "Let's start again — what problem should this assistant solve?"),
+            "phase": "problem", "confidence": 5, "state": state}
 
 
 def talk_build(sess, brief, lang="en"):
