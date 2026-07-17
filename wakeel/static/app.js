@@ -591,6 +591,7 @@ function openTalk() {
       </aside>
     </div>`;
   document.body.appendChild(ov);
+  try { window.speechSynthesis.getVoices(); window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices(); } catch (e) {} // warm voice list
   TALK = { state: {}, lang: ar ? "ar" : "en", recog: null, busy: false, speaking: false, seen: new Set() };
   const log = ov.querySelector("#talkLog"), status = ov.querySelector("#talkStatus"), mic = ov.querySelector("#talkMic");
   const scroll = ov.querySelector("#tcScroll"), world = ov.querySelector("#tcWorld"), wires = ov.querySelector("#tcWires");
@@ -637,11 +638,24 @@ function openTalk() {
     world.style.transform = `translate(${tx2}px,${ty2}px) scale(${sc})`;
     if (conf != null) { ov.querySelector("#tcConfFill").style.width = Math.max(0, Math.min(100, conf)) + "%"; ov.querySelector("#tcConfPct").textContent = Math.round(conf) + "%"; }
   };
+  const pickVoice = () => {
+    const voices = (window.speechSynthesis && window.speechSynthesis.getVoices()) || [];
+    if (!voices.length) return null;
+    if (ar) return voices.find(v => v.lang && v.lang.toLowerCase().startsWith("ar")) || null;
+    // premium, natural-sounding OS/browser voices (Mac: Samantha/Ava, Win: Sonia, Chrome: Google UK Female)
+    const pref = ["Samantha", "Ava", "Victoria", "Karen", "Google UK English Female", "Microsoft Sonia", "Google US English", "Microsoft Aria"];
+    return pref.map(n => voices.find(v => v.name && v.name.includes(n))).find(Boolean)
+      || voices.find(v => v.lang && v.lang.startsWith("en") && /female|samantha|zira|aria/i.test(v.name))
+      || voices.find(v => v.lang && v.lang.startsWith("en")) || null;
+  };
   const speak = (text) => new Promise(res => {
     try {
       window.speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(text);
-      u.lang = ar ? "ar-SA" : "en-US"; u.onend = res; u.onerror = res;
+      u.lang = ar ? "ar-SA" : "en-US";
+      const v = pickVoice(); if (v) u.voice = v;
+      u.rate = 0.98; u.pitch = 1.03;
+      u.onend = res; u.onerror = res;
       TALK.speaking = true; window.speechSynthesis.speak(u);
     } catch (e) { res(); }
   }).then(() => { TALK.speaking = false; });
