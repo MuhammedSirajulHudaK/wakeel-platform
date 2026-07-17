@@ -231,6 +231,7 @@ const T = {
   "Tap the mic and reply": "اضغط الميكروفون وأجب", "Type your answer below": "اكتب إجابتك بالأسفل",
   "Your assistant": "مساعدك", "ready": "جاهز", "Ready": "جاهز", "Open it": "افتحه",
   "Speak, and I'll sketch it live": "تحدّث، وسأرسمه أمامك مباشرة", "Your agent will appear here as you talk": "سيظهر وكيلك هنا أثناء حديثك",
+  "Connecting…": "جارٍ الاتصال…", "Listening — just talk": "أستمع — تحدّث فقط", "Tap the mic to start": "اضغط الميكروفون للبدء", "Tap the mic to start talking": "اضغط الميكروفون لبدء التحدث",
   "Review a trade license application": "مراجعة طلب رخصة تجارية",
   "Route a citizen complaint": "توجيه شكوى مواطن",
   "Draft a bilingual approval letter": "صياغة خطاب موافقة ثنائي اللغة",
@@ -561,6 +562,27 @@ const TK_KIND = {
   approval: { ic: "✋", c: "#ec6a6a", label: "Approval" },
   output: { ic: "✅", c: "#12b76a", label: "Result" },
 };
+// client-side staged reveal (mirrors the server) — used by the realtime tool calls
+const TK_PROG_KINDS = {
+  1: ["trigger", "agent", "output"], 2: ["trigger", "agent", "decision", "output"],
+  3: ["trigger", "agent", "knowledge", "decision", "tool", "output"],
+  4: ["trigger", "agent", "knowledge", "decision", "guardrail", "approval", "tool", "output"],
+};
+const TK_PROG_EDGES = {
+  1: [["trigger", "agent"], ["agent", "output"]],
+  2: [["trigger", "agent"], ["agent", "decision"], ["decision", "output"]],
+  3: [["trigger", "agent"], ["knowledge", "agent", "grounds"], ["agent", "decision"], ["decision", "tool", "acts"], ["tool", "output"]],
+  4: [["trigger", "agent"], ["knowledge", "agent", "grounds"], ["agent", "decision"], ["guardrail", "decision", "checks"], ["decision", "approval", "if sensitive"], ["decision", "tool", "acts"], ["approval", "output"], ["tool", "output"]],
+};
+const TK_KIND_DEF = { trigger: "When it starts", agent: "Understand the request", knowledge: "Rules & SOP", tool: "Take the action", decision: "Check the rules", guardrail: "Safety limits", approval: "Officer approves", output: "Record the result" };
+function stagedSketch(blocks, stage) {
+  stage = Math.max(1, Math.min(4, stage || 1));
+  const by = {}; (blocks || []).forEach(b => { if (b && b.kind) by[b.kind] = { title: b.title, desc: b.desc }; });
+  const kinds = TK_PROG_KINDS[stage];
+  const nodes = kinds.map(k => ({ id: k, kind: k, title: (by[k] && by[k].title) || TK_KIND_DEF[k], desc: (by[k] && by[k].desc) || "" }));
+  const edges = TK_PROG_EDGES[stage].filter(e => kinds.includes(e[0]) && kinds.includes(e[1])).map(e => ({ source: e[0], target: e[1], label: e[2] || "" }));
+  return { nodes, edges };
+}
 function openTalk() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   const supported = !!SR;
@@ -589,6 +611,7 @@ function openTalk() {
         ${supported ? "" : `<div class="talk-fallback"><input id="talkType" placeholder="${t("Type here instead…")}"/><button class="btn primary sm" id="talkTypeSend">${t("Send")}</button></div>`}
         <div class="talk-done" id="talkDone" hidden></div>
       </aside>
+      <audio id="tkAudio" autoplay style="display:none"></audio>
     </div>`;
   document.body.appendChild(ov);
   try { window.speechSynthesis.getVoices(); window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices(); } catch (e) {} // warm voice list
@@ -703,16 +726,108 @@ function openTalk() {
     } catch (e) { bubble("ai", "⚠️ " + (e.message || "error")); setStatus(t("Tap the mic to talk")); }
     finally { if (TALK) TALK.busy = false; }
   };
-  mic.onclick = () => { if (TALK && TALK.speaking) { window.speechSynthesis.cancel(); TALK.speaking = false; } listen(); };
+  // shared build step (used by realtime tool + kept inline for browser mode)
+  const doBuild = async (brief) => {
+    if (!TALK || TALK.built) return; TALK.built = true;
+    setStatus(t("Building your assistant… (about a minute)"));
+    scroll.classList.add("is-building"); ov.querySelector("#tcSub").textContent = t("Building your assistant…");
+    const dn = ov.querySelector("#talkDone"); dn.hidden = false; dn.innerHTML = `<div class="spin" style="margin:6px auto"></div>`;
+    try {
+      const bd = await api("POST", "talk-build", { brief, lang: TALK.lang });
+      if (!TALK) return; scroll.classList.remove("is-building");
+      if (bd.done && bd.agent_id) {
+        ov.querySelector("#tcSub").textContent = t("Ready");
+        const line = (TALK.lang === "ar") ? `تم! ${bd.name || ""} جاهز.` : `Done! ${bd.name || "Your assistant"} is ready.`;
+        bubble("ai", line);
+        dn.innerHTML = `<div class="tk-built">✅ ${esc(bd.name || t("Your assistant"))} — ${t("ready")}</div><button class="btn primary" id="talkOpen">${t("Open it")}</button>`;
+        ov.querySelector("#talkOpen").onclick = () => { closeTalk(); openAgent(bd.agent_id, "overview"); };
+      } else { TALK.built = false; dn.hidden = true; ov.querySelector("#tcSub").textContent = t("Speak, and I'll sketch it live"); }
+    } catch (e) { if (TALK) { TALK.built = false; scroll.classList.remove("is-building"); dn.hidden = true; } }
+  };
+  // ---- OpenAI Realtime (GPT live) ----
+  const rtSend = (o) => { try { if (TALK && TALK.dc && TALK.dc.readyState === "open") TALK.dc.send(JSON.stringify(o)); } catch (e) {} };
+  const configureSession = () => {
+    const instr = ar
+      ? "أنت وكيل، مرشد صوتي ودود يساعد موظفاً حكومياً غير تقني في الإمارات على بناء مساعد ذكي بمجرد التحدث. اسأل سؤالاً بسيطاً واحداً في كل مرة بكلمات يومية بلا مصطلحات تقنية. كلما فهمت أكثر استدعِ الأداة render_agent لتحديث المخطط الذي يراه (المرحلة 1 في البداية حتى 4 عند الفهم الكامل). عندما تجمع ما يكفي اجعل ready=true مع وصف كامل وأخبره أنك تبنيه الآن. اجعل ردودك المنطوقة جملة أو جملتين قصيرتين."
+      : "You are Wakeel, a warm voice guide helping a non-technical UAE government officer build an AI assistant just by talking. Ask ONE simple question at a time in plain everyday words — never technical jargon. As you learn what they want, CALL the render_agent tool to update the live diagram they see (stage 1 early, up to 4 when fully understood). When you have enough, set ready=true with a full plain-English brief and tell them you're building it now. Keep every spoken reply to one or two short sentences.";
+    rtSend({ type: "session.update", session: {
+      modalities: ["audio", "text"], instructions: instr, voice: "marin",
+      input_audio_transcription: { model: "whisper-1" }, turn_detection: { type: "server_vad", silence_duration_ms: 700 },
+      tools: [{ type: "function", name: "render_agent", description: "Update the live agent diagram the user sees. Call whenever you understand more.",
+        parameters: { type: "object", properties: {
+          stage: { type: "integer", description: "1 = just started, 4 = fully understood" },
+          blocks: { type: "array", items: { type: "object", properties: { kind: { type: "string", enum: ["trigger", "agent", "knowledge", "tool", "decision", "guardrail", "approval", "output"] }, title: { type: "string" }, desc: { type: "string" } }, required: ["kind", "title"] } },
+          ready: { type: "boolean" }, brief: { type: "string" } }, required: ["stage", "blocks"] } }],
+      tool_choice: "auto"
+    } });
+    rtSend({ type: "response.create", response: { instructions: "Greet the user warmly in ONE sentence, reassure them there's nothing technical to set up, and ask what they'd like their assistant to do. Ask only that one question." } });
+  };
+  const doRenderAgent = (a) => {
+    const stage = Math.max(1, Math.min(4, a.stage || 1));
+    ov.querySelector("#tcEmpty").style.display = "none";
+    paintSketch(stagedSketch(a.blocks || [], stage), [0, 36, 56, 76, 92][stage]);
+    if (a.ready && (a.brief || "").trim()) doBuild(a.brief);
+  };
+  const handleRtEvent = (data) => {
+    let ev; try { ev = JSON.parse(data); } catch (e) { return; }
+    if (ev.type === "response.function_call_arguments.done") {
+      let a = {}; try { a = JSON.parse(ev.arguments || "{}"); } catch (e) {}
+      if (ev.name === "render_agent") doRenderAgent(a);
+      rtSend({ type: "conversation.item.create", item: { type: "function_call_output", call_id: ev.call_id, output: JSON.stringify({ ok: true }) } });
+      rtSend({ type: "response.create" });
+    } else if (ev.type === "conversation.item.input_audio_transcription.completed") { if (ev.transcript) bubble("me", ev.transcript.trim()); }
+    else if (ev.type === "response.audio_transcript.done") { if (ev.transcript) bubble("ai", ev.transcript.trim()); }
+  };
+  const stopRealtime = () => {
+    try { if (TALK && TALK.stream) TALK.stream.getTracks().forEach(x => x.stop()); } catch (e) {}
+    try { if (TALK && TALK.pc) TALK.pc.close(); } catch (e) {}
+    if (TALK) { TALK.rtLive = false; TALK.pc = null; TALK.dc = null; TALK.stream = null; }
+    mic.classList.remove("listening");
+  };
+  const startRealtime = async () => {
+    if (!TALK || TALK.rtLive || TALK.rtConnecting) return;
+    TALK.rtConnecting = true; setStatus(t("Connecting…")); ov.querySelector("#tcSub").textContent = t("Connecting…"); mic.classList.add("listening");
+    try {
+      const pc = new RTCPeerConnection(); TALK.pc = pc;
+      pc.ontrack = (e) => { const au = ov.querySelector("#tkAudio"); if (au) au.srcObject = e.streams[0]; };
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+      TALK.stream = stream; stream.getTracks().forEach(tr => pc.addTrack(tr, stream));
+      const dc = pc.createDataChannel("oai-events"); TALK.dc = dc;
+      dc.onopen = () => configureSession(); dc.onmessage = (e) => handleRtEvent(e.data);
+      const offer = await pc.createOffer(); await pc.setLocalDescription(offer);
+      const resp = await fetch("api/realtime", { method: "POST", headers: { "Content-Type": "application/sdp" }, body: offer.sdp, credentials: "include" });
+      if (!resp.ok) throw new Error("handshake " + resp.status);
+      await pc.setRemoteDescription({ type: "answer", sdp: await resp.text() });
+      TALK.rtLive = true; TALK.rtConnecting = false;
+      setStatus(t("Listening — just talk")); ov.querySelector("#tcSub").textContent = t("Speak, and I'll sketch it live");
+    } catch (e) {
+      TALK.rtConnecting = false; TALK.rt = false; stopRealtime();
+      bubble("ai", ar ? "الصوت المباشر غير متاح الآن — سأستخدم الصوت العادي." : "Live voice isn't available right now — I'll use the standard voice.");
+      mic.onclick = () => { if (TALK.speaking) { window.speechSynthesis.cancel(); TALK.speaking = false; } listen(); };
+      const g = ar ? "أخبرني بما تريد أن يقوم به مساعدك." : "Tell me what you'd like your assistant to do.";
+      bubble("ai", g); speak(g).then(() => setStatus(supported ? t("Tap the mic and speak") : t("Type your answer below")));
+    }
+  };
   ov.querySelector("#talkX").onclick = closeTalk;
   if (!supported) {
     const ti = ov.querySelector("#talkType"), tb = ov.querySelector("#talkTypeSend");
     const s = () => { const v = ti.value.trim(); if (v) { ti.value = ""; send(v); } };
     tb.onclick = s; ti.addEventListener("keydown", e => { if (e.key === "Enter") s(); });
   }
-  const greet = ar ? "مرحباً! أخبرني بما تريد أن يقوم به مساعدك، وسأبنيه بينما نتحدث." : "Hi! Tell me what you'd like your assistant to do, and I'll build it as we talk.";
-  bubble("ai", greet);
-  speak(greet).then(() => setStatus(supported ? t("Tap the mic and speak") : t("Type your answer below")));
+  const initBrowser = () => {
+    mic.onclick = () => { if (TALK && TALK.speaking) { window.speechSynthesis.cancel(); TALK.speaking = false; } listen(); };
+    const greet = ar ? "مرحباً! أخبرني بما تريد أن يقوم به مساعدك، وسأبنيه بينما نتحدث." : "Hi! Tell me what you'd like your assistant to do, and I'll build it as we talk.";
+    bubble("ai", greet); speak(greet).then(() => setStatus(supported ? t("Tap the mic and speak") : t("Type your answer below")));
+  };
+  api("GET", "realtime").then(cfg => {
+    if (!TALK) return;
+    if (cfg && cfg.configured) {
+      TALK.rt = true;
+      mic.onclick = () => { if (TALK.rtLive) { stopRealtime(); setStatus(t("Tap the mic to talk")); ov.querySelector("#tcSub").textContent = t("Speak, and I'll sketch it live"); } else startRealtime(); };
+      bubble("ai", ar ? "اضغط الميكروفون وابدأ التحدث مع وكيل مباشرةً." : "Tap the mic and start talking to Wakeel — it's a live voice, just have a conversation.");
+      setStatus(t("Tap the mic to start")); ov.querySelector("#tcSub").textContent = t("Tap the mic to start talking");
+    } else initBrowser();
+  }).catch(() => { if (TALK) initBrowser(); });
 }
 function closeTalk() { try { window.speechSynthesis.cancel(); if (TALK && TALK.recog) TALK.recog.abort(); } catch (e) {} const o = document.getElementById("talkOv"); if (o) o.remove(); TALK = null; }
 // grow the composer to fit its content (up to a max), then scroll — so long prompts stay readable

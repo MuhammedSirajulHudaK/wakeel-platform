@@ -2121,6 +2121,38 @@ def talk_build(sess, brief, lang="en"):
         return {"done": False, "error": str(e)[:200]}
 
 
+# ---- OpenAI Realtime ("GPT live") voice : server-side SDP proxy -------------
+REALTIME_MODEL = os.environ.get("REALTIME_MODEL", "gpt-realtime")
+
+
+def realtime_config():
+    return {"configured": bool(OPENAI_KEY), "model": REALTIME_MODEL}
+
+
+def realtime_sdp(offer_sdp):
+    """Proxy the browser's WebRTC SDP offer to OpenAI Realtime and return the answer SDP.
+    The API key stays server-side; the browser streams audio directly to OpenAI."""
+    if not OPENAI_KEY:
+        raise RuntimeError("OpenAI key not configured for realtime")
+    errs = []
+    for base in ("https://api.openai.com/v1/realtime/calls", "https://api.openai.com/v1/realtime"):
+        try:
+            url = base + "?model=" + urllib.parse.quote(REALTIME_MODEL)
+            req = urllib.request.Request(url, data=offer_sdp.encode("utf-8"),
+                                         headers={"Authorization": "Bearer " + OPENAI_KEY,
+                                                  "Content-Type": "application/sdp",
+                                                  "OpenAI-Beta": "realtime=v1"}, method="POST")
+            return urllib.request.urlopen(req, timeout=30).read().decode("utf-8")
+        except Exception as e:
+            body = ""
+            try:
+                body = e.read().decode()[:200]  # type: ignore[attr-defined]
+            except Exception:
+                pass
+            errs.append(f"{base.split('/v1/')[1]}: {e} {body}")
+    raise RuntimeError("realtime handshake failed — " + " | ".join(errs))
+
+
 def knowledge_list(sess):
     res = dify(sess, "GET", "/datasets?page=1&limit=30")
     return {"knowledge": [{"id": d.get("id"), "name": d.get("name"),
@@ -2825,6 +2857,8 @@ class H(BaseHTTPRequestHandler):
             return self._file("wakeel-mark.svg", "image/svg+xml")
         if p == "/api/health":
             return self._send(200, {"ok": True, "sessions": len(SESSIONS), "asset_v": self._asset_version()})
+        if p == "/api/realtime":
+            return self._send(200, realtime_config())
         if p == "/api/oauth/google/callback":
             # top-level redirect back from Google — no session guard (uses signed state)
             q = dict(x.split("=", 1) for x in (self.path.split("?", 1) + [""])[1].split("&") if "=" in x)
@@ -2926,6 +2960,16 @@ class H(BaseHTTPRequestHandler):
         p = self.path.split("?")[0]
         if p.startswith("/beam/"):
             return self._beam()
+        if p == "/api/realtime":
+            # raw SDP offer -> OpenAI Realtime answer SDP (not JSON)
+            if not self._sess():
+                return self._send(401, {"error": "login required"})
+            try:
+                n = int(self.headers.get("Content-Length", 0))
+                offer = self.rfile.read(n).decode("utf-8", "ignore")
+                return self._send(200, realtime_sdp(offer).encode("utf-8"), "application/sdp")
+            except Exception as e:
+                return self._send(500, {"error": str(e)})
         try:
             b = self._body()
             if p == "/api/login":
