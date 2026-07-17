@@ -1099,3 +1099,10 @@ textarea.input{padding:12px 14px;min-height:auto;resize:none}
 .tk-mode.live{color:#04240f;background:#3ee08a}
 .tk-mode.pending{color:#e6b02e;background:rgba(230,176,46,.12)}
 .tk-mode.standard{color:var(--muted);background:var(--panel-3)}
+
+/* Voice-lab (wakeel-notension port) mounted inside the Talk overlay */
+.talk-ov{padding:0!important;align-items:stretch!important;justify-content:stretch!important;background:#07100d}
+.talk-ov .voice-lab-shell{min-height:0;height:100vh;width:100%}
+.voice-lab-shell .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.voice-lab-shell .vl-icon-btn{width:32px;height:32px;border-radius:9px;border:1px solid var(--vl-line);background:transparent;color:var(--vl-muted);font-size:15px;cursor:pointer}
+.voice-lab-shell .vl-icon-btn:hover{color:var(--vl-text)}

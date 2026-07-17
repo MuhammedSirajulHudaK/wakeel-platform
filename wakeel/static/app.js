@@ -583,277 +583,191 @@ function stagedSketch(blocks, stage) {
   const edges = TK_PROG_EDGES[stage].filter(e => kinds.includes(e[0]) && kinds.includes(e[1])).map(e => ({ source: e[0], target: e[1], label: e[2] || "" }));
   return { nodes, edges };
 }
+const VL_LABEL = { trigger: "It starts", agent: "Wakeel reads & understands", knowledge: "It uses trusted context", decision: "It checks", tool: "It takes action", guardrail: "It stays safe", approval: "A person reviews", output: "You get" };
+const VL_LABEL_AR = { trigger: "تبدأ", agent: "وكيل يقرأ ويفهم", knowledge: "تستخدم سياقاً موثوقاً", decision: "تتحقق", tool: "تتخذ إجراءً", guardrail: "تبقى آمنة", approval: "شخص يراجع", output: "تحصل على" };
+const VL_ICON = { trigger: "⏰", agent: "🤖", knowledge: "📚", decision: "🔀", tool: "⚡", guardrail: "🛡️", approval: "🙋", output: "✅" };
 function openTalk() {
+  const ar = LANG === "ar";
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   const supported = !!SR;
-  const ar = LANG === "ar";
+  const L = (en, arr) => ar ? arr : en;
   const ov = document.createElement("div"); ov.className = "talk-ov"; ov.id = "talkOv";
+  if (ar) { ov.setAttribute("dir", "rtl"); }
   ov.innerHTML = `
-    <div class="talk-stage">
-      <div class="talk-canvas" id="talkCanvas">
-        <div class="tc-head">
-          <div><div class="tc-h-title">${t("Your assistant")}</div>
-            <div class="tc-h-sub" id="tcSub">${t("Speak, and I'll sketch it live")}</div></div>
-          <div class="tc-conf"><div class="tc-conf-bar"><i id="tcConfFill"></i></div><span id="tcConfPct">0%</span></div>
+    <div class="voice-lab-shell guided-lab" id="vlShell">
+      <audio id="tkAudio" autoplay class="sr-only"></audio>
+      <header class="voice-lab-topbar">
+        <div class="voice-lab-title">
+          <button class="vl-icon-btn" id="vlBack" aria-label="Close">✕</button>
+          <span class="wakeel-logo-mark"><span>و</span></span>
+          <span><strong>${L("New agent", "وكيل جديد")}</strong><small id="vlTitle">${L("Built with Wakeel", "مبني بواسطة وكيل")}</small></span>
+          <i class="voice-lab-beta">${L("Guided build", "بناء موجّه")}</i>
         </div>
-        <div class="tc-scroll" id="tcScroll"><div class="tc-world" id="tcWorld"><svg class="tc-wires" id="tcWires"></svg></div>
-          <div class="tc-empty" id="tcEmpty">🎙️ ${t("Your agent will appear here as you talk")}</div>
+        <div class="voice-lab-actions">
+          <span class="voice-mode-badge ready" id="vlBadge"><i></i> ${L("Natural voice", "صوت طبيعي")}</span>
+          <button type="button" id="vlReset">↺ ${L("Start over", "ابدأ من جديد")}</button>
+          <button class="voice-publish-button" id="vlPublish" disabled>✨ <span>${L("Publish agent", "نشر الوكيل")}</span></button>
         </div>
-      </div>
-      <aside class="talk-side">
-        <button class="talk-x" id="talkX">✕</button>
-        <div class="talk-head"><div class="logo" style="width:30px;height:30px;border-radius:9px"><span>و</span></div>
-          <div><div class="talk-title">${t("Talk to build")}</div>
-          <div class="talk-sub">${t("Just speak — I'll build your assistant as we talk.")}</div></div></div>
-        <div class="talk-log" id="talkLog"></div>
-        <div class="talk-status" id="talkStatus"></div>
-        <div class="talk-controls"><button class="talk-mic" id="talkMic" title="${t("Tap and speak")}">🎤</button></div>
-        <div class="tk-mode" id="tkMode"></div>
-        ${supported ? "" : `<div class="talk-fallback"><input id="talkType" placeholder="${t("Type here instead…")}"/><button class="btn primary sm" id="talkTypeSend">${t("Send")}</button></div>`}
-        <div class="talk-done" id="talkDone" hidden></div>
-      </aside>
-      <audio id="tkAudio" autoplay style="display:none"></audio>
+      </header>
+      <main class="voice-lab-main assistant-overlay-layout">
+        <section class="voice-canvas-panel story-canvas-panel">
+          <div class="voice-canvas-toolbar">
+            <div>
+              <span class="canvas-live-dot"><i></i> ${L("Building together", "نبني معاً")}</span>
+              <strong id="vlCanvasTitle">${L("Your canvas starts empty", "لوحتك تبدأ فارغة")}</strong>
+              <small id="vlCanvasSub">${L("We'll begin gently with your role", "سنبدأ بلطف بدورك")}</small>
+            </div>
+            <div class="story-read-direction" id="vlReadDir" hidden><span>1</span> → <b id="vlStepCount">0</b> ${L("Read left to right", "اقرأ من اليمين لليسار")}</div>
+          </div>
+          <div class="voice-canvas-scroll" id="vlScroll">
+            <div class="agent-story-world is-empty" id="vlWorld">
+              <div class="canvas-grid"></div>
+              <div class="canvas-empty-state" id="vlEmpty">
+                <div class="canvas-narrator-orbit"><span class="canvas-narrator-avatar">✨</span><i></i><i></i><i></i></div>
+                <span class="canvas-narrator-label">🔊 ${L("Wakeel · your work-shadowing assistant", "وكيل · مساعدك الذي يرافق عملك")}</span>
+                <h1>${L("Tell me about your day.<br>I'll sketch what I hear.", "أخبرني عن يومك.<br>سأرسم ما أسمعه.")}</h1>
+                <p>${L("Start with your role. There's nothing technical to set up, and messy answers are completely fine.", "ابدأ بدورك. لا شيء تقني لإعداده، والإجابات غير المرتّبة مقبولة تماماً.")}</p>
+                <button type="button" id="vlStart">🎤 ${L("Say hello to Wakeel", "قل مرحباً لوكيل")}</button>
+                <small>${L("Or answer the first question in the chat.", "أو أجب على السؤال الأول في المحادثة.")}</small>
+              </div>
+              <div class="agent-story" id="vlStory" hidden>
+                <div class="agent-story-heading"><span>✨ ${L("What I understood from you", "ما فهمته منك")}</span>
+                  <h2>${L("Here's the work story we're building together", "هذه قصة العمل التي نبنيها معاً")}</h2>
+                  <p>${L("I'll explain every change as it appears. Follow the numbered steps.", "سأشرح كل تغيير عند ظهوره. اتبع الخطوات المرقّمة.")}</p></div>
+                <div class="agent-story-flow" id="vlFlow"></div>
+                <div class="story-safety-rail" id="vlSafety" hidden></div>
+              </div>
+              <div class="canvas-building-state" id="vlBuilding" hidden>
+                <span>🔊</span><strong>${L("I'm building your assistant now", "أبني مساعدك الآن")}</strong><small>${L("This takes about a minute…", "يستغرق هذا حوالي دقيقة…")}</small>
+              </div>
+            </div>
+          </div>
+          <div class="voice-canvas-footer">
+            <div class="story-human-control" id="vlHuman" hidden>👤 <span><small>${L("You stay in control", "أنت المتحكم")}</small><strong>${L("Wakeel prepares the work. A person approves sensitive actions.", "وكيل يجهّز العمل. شخص يوافق على الإجراءات الحساسة.")}</strong></span></div>
+            <div class="canvas-empty-footer" id="vlEmptyFoot">✨ <span>${L("Start with your role. I'll draw only after I understand the work.", "ابدأ بدورك. لن أرسم إلا بعد أن أفهم العمل.")}</span></div>
+            <div class="canvas-integrations" id="vlInteg" hidden><small>${L("Apps in this story", "التطبيقات في هذه القصة")}</small></div>
+          </div>
+        </section>
+        <aside class="assistant-float open state-idle" id="vlFloat">
+          <header class="assistant-float-header">
+            <span class="assistant-live-orb">✨<i></i><i></i></span>
+            <span class="assistant-float-identity"><strong>Wakeel</strong><small id="vlState">${L("Ready when you are", "جاهز متى شئت")}</small></span>
+            <span class="assistant-mini-progress"><b id="vlPct">0%</b><i><em id="vlPctBar" style="width:0%"></em></i></span>
+          </header>
+          <div class="assistant-float-body">
+            <div class="assistant-now" aria-live="polite"><small id="vlNowLabel">${L("Wakeel says", "يقول وكيل")}</small><p id="vlNow">…</p></div>
+            <div class="assistant-current-question"><span><small id="vlStepLabel">${L("Step 1 of 5", "الخطوة 1 من 5")}</small><strong id="vlQuestion">${L("What would you like your assistant to do?", "ما الذي تريد أن يقوم به مساعدك؟")}</strong></span></div>
+            <form class="assistant-float-composer" id="vlForm">
+              <button class="assistant-float-mic idle" id="vlMic" type="button" title="${L("Talk to Wakeel", "تحدّث إلى وكيل")}">🎤</button>
+              <textarea id="vlInput" placeholder="${L("Talk naturally, or type here…", "تحدّث بطبيعية أو اكتب هنا…")}" rows="1"></textarea>
+              <span class="assistant-listening-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span>
+              <button class="assistant-float-send" id="vlSend" type="submit" title="${L("Send", "إرسال")}">➤</button>
+            </form>
+            <p class="assistant-float-foot">🛡️ ${L("Nothing runs until you publish.", "لا شيء يعمل حتى تنشر.")}</p>
+          </div>
+        </aside>
+      </main>
     </div>`;
   document.body.appendChild(ov);
-  try { window.speechSynthesis.getVoices(); window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices(); } catch (e) {} // warm voice list
-  TALK = { state: {}, lang: ar ? "ar" : "en", recog: null, busy: false, speaking: false, seen: new Set() };
-  const log = ov.querySelector("#talkLog"), status = ov.querySelector("#talkStatus"), mic = ov.querySelector("#talkMic");
-  const scroll = ov.querySelector("#tcScroll"), world = ov.querySelector("#tcWorld"), wires = ov.querySelector("#tcWires");
-  const setStatus = (s) => { status.textContent = s || ""; };
-  const bubble = (who, txt) => { const d = document.createElement("div"); d.className = "tk-msg " + who; d.textContent = txt; log.appendChild(d); log.scrollTop = log.scrollHeight; };
-  const setMode = (cls, txt) => { const m = ov.querySelector("#tkMode"); if (m) { m.className = "tk-mode " + cls; m.textContent = txt; } };
-  const NS = "http://www.w3.org/2000/svg", CW = 178;
-  const paintSketch = (sk, conf) => {
-    const nodes = (sk && sk.nodes || []).filter(n => n && n.id && TK_KIND[n.kind]);
-    if (!nodes.length) return;
-    ov.querySelector("#tcEmpty").style.display = "none";
-    const ids = new Set(nodes.map(n => n.id));
-    const edges = (sk.edges || []).filter(e => ids.has(e.source) && ids.has(e.target));
-    const rank = {}; nodes.forEach(n => rank[n.id] = 0);
-    let ch = true, g = 0; while (ch && g++ < 40) { ch = false; edges.forEach(e => { if (rank[e.target] < rank[e.source] + 1) { rank[e.target] = rank[e.source] + 1; ch = true; } }); }
-    const cols = {}; nodes.forEach(n => (cols[rank[n.id]] = cols[rank[n.id]] || []).push(n));
-    const COLW = 214, ROWH = 118, PADX = 24, PADY = 20, CH = 74;
-    const maxRows = Math.max(1, ...Object.values(cols).map(a => a.length));
-    const pos = {};
-    Object.keys(cols).forEach(r => { const arr = cols[r]; const off = PADY + (maxRows * ROWH - arr.length * ROWH) / 2; arr.forEach((n, i) => pos[n.id] = { x: PADX + r * COLW, y: off + i * ROWH }); });
-    Array.from(world.querySelectorAll(".tc-node,.tc-elabel")).forEach(x => x.remove()); wires.innerHTML = "";
-    nodes.forEach(n => {
-      const m = TK_KIND[n.kind]; const isNew = !TALK.seen.has(n.id);
-      const el = document.createElement("div"); el.className = "tc-node" + (isNew ? " tc-arrive" : "");
-      el.style.left = pos[n.id].x + "px"; el.style.top = pos[n.id].y + "px"; el.style.setProperty("--nc", m.c);
-      el.innerHTML = `<span class="tc-acc"></span><div class="tc-b"><div class="tc-t">${m.ic} ${esc(m.label)}</div>
-        <div class="tc-ti">${esc(n.title || m.label)}</div>${n.desc ? `<div class="tc-d">${esc(n.desc)}</div>` : ""}</div>`;
-      world.appendChild(el); TALK.seen.add(n.id);
-    });
-    edges.forEach(e => {
-      const s = pos[e.source], tt = pos[e.target]; if (!s || !tt) return;
-      const sx = s.x + CW, sy = s.y + CH / 2, tx = tt.x, ty = tt.y + CH / 2;
-      const mx = Math.round((sx + tx) / 2), r = 12, vd = ty > sy ? 1 : -1;
-      const d = Math.abs(ty - sy) < 2 ? `M ${sx} ${sy} L ${tx} ${ty}`
-        : `M ${sx} ${sy} L ${mx - r} ${sy} Q ${mx} ${sy} ${mx} ${sy + vd * r} L ${mx} ${ty - vd * r} Q ${mx} ${ty} ${mx + r} ${ty} L ${tx} ${ty}`;
-      const p = document.createElementNS(NS, "path"); p.setAttribute("d", d); p.setAttribute("class", "tc-wire"); wires.appendChild(p);
-    });
-    // fit
-    let a = 1e9, b = 1e9, c = -1e9, dd = -1e9;
-    nodes.forEach(n => { a = Math.min(a, pos[n.id].x); b = Math.min(b, pos[n.id].y); c = Math.max(c, pos[n.id].x + CW); dd = Math.max(dd, pos[n.id].y + CH); });
-    a -= 24; b -= 20; c += 24; dd += 20;
-    const vw = scroll.clientWidth, vh = scroll.clientHeight;
-    const sc = Math.max(.4, Math.min(vw / (c - a), vh / (dd - b), 1));
-    const tx2 = (vw - (c - a) * sc) / 2 - a * sc, ty2 = (vh - (dd - b) * sc) / 2 - b * sc;
-    world.style.transform = `translate(${tx2}px,${ty2}px) scale(${sc})`;
-    if (conf != null) { ov.querySelector("#tcConfFill").style.width = Math.max(0, Math.min(100, conf)) + "%"; ov.querySelector("#tcConfPct").textContent = Math.round(conf) + "%"; }
-  };
-  const pickVoice = () => {
-    const voices = (window.speechSynthesis && window.speechSynthesis.getVoices()) || [];
-    if (!voices.length) return null;
-    if (ar) return voices.find(v => v.lang && v.lang.toLowerCase().startsWith("ar")) || null;
-    // premium, natural-sounding OS/browser voices (Mac: Samantha/Ava, Win: Sonia, Chrome: Google UK Female)
-    const pref = ["Samantha", "Ava", "Victoria", "Karen", "Google UK English Female", "Microsoft Sonia", "Google US English", "Microsoft Aria"];
-    return pref.map(n => voices.find(v => v.name && v.name.includes(n))).find(Boolean)
-      || voices.find(v => v.lang && v.lang.startsWith("en") && /female|samantha|zira|aria/i.test(v.name))
-      || voices.find(v => v.lang && v.lang.startsWith("en")) || null;
-  };
-  const speakBrowser = (text) => new Promise(res => {
-    try {
-      window.speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(text);
-      u.lang = ar ? "ar-SA" : "en-US";
-      const v = pickVoice(); if (v) u.voice = v;
-      u.rate = 0.98; u.pitch = 1.03;
-      u.onend = res; u.onerror = res;
-      TALK.speaking = true; window.speechSynthesis.speak(u);
-    } catch (e) { res(); }
-  }).then(() => { TALK.speaking = false; });
-  // Natural voice via OpenAI TTS; falls back to the browser voice if it fails.
+  TALK = { state: {}, lang: ar ? "ar" : "en", recog: null, busy: false, speaking: false, built: false, title: "" };
+  const $$ = (id) => ov.querySelector("#" + id);
+  const audio = $$("tkAudio");
+  const setState = (s, label) => { $$("vlFloat").className = "assistant-float open state-" + s; if (label != null) $$("vlState").textContent = label; $$("vlMic").className = "assistant-float-mic " + s; $$("vlForm").className = "assistant-float-composer" + (s === "listening" || s === "live" ? " is-listening" : ""); };
+  // natural voice via OpenAI TTS, browser fallback
+  const speakBrowser = (text) => new Promise(res => { try { window.speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = ar ? "ar-SA" : "en-US"; u.rate = 0.98; u.pitch = 1.03; u.onend = res; u.onerror = res; TALK.speaking = true; window.speechSynthesis.speak(u); } catch (e) { res(); } }).then(() => { TALK.speaking = false; });
   const speak = async (text) => {
     if (!text || !TALK) return;
     try {
       const r = await fetch("api/tts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, voice: "nova" }), credentials: "include" });
-      if (!r.ok) throw new Error("tts " + r.status);
+      if (!r.ok) throw new Error("tts");
       const url = URL.createObjectURL(await r.blob());
-      const au = ov.querySelector("#tkAudio"); if (!au) throw new Error("no audio el");
       TALK.speaking = true;
-      await new Promise((res) => { au.srcObject = null; au.src = url; au.onended = res; au.onerror = res; const pr = au.play(); if (pr && pr.catch) pr.catch(() => res()); });
+      await new Promise((res) => { audio.srcObject = null; audio.src = url; audio.onended = res; audio.onerror = res; const p = audio.play(); if (p && p.catch) p.catch(() => res()); });
       TALK.speaking = false; URL.revokeObjectURL(url);
     } catch (e) { await speakBrowser(text); }
   };
-  const listen = () => {
-    if (!supported || TALK.busy || TALK.speaking || !TALK) return;
-    const rec = new SR(); TALK.recog = rec;
-    rec.lang = ar ? "ar-AE" : "en-US"; rec.interimResults = false; rec.maxAlternatives = 1;
-    rec.onstart = () => { mic.classList.add("listening"); setStatus(t("Listening…")); };
-    rec.onresult = (e) => { mic.classList.remove("listening"); send(e.results[0][0].transcript); };
-    rec.onerror = () => { mic.classList.remove("listening"); setStatus(t("Tap the mic to talk")); };
-    rec.onend = () => { mic.classList.remove("listening"); };
-    try { rec.start(); } catch (e) {}
+  const renderStory = (sk) => {
+    const nodes = (sk && sk.nodes || []).filter(n => n && VL_LABEL[n.kind]);
+    const steps = nodes.filter(n => n.kind !== "guardrail");
+    if (!steps.length) return;
+    $$("vlEmpty").hidden = true; $$("vlStory").hidden = false; $$("vlBuilding").hidden = true;
+    $$("vlWorld").className = "agent-story-world has-story";
+    $$("vlEmptyFoot").hidden = true; $$("vlHuman").hidden = false;
+    $$("vlReadDir").hidden = false; $$("vlStepCount").textContent = steps.length;
+    $$("vlFlow").style.gridTemplateColumns = `repeat(${steps.length}, minmax(150px,1fr))`;
+    $$("vlFlow").innerHTML = steps.map((n, i) => `
+      <article class="story-step kind-${n.kind} progressive">
+        <span class="story-step-number">${i + 1}</span>
+        <span class="story-step-icon">${VL_ICON[n.kind] || "•"}</span>
+        <small>${esc((ar ? VL_LABEL_AR : VL_LABEL)[n.kind] || n.kind)}</small>
+        <strong>${esc(n.title || "")}</strong>
+        <p>${esc(n.desc || "")}</p>
+        ${i < steps.length - 1 ? `<span class="story-next" aria-hidden="true">→</span>` : ""}
+      </article>`).join("");
+    const guard = nodes.find(n => n.kind === "guardrail");
+    if (guard) { $$("vlSafety").hidden = false; $$("vlSafety").innerHTML = `<span>🛡️</span><div><small>${L("Always protecting every step", "يحمي كل خطوة دائماً")}</small><strong>${esc(guard.title || "")}</strong><p>${esc(guard.desc || "")}</p></div><div class="story-safety-rules">${(sk.guardrails || []).slice(0, 2).map(r => `<i>✓ ${esc(r)}</i>`).join("")}</div>`; }
+    else $$("vlSafety").hidden = true;
+    const integ = sk.integrations || [];
+    if (integ.length) { $$("vlInteg").hidden = false; $$("vlInteg").innerHTML = `<small>${L("Apps in this story", "التطبيقات في هذه القصة")}</small>` + integ.map(x => `<span>${esc(x)}</span>`).join(""); }
+    if (TALK.title) { $$("vlCanvasTitle").textContent = TALK.title; $$("vlTitle").textContent = TALK.title; }
+  };
+  const updateNow = (reply, conf) => {
+    $$("vlNow").textContent = reply; $$("vlNowLabel").textContent = L("Wakeel says", "يقول وكيل");
+    $$("vlQuestion").textContent = reply;
+    if (conf != null) { $$("vlPct").textContent = Math.round(conf) + "%"; $$("vlPctBar").style.width = Math.round(conf) + "%"; }
+  };
+  const doBuild = async (brief) => {
+    if (!TALK || TALK.built) return; TALK.built = true;
+    $$("vlStory").hidden = true; $$("vlBuilding").hidden = false; setState("thinking", L("Building your assistant…", "أبني مساعدك…"));
+    try {
+      const bd = await api("POST", "talk-build", { brief, lang: TALK.lang });
+      if (!TALK) return;
+      $$("vlBuilding").hidden = true; $$("vlStory").hidden = false;
+      if (bd.done && bd.agent_id) {
+        TALK.title = bd.name || TALK.title;
+        $$("vlTitle").textContent = bd.name || $$("vlTitle").textContent;
+        const line = ar ? `تم! ${bd.name || ""} جاهز.` : `Done! ${bd.name || "Your assistant"} is ready.`;
+        updateNow(line, 100); await speak(line);
+        const pb = $$("vlPublish"); pb.disabled = false; pb.classList.add("published"); pb.querySelector("span").textContent = L("Open agent", "افتح الوكيل");
+        pb.onclick = () => { closeTalk(); openAgent(bd.agent_id, "overview"); };
+        setState("idle", L("Ready", "جاهز"));
+      } else { TALK.built = false; setState("idle", L("Let's adjust", "لنعدّل")); }
+    } catch (e) { if (TALK) { TALK.built = false; $$("vlBuilding").hidden = true; $$("vlStory").hidden = false; setState("idle"); } }
   };
   const send = async (text) => {
     if (!text || !TALK || TALK.busy) return;
-    TALK.busy = true; mic.classList.remove("listening"); bubble("me", text); setStatus(t("Thinking…"));
+    TALK.busy = true; $$("vlInput").value = ""; setState("thinking", L("Wakeel is thinking…", "وكيل يفكّر…")); $$("vlNowLabel").textContent = L("Wakeel is thinking", "وكيل يفكّر");
     try {
       const r = await api("POST", "talk", { text, state: TALK.state, lang: TALK.lang });
       if (!TALK) return;
       TALK.state = r.state || TALK.state;
-      if (r.sketch) paintSketch(r.sketch, r.confidence);
-      bubble("ai", r.reply); await speak(r.reply);
+      if (r.sketch) renderStory(r.sketch);
+      updateNow(r.reply, r.confidence);
+      setState("idle", L("Ready when you are", "جاهز متى شئت"));
+      await speak(r.reply);
       if (!TALK) return;
-      if (r.phase === "building" && r.brief) {
-        setStatus(t("Building your assistant… (about a minute)"));
-        scroll.classList.add("is-building"); ov.querySelector("#tcSub").textContent = t("Building your assistant…");
-        const dn = ov.querySelector("#talkDone"); dn.hidden = false; dn.innerHTML = `<div class="spin" style="margin:6px auto"></div>`;
-        const bd = await api("POST", "talk-build", { brief: r.brief, lang: TALK.lang });
-        if (!TALK) return;
-        scroll.classList.remove("is-building");
-        if (bd.done && bd.agent_id) {
-          ov.querySelector("#tcSub").textContent = t("Ready");
-          const line = (TALK.lang === "ar") ? `تم! ${bd.name || ""} جاهز.` : `Done! ${bd.name || "Your assistant"} is ready.`;
-          bubble("ai", line); await speak(line); setStatus("");
-          dn.innerHTML = `<div class="tk-built">✅ ${esc(bd.name || t("Your assistant"))} — ${t("ready")}</div>
-            <button class="btn primary" id="talkOpen">${t("Open it")}</button>`;
-          ov.querySelector("#talkOpen").onclick = () => { closeTalk(); openAgent(bd.agent_id, "overview"); };
-        } else {
-          ov.querySelector("#tcSub").textContent = t("Speak, and I'll sketch it live");
-          dn.hidden = true;
-          const msg = (TALK.lang === "ar") ? "واجهت مشكلة بسيطة في البناء — لنعدّل قليلاً. ما الذي تريد تغييره؟" : "I hit a snag building that — let's adjust. What should change?";
-          bubble("ai", msg); await speak(msg); setStatus(t("Tap the mic and reply")); setTimeout(listen, 300);
-        }
-      } else { setStatus(t("Tap the mic and reply")); setTimeout(listen, 300); }
-    } catch (e) { bubble("ai", "⚠️ " + (e.message || "error")); setStatus(t("Tap the mic to talk")); }
+      if (r.phase === "building" && r.brief) doBuild(r.brief);
+    } catch (e) { updateNow("⚠️ " + (e.message || "error")); setState("idle"); }
     finally { if (TALK) TALK.busy = false; }
   };
-  // shared build step (used by realtime tool + kept inline for browser mode)
-  const doBuild = async (brief) => {
-    if (!TALK || TALK.built) return; TALK.built = true;
-    setStatus(t("Building your assistant… (about a minute)"));
-    scroll.classList.add("is-building"); ov.querySelector("#tcSub").textContent = t("Building your assistant…");
-    const dn = ov.querySelector("#talkDone"); dn.hidden = false; dn.innerHTML = `<div class="spin" style="margin:6px auto"></div>`;
-    try {
-      const bd = await api("POST", "talk-build", { brief, lang: TALK.lang });
-      if (!TALK) return; scroll.classList.remove("is-building");
-      if (bd.done && bd.agent_id) {
-        ov.querySelector("#tcSub").textContent = t("Ready");
-        const line = (TALK.lang === "ar") ? `تم! ${bd.name || ""} جاهز.` : `Done! ${bd.name || "Your assistant"} is ready.`;
-        bubble("ai", line);
-        dn.innerHTML = `<div class="tk-built">✅ ${esc(bd.name || t("Your assistant"))} — ${t("ready")}</div><button class="btn primary" id="talkOpen">${t("Open it")}</button>`;
-        ov.querySelector("#talkOpen").onclick = () => { closeTalk(); openAgent(bd.agent_id, "overview"); };
-      } else { TALK.built = false; dn.hidden = true; ov.querySelector("#tcSub").textContent = t("Speak, and I'll sketch it live"); }
-    } catch (e) { if (TALK) { TALK.built = false; scroll.classList.remove("is-building"); dn.hidden = true; } }
+  const listen = () => {
+    if (!supported || !TALK || TALK.busy || TALK.speaking) return;
+    const rec = new SR(); TALK.recog = rec; rec.lang = ar ? "ar-AE" : "en-US"; rec.interimResults = false; rec.maxAlternatives = 1;
+    rec.onstart = () => setState("listening", L("Listening…", "أستمع…"));
+    rec.onresult = (e) => { setState("idle"); send(e.results[0][0].transcript); };
+    rec.onerror = () => setState("idle", L("Tap the mic to talk", "اضغط الميكروفون للتحدث"));
+    rec.onend = () => { if ($$("vlMic").classList.contains("listening")) setState("idle"); };
+    try { rec.start(); } catch (e) {}
   };
-  // ---- OpenAI Realtime (GPT live) ----
-  const rtSend = (o) => { try { if (TALK && TALK.dc && TALK.dc.readyState === "open") TALK.dc.send(JSON.stringify(o)); } catch (e) {} };
-  const configureSession = () => {
-    const instr = ar
-      ? "أنت وكيل، مرشد صوتي ودود يساعد موظفاً حكومياً غير تقني في الإمارات على بناء مساعد ذكي بمجرد التحدث. اسأل سؤالاً بسيطاً واحداً في كل مرة بكلمات يومية بلا مصطلحات تقنية. كلما فهمت أكثر استدعِ الأداة render_agent لتحديث المخطط الذي يراه (المرحلة 1 في البداية حتى 4 عند الفهم الكامل). عندما تجمع ما يكفي اجعل ready=true مع وصف كامل وأخبره أنك تبنيه الآن. اجعل ردودك المنطوقة جملة أو جملتين قصيرتين."
-      : "You are Wakeel, a warm voice guide helping a non-technical UAE government officer build an AI assistant just by talking. Ask ONE simple question at a time in plain everyday words — never technical jargon. As you learn what they want, CALL the render_agent tool to update the live diagram they see (stage 1 early, up to 4 when fully understood). When you have enough, set ready=true with a full plain-English brief and tell them you're building it now. Keep every spoken reply to one or two short sentences.";
-    const TOOLS = [{ type: "function", name: "render_agent", description: "Update the live agent diagram the user sees. Call whenever you understand more.",
-      parameters: { type: "object", properties: {
-        stage: { type: "integer", description: "1 = just started, 4 = fully understood" },
-        blocks: { type: "array", items: { type: "object", properties: { kind: { type: "string", enum: ["trigger", "agent", "knowledge", "tool", "decision", "guardrail", "approval", "output"] }, title: { type: "string" }, desc: { type: "string" } }, required: ["kind", "title"] } },
-        ready: { type: "boolean" }, brief: { type: "string" } }, required: ["stage", "blocks"] } }];
-    // GA gpt-realtime session schema (nested audio); harmless flat fields kept for older models
-    rtSend({ type: "session.update", session: {
-      type: "realtime", instructions: instr,
-      audio: { input: { transcription: { model: "whisper-1" }, turn_detection: { type: "server_vad", silence_duration_ms: 700 } }, output: { voice: "marin" } },
-      tools: TOOLS, tool_choice: "auto"
-    } });
-    rtSend({ type: "response.create", response: { instructions: "Greet the user warmly in ONE sentence, reassure them there's nothing technical to set up, and ask what they'd like their assistant to do. Ask only that one question." } });
-  };
-  const doRenderAgent = (a) => {
-    const stage = Math.max(1, Math.min(4, a.stage || 1));
-    ov.querySelector("#tcEmpty").style.display = "none";
-    paintSketch(stagedSketch(a.blocks || [], stage), [0, 36, 56, 76, 92][stage]);
-    if (a.ready && (a.brief || "").trim()) doBuild(a.brief);
-  };
-  const handleRtEvent = (data) => {
-    let ev; try { ev = JSON.parse(data); } catch (e) { return; }
-    if (ev.type === "response.function_call_arguments.done") {
-      let a = {}; try { a = JSON.parse(ev.arguments || "{}"); } catch (e) {}
-      if (ev.name === "render_agent") doRenderAgent(a);
-      rtSend({ type: "conversation.item.create", item: { type: "function_call_output", call_id: ev.call_id, output: JSON.stringify({ ok: true }) } });
-      rtSend({ type: "response.create" });
-    } else if (ev.type === "conversation.item.input_audio_transcription.completed") { if (ev.transcript) bubble("me", ev.transcript.trim()); }
-    else if (ev.type === "response.audio_transcript.done") { if (ev.transcript) bubble("ai", ev.transcript.trim()); }
-    else if (ev.type === "error") { try { console.error("[realtime event error]", ev.error); } catch (x) {} }
-  };
-  const stopRealtime = () => {
-    try { if (TALK && TALK.stream) TALK.stream.getTracks().forEach(x => x.stop()); } catch (e) {}
-    try { if (TALK && TALK.pc) TALK.pc.close(); } catch (e) {}
-    if (TALK) { TALK.rtLive = false; TALK.pc = null; TALK.dc = null; TALK.stream = null; }
-    mic.classList.remove("listening");
-  };
-  const startRealtime = async () => {
-    if (!TALK || TALK.rtLive || TALK.rtConnecting) return;
-    TALK.rtConnecting = true; setStatus(t("Connecting…")); ov.querySelector("#tcSub").textContent = t("Connecting…"); mic.classList.add("listening");
-    try {
-      const pc = new RTCPeerConnection(); TALK.pc = pc;
-      pc.ontrack = (e) => { const au = ov.querySelector("#tkAudio"); if (au) { au.srcObject = e.streams[0]; au.play && au.play().catch(() => {}); } };
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
-      TALK.stream = stream; stream.getTracks().forEach(tr => pc.addTrack(tr, stream));
-      const dc = pc.createDataChannel("oai-events"); TALK.dc = dc;
-      dc.onopen = () => configureSession(); dc.onmessage = (e) => handleRtEvent(e.data);
-      const offer = await pc.createOffer(); await pc.setLocalDescription(offer);
-      const resp = await fetch("api/realtime", { method: "POST", headers: { "Content-Type": "application/sdp" }, body: offer.sdp, credentials: "include" });
-      if (!resp.ok) throw new Error("handshake " + resp.status);
-      await pc.setRemoteDescription({ type: "answer", sdp: await resp.text() });
-      TALK.rtLive = true; TALK.rtConnecting = false;
-      setMode("live", "🟢 " + (ar ? "صوت مباشر (GPT)" : "Live voice (GPT)"));
-      setStatus(t("Listening — just talk")); ov.querySelector("#tcSub").textContent = t("Speak, and I'll sketch it live");
-    } catch (e) {
-      try { console.error("[wakeel realtime]", e); } catch (x) {}
-      TALK.rtConnecting = false; TALK.rt = false; stopRealtime();
-      setMode("standard", "⚪ " + (ar ? "صوت عادي" : "Standard voice"));
-      bubble("ai", (ar ? "الصوت المباشر لم يبدأ" : "Live voice didn't start") + " — " + String(e && e.message || e).slice(0, 80) + ". " + (ar ? "سأستخدم الصوت العادي." : "Using standard voice."));
-      mic.onclick = () => { if (TALK.speaking) { window.speechSynthesis.cancel(); TALK.speaking = false; } listen(); };
-      const g = ar ? "أخبرني بما تريد أن يقوم به مساعدك." : "Tell me what you'd like your assistant to do.";
-      bubble("ai", g); speak(g).then(() => setStatus(supported ? t("Tap the mic and speak") : t("Type your answer below")));
-    }
-  };
-  ov.querySelector("#talkX").onclick = closeTalk;
-  if (!supported) {
-    const ti = ov.querySelector("#talkType"), tb = ov.querySelector("#talkTypeSend");
-    const s = () => { const v = ti.value.trim(); if (v) { ti.value = ""; send(v); } };
-    tb.onclick = s; ti.addEventListener("keydown", e => { if (e.key === "Enter") s(); });
-  }
-  const initBrowser = () => {
-    setMode("live", "🟢 " + (ar ? "صوت طبيعي (OpenAI)" : "Natural voice (OpenAI)"));
-    mic.onclick = () => { if (TALK && TALK.speaking) { try { const au = ov.querySelector("#tkAudio"); if (au) au.pause(); window.speechSynthesis.cancel(); } catch (e) {} TALK.speaking = false; } listen(); };
-    const greet = ar ? "مرحباً! أخبرني بما تريد أن يقوم به مساعدك، وسأبنيه بينما نتحدث." : "Hi! Tell me what you'd like your assistant to do, and I'll build it as we talk.";
-    bubble("ai", greet); speak(greet).then(() => setStatus(supported ? t("Tap the mic and speak") : t("Type your answer below")));
-  };
-  // Default to the reliable natural-voice (OpenAI TTS) turn-based flow. Realtime WebRTC
-  // stays available but is opt-in via ?rt=1 (it's browser-finicky).
-  if (/[?&]rt=1/.test(location.search)) {
-    api("GET", "realtime").then(cfg => {
-      if (!TALK) return;
-      if (cfg && cfg.configured) {
-        TALK.rt = true;
-        setMode("pending", "🎙️ " + (ar ? "صوت مباشر جاهز — اضغط الميكروفون" : "Live voice ready — tap the mic"));
-        mic.onclick = () => { if (TALK.rtLive) { stopRealtime(); setMode("pending", "🎙️ " + (ar ? "متوقف — اضغط للتحدث" : "Paused — tap to talk")); setStatus(t("Tap the mic to talk")); ov.querySelector("#tcSub").textContent = t("Speak, and I'll sketch it live"); } else startRealtime(); };
-        bubble("ai", ar ? "اضغط الميكروفون وابدأ التحدث مع وكيل مباشرةً." : "Tap the mic and start talking to Wakeel — it's a live voice, just have a conversation.");
-        setStatus(t("Tap the mic to start")); ov.querySelector("#tcSub").textContent = t("Tap the mic to start talking");
-      } else initBrowser();
-    }).catch(() => { if (TALK) initBrowser(); });
-  } else initBrowser();
+  const toggleMic = () => { if (!TALK) return; if (TALK.speaking) { try { audio.pause(); window.speechSynthesis.cancel(); } catch (e) {} TALK.speaking = false; } if ($$("vlMic").classList.contains("listening")) { try { TALK.recog && TALK.recog.stop(); } catch (e) {} setState("idle"); } else listen(); };
+  $$("vlMic").onclick = toggleMic;
+  $$("vlStart").onclick = toggleMic;
+  $$("vlForm").addEventListener("submit", (e) => { e.preventDefault(); const v = $$("vlInput").value.trim(); if (v) send(v); });
+  $$("vlInput").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $$("vlForm").requestSubmit(); } });
+  $$("vlBack").onclick = closeTalk;
+  $$("vlReset").onclick = () => { closeTalk(); openTalk(); };
+  const greet = ar ? "مرحباً! أنا وكيل. أخبرني بما تريد أن يقوم به مساعدك، وسأرسمه بينما نتحدث." : "Hi, I'm Wakeel. Tell me what you'd like your assistant to do, and I'll sketch it as we talk.";
+  updateNow(greet, 0); speak(greet);
 }
 function closeTalk() { try { window.speechSynthesis.cancel(); if (TALK && TALK.recog) TALK.recog.abort(); } catch (e) {} const o = document.getElementById("talkOv"); if (o) o.remove(); TALK = null; }
 // grow the composer to fit its content (up to a max), then scroll — so long prompts stay readable

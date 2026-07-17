@@ -2867,6 +2867,8 @@ class H(BaseHTTPRequestHandler):
             return self._nocache("app.js", "application/javascript")
         if p == "/style.css":
             return self._nocache("style.css", "text/css")
+        if p == "/voicelab.css":
+            return self._nocache("voicelab.css", "text/css")
         if p == "/tour.html":
             return self._file("tour.html", "text/html; charset=utf-8")
         if p == "/wakeel-mark.svg":
