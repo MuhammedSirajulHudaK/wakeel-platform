@@ -673,7 +673,7 @@ function openTalk() {
       || voices.find(v => v.lang && v.lang.startsWith("en") && /female|samantha|zira|aria/i.test(v.name))
       || voices.find(v => v.lang && v.lang.startsWith("en")) || null;
   };
-  const speak = (text) => new Promise(res => {
+  const speakBrowser = (text) => new Promise(res => {
     try {
       window.speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(text);
@@ -684,6 +684,19 @@ function openTalk() {
       TALK.speaking = true; window.speechSynthesis.speak(u);
     } catch (e) { res(); }
   }).then(() => { TALK.speaking = false; });
+  // Natural voice via OpenAI TTS; falls back to the browser voice if it fails.
+  const speak = async (text) => {
+    if (!text || !TALK) return;
+    try {
+      const r = await fetch("api/tts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, voice: "nova" }), credentials: "include" });
+      if (!r.ok) throw new Error("tts " + r.status);
+      const url = URL.createObjectURL(await r.blob());
+      const au = ov.querySelector("#tkAudio"); if (!au) throw new Error("no audio el");
+      TALK.speaking = true;
+      await new Promise((res) => { au.srcObject = null; au.src = url; au.onended = res; au.onerror = res; const pr = au.play(); if (pr && pr.catch) pr.catch(() => res()); });
+      TALK.speaking = false; URL.revokeObjectURL(url);
+    } catch (e) { await speakBrowser(text); }
+  };
   const listen = () => {
     if (!supported || TALK.busy || TALK.speaking || !TALK) return;
     const rec = new SR(); TALK.recog = rec;
@@ -822,21 +835,25 @@ function openTalk() {
     tb.onclick = s; ti.addEventListener("keydown", e => { if (e.key === "Enter") s(); });
   }
   const initBrowser = () => {
-    setMode("standard", "⚪ " + (ar ? "صوت عادي" : "Standard voice"));
-    mic.onclick = () => { if (TALK && TALK.speaking) { window.speechSynthesis.cancel(); TALK.speaking = false; } listen(); };
+    setMode("live", "🟢 " + (ar ? "صوت طبيعي (OpenAI)" : "Natural voice (OpenAI)"));
+    mic.onclick = () => { if (TALK && TALK.speaking) { try { const au = ov.querySelector("#tkAudio"); if (au) au.pause(); window.speechSynthesis.cancel(); } catch (e) {} TALK.speaking = false; } listen(); };
     const greet = ar ? "مرحباً! أخبرني بما تريد أن يقوم به مساعدك، وسأبنيه بينما نتحدث." : "Hi! Tell me what you'd like your assistant to do, and I'll build it as we talk.";
     bubble("ai", greet); speak(greet).then(() => setStatus(supported ? t("Tap the mic and speak") : t("Type your answer below")));
   };
-  api("GET", "realtime").then(cfg => {
-    if (!TALK) return;
-    if (cfg && cfg.configured) {
-      TALK.rt = true;
-      setMode("pending", "🎙️ " + (ar ? "صوت مباشر جاهز — اضغط الميكروفون" : "Live voice ready — tap the mic"));
-      mic.onclick = () => { if (TALK.rtLive) { stopRealtime(); setMode("pending", "🎙️ " + (ar ? "متوقف — اضغط للتحدث" : "Paused — tap to talk")); setStatus(t("Tap the mic to talk")); ov.querySelector("#tcSub").textContent = t("Speak, and I'll sketch it live"); } else startRealtime(); };
-      bubble("ai", ar ? "اضغط الميكروفون وابدأ التحدث مع وكيل مباشرةً." : "Tap the mic and start talking to Wakeel — it's a live voice, just have a conversation.");
-      setStatus(t("Tap the mic to start")); ov.querySelector("#tcSub").textContent = t("Tap the mic to start talking");
-    } else initBrowser();
-  }).catch(() => { if (TALK) initBrowser(); });
+  // Default to the reliable natural-voice (OpenAI TTS) turn-based flow. Realtime WebRTC
+  // stays available but is opt-in via ?rt=1 (it's browser-finicky).
+  if (/[?&]rt=1/.test(location.search)) {
+    api("GET", "realtime").then(cfg => {
+      if (!TALK) return;
+      if (cfg && cfg.configured) {
+        TALK.rt = true;
+        setMode("pending", "🎙️ " + (ar ? "صوت مباشر جاهز — اضغط الميكروفون" : "Live voice ready — tap the mic"));
+        mic.onclick = () => { if (TALK.rtLive) { stopRealtime(); setMode("pending", "🎙️ " + (ar ? "متوقف — اضغط للتحدث" : "Paused — tap to talk")); setStatus(t("Tap the mic to talk")); ov.querySelector("#tcSub").textContent = t("Speak, and I'll sketch it live"); } else startRealtime(); };
+        bubble("ai", ar ? "اضغط الميكروفون وابدأ التحدث مع وكيل مباشرةً." : "Tap the mic and start talking to Wakeel — it's a live voice, just have a conversation.");
+        setStatus(t("Tap the mic to start")); ov.querySelector("#tcSub").textContent = t("Tap the mic to start talking");
+      } else initBrowser();
+    }).catch(() => { if (TALK) initBrowser(); });
+  } else initBrowser();
 }
 function closeTalk() { try { window.speechSynthesis.cancel(); if (TALK && TALK.recog) TALK.recog.abort(); } catch (e) {} const o = document.getElementById("talkOv"); if (o) o.remove(); TALK = null; }
 // grow the composer to fit its content (up to a max), then scroll — so long prompts stay readable

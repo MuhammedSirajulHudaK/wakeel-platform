@@ -2121,6 +2121,22 @@ def talk_build(sess, brief, lang="en"):
         return {"done": False, "error": str(e)[:200]}
 
 
+# ---- Natural voice via OpenAI TTS (reliable, works in every browser) --------
+TTS_MODEL = os.environ.get("TTS_MODEL", "gpt-4o-mini-tts")
+
+
+def tts(text, voice="nova"):
+    """Return natural-sounding MP3 audio for the given text via OpenAI TTS."""
+    if not OPENAI_KEY:
+        raise RuntimeError("OpenAI key not configured for TTS")
+    body = json.dumps({"model": TTS_MODEL, "voice": voice, "input": (text or "")[:1800],
+                       "response_format": "mp3"}).encode()
+    req = urllib.request.Request("https://api.openai.com/v1/audio/speech", data=body,
+                                 headers={"Authorization": "Bearer " + OPENAI_KEY,
+                                          "Content-Type": "application/json"}, method="POST")
+    return urllib.request.urlopen(req, timeout=30).read()
+
+
 # ---- OpenAI Realtime ("GPT live") voice : server-side SDP proxy -------------
 REALTIME_MODEL = os.environ.get("REALTIME_MODEL", "gpt-realtime")
 
@@ -3123,6 +3139,12 @@ class H(BaseHTTPRequestHandler):
                 r = chat(sess, b.get("message", ""), b.get("history", []), b.get("system", ""))
                 log_act(sess, "chat", b.get("message", "")[:60])
                 return self._send(200, r)
+            if p == "/api/tts":
+                try:
+                    audio = tts(b.get("text", ""), b.get("voice", "nova"))
+                    return self._send(200, audio, "audio/mpeg")
+                except Exception as e:
+                    return self._send(500, {"error": str(e)[:160]})
             if p == "/api/talk":
                 return self._send(200, talk(sess, b.get("text", ""), b.get("state"), b.get("lang", "en")))
             if p == "/api/talk-build":
