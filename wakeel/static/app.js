@@ -750,15 +750,16 @@ function openTalk() {
     const instr = ar
       ? "أنت وكيل، مرشد صوتي ودود يساعد موظفاً حكومياً غير تقني في الإمارات على بناء مساعد ذكي بمجرد التحدث. اسأل سؤالاً بسيطاً واحداً في كل مرة بكلمات يومية بلا مصطلحات تقنية. كلما فهمت أكثر استدعِ الأداة render_agent لتحديث المخطط الذي يراه (المرحلة 1 في البداية حتى 4 عند الفهم الكامل). عندما تجمع ما يكفي اجعل ready=true مع وصف كامل وأخبره أنك تبنيه الآن. اجعل ردودك المنطوقة جملة أو جملتين قصيرتين."
       : "You are Wakeel, a warm voice guide helping a non-technical UAE government officer build an AI assistant just by talking. Ask ONE simple question at a time in plain everyday words — never technical jargon. As you learn what they want, CALL the render_agent tool to update the live diagram they see (stage 1 early, up to 4 when fully understood). When you have enough, set ready=true with a full plain-English brief and tell them you're building it now. Keep every spoken reply to one or two short sentences.";
+    const TOOLS = [{ type: "function", name: "render_agent", description: "Update the live agent diagram the user sees. Call whenever you understand more.",
+      parameters: { type: "object", properties: {
+        stage: { type: "integer", description: "1 = just started, 4 = fully understood" },
+        blocks: { type: "array", items: { type: "object", properties: { kind: { type: "string", enum: ["trigger", "agent", "knowledge", "tool", "decision", "guardrail", "approval", "output"] }, title: { type: "string" }, desc: { type: "string" } }, required: ["kind", "title"] } },
+        ready: { type: "boolean" }, brief: { type: "string" } }, required: ["stage", "blocks"] } }];
+    // GA gpt-realtime session schema (nested audio); harmless flat fields kept for older models
     rtSend({ type: "session.update", session: {
-      modalities: ["audio", "text"], instructions: instr, voice: "marin",
-      input_audio_transcription: { model: "whisper-1" }, turn_detection: { type: "server_vad", silence_duration_ms: 700 },
-      tools: [{ type: "function", name: "render_agent", description: "Update the live agent diagram the user sees. Call whenever you understand more.",
-        parameters: { type: "object", properties: {
-          stage: { type: "integer", description: "1 = just started, 4 = fully understood" },
-          blocks: { type: "array", items: { type: "object", properties: { kind: { type: "string", enum: ["trigger", "agent", "knowledge", "tool", "decision", "guardrail", "approval", "output"] }, title: { type: "string" }, desc: { type: "string" } }, required: ["kind", "title"] } },
-          ready: { type: "boolean" }, brief: { type: "string" } }, required: ["stage", "blocks"] } }],
-      tool_choice: "auto"
+      type: "realtime", instructions: instr,
+      audio: { input: { transcription: { model: "whisper-1" }, turn_detection: { type: "server_vad", silence_duration_ms: 700 } }, output: { voice: "marin" } },
+      tools: TOOLS, tool_choice: "auto"
     } });
     rtSend({ type: "response.create", response: { instructions: "Greet the user warmly in ONE sentence, reassure them there's nothing technical to set up, and ask what they'd like their assistant to do. Ask only that one question." } });
   };
