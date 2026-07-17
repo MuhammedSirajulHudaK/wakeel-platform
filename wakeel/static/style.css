@@ -1094,3 +1094,8 @@ textarea.input{padding:12px 14px;min-height:auto;resize:none}
 .talk-fallback input{flex:1;background:var(--bg);border:1px solid var(--line);border-radius:10px;color:var(--text);padding:10px 12px;font:inherit;outline:none}
 .talk-done{margin-top:14px;display:flex;flex-direction:column;align-items:center;gap:10px}
 .tk-built{font-size:15px;font-weight:750;color:#3ee08a}
+
+.tk-mode{text-align:center;font-size:11.5px;font-weight:700;margin-top:8px;padding:4px 0;border-radius:8px;color:var(--muted)}
+.tk-mode.live{color:#04240f;background:#3ee08a}
+.tk-mode.pending{color:#e6b02e;background:rgba(230,176,46,.12)}
+.tk-mode.standard{color:var(--muted);background:var(--panel-3)}

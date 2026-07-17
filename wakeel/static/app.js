@@ -608,6 +608,7 @@ function openTalk() {
         <div class="talk-log" id="talkLog"></div>
         <div class="talk-status" id="talkStatus"></div>
         <div class="talk-controls"><button class="talk-mic" id="talkMic" title="${t("Tap and speak")}">🎤</button></div>
+        <div class="tk-mode" id="tkMode"></div>
         ${supported ? "" : `<div class="talk-fallback"><input id="talkType" placeholder="${t("Type here instead…")}"/><button class="btn primary sm" id="talkTypeSend">${t("Send")}</button></div>`}
         <div class="talk-done" id="talkDone" hidden></div>
       </aside>
@@ -620,6 +621,7 @@ function openTalk() {
   const scroll = ov.querySelector("#tcScroll"), world = ov.querySelector("#tcWorld"), wires = ov.querySelector("#tcWires");
   const setStatus = (s) => { status.textContent = s || ""; };
   const bubble = (who, txt) => { const d = document.createElement("div"); d.className = "tk-msg " + who; d.textContent = txt; log.appendChild(d); log.scrollTop = log.scrollHeight; };
+  const setMode = (cls, txt) => { const m = ov.querySelector("#tkMode"); if (m) { m.className = "tk-mode " + cls; m.textContent = txt; } };
   const NS = "http://www.w3.org/2000/svg", CW = 178;
   const paintSketch = (sk, conf) => {
     const nodes = (sk && sk.nodes || []).filter(n => n && n.id && TK_KIND[n.kind]);
@@ -778,6 +780,7 @@ function openTalk() {
       rtSend({ type: "response.create" });
     } else if (ev.type === "conversation.item.input_audio_transcription.completed") { if (ev.transcript) bubble("me", ev.transcript.trim()); }
     else if (ev.type === "response.audio_transcript.done") { if (ev.transcript) bubble("ai", ev.transcript.trim()); }
+    else if (ev.type === "error") { try { console.error("[realtime event error]", ev.error); } catch (x) {} }
   };
   const stopRealtime = () => {
     try { if (TALK && TALK.stream) TALK.stream.getTracks().forEach(x => x.stop()); } catch (e) {}
@@ -790,7 +793,7 @@ function openTalk() {
     TALK.rtConnecting = true; setStatus(t("Connecting…")); ov.querySelector("#tcSub").textContent = t("Connecting…"); mic.classList.add("listening");
     try {
       const pc = new RTCPeerConnection(); TALK.pc = pc;
-      pc.ontrack = (e) => { const au = ov.querySelector("#tkAudio"); if (au) au.srcObject = e.streams[0]; };
+      pc.ontrack = (e) => { const au = ov.querySelector("#tkAudio"); if (au) { au.srcObject = e.streams[0]; au.play && au.play().catch(() => {}); } };
       const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
       TALK.stream = stream; stream.getTracks().forEach(tr => pc.addTrack(tr, stream));
       const dc = pc.createDataChannel("oai-events"); TALK.dc = dc;
@@ -800,10 +803,13 @@ function openTalk() {
       if (!resp.ok) throw new Error("handshake " + resp.status);
       await pc.setRemoteDescription({ type: "answer", sdp: await resp.text() });
       TALK.rtLive = true; TALK.rtConnecting = false;
+      setMode("live", "🟢 " + (ar ? "صوت مباشر (GPT)" : "Live voice (GPT)"));
       setStatus(t("Listening — just talk")); ov.querySelector("#tcSub").textContent = t("Speak, and I'll sketch it live");
     } catch (e) {
+      try { console.error("[wakeel realtime]", e); } catch (x) {}
       TALK.rtConnecting = false; TALK.rt = false; stopRealtime();
-      bubble("ai", ar ? "الصوت المباشر غير متاح الآن — سأستخدم الصوت العادي." : "Live voice isn't available right now — I'll use the standard voice.");
+      setMode("standard", "⚪ " + (ar ? "صوت عادي" : "Standard voice"));
+      bubble("ai", (ar ? "الصوت المباشر لم يبدأ" : "Live voice didn't start") + " — " + String(e && e.message || e).slice(0, 80) + ". " + (ar ? "سأستخدم الصوت العادي." : "Using standard voice."));
       mic.onclick = () => { if (TALK.speaking) { window.speechSynthesis.cancel(); TALK.speaking = false; } listen(); };
       const g = ar ? "أخبرني بما تريد أن يقوم به مساعدك." : "Tell me what you'd like your assistant to do.";
       bubble("ai", g); speak(g).then(() => setStatus(supported ? t("Tap the mic and speak") : t("Type your answer below")));
@@ -816,6 +822,7 @@ function openTalk() {
     tb.onclick = s; ti.addEventListener("keydown", e => { if (e.key === "Enter") s(); });
   }
   const initBrowser = () => {
+    setMode("standard", "⚪ " + (ar ? "صوت عادي" : "Standard voice"));
     mic.onclick = () => { if (TALK && TALK.speaking) { window.speechSynthesis.cancel(); TALK.speaking = false; } listen(); };
     const greet = ar ? "مرحباً! أخبرني بما تريد أن يقوم به مساعدك، وسأبنيه بينما نتحدث." : "Hi! Tell me what you'd like your assistant to do, and I'll build it as we talk.";
     bubble("ai", greet); speak(greet).then(() => setStatus(supported ? t("Tap the mic and speak") : t("Type your answer below")));
@@ -824,7 +831,8 @@ function openTalk() {
     if (!TALK) return;
     if (cfg && cfg.configured) {
       TALK.rt = true;
-      mic.onclick = () => { if (TALK.rtLive) { stopRealtime(); setStatus(t("Tap the mic to talk")); ov.querySelector("#tcSub").textContent = t("Speak, and I'll sketch it live"); } else startRealtime(); };
+      setMode("pending", "🎙️ " + (ar ? "صوت مباشر جاهز — اضغط الميكروفون" : "Live voice ready — tap the mic"));
+      mic.onclick = () => { if (TALK.rtLive) { stopRealtime(); setMode("pending", "🎙️ " + (ar ? "متوقف — اضغط للتحدث" : "Paused — tap to talk")); setStatus(t("Tap the mic to talk")); ov.querySelector("#tcSub").textContent = t("Speak, and I'll sketch it live"); } else startRealtime(); };
       bubble("ai", ar ? "اضغط الميكروفون وابدأ التحدث مع وكيل مباشرةً." : "Tap the mic and start talking to Wakeel — it's a live voice, just have a conversation.");
       setStatus(t("Tap the mic to start")); ov.querySelector("#tcSub").textContent = t("Tap the mic to start talking");
     } else initBrowser();
