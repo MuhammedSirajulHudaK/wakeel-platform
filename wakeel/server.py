@@ -2012,10 +2012,11 @@ PROBLEM_SYS = (
     "they want to hand off. Have a short spoken conversation, ONE simple question at a time, plain words, "
     "no jargon. Do NOT design a solution yet. As soon as you clearly understand the core problem, LOCK it.\n\n"
     "Respond with ONLY JSON: {\"reply\":\"<1-2 short spoken sentences>\",\"locked\":<true|false>,"
-    "\"problem\":\"<when locked: ONE clear sentence naming the problem to solve; else empty>\"}\n"
-    "Set locked=true only when the problem is concrete enough to design a solution (usually after 1-3 "
-    "answers). When you lock, your reply should restate the problem in one line and ask if you should work "
-    "out how to solve it."
+    "\"problem\":\"<ALWAYS your best ONE-sentence guess of their core problem so far>\"}\n"
+    "Always fill 'problem' with your best current guess, even before locking. Set locked=true as soon as "
+    "the problem is concrete enough to design a solution (prefer locking after 1-2 answers rather than "
+    "over-asking). When you lock, your reply should restate the problem in one line and ask if you should "
+    "work out how to solve it."
 )
 # Phase 2: THINK — design the assistant that solves the locked problem.
 THINKER_SYS = (
@@ -2123,11 +2124,19 @@ def talk(sess, text, state, lang="en"):
 
     if phase in ("problem", "locked") and not (phase == "locked" and _affirmative(text)):
         p = _talk_llm(PROBLEM_SYS, turns[:-1], text, lang)
+        prob = (p.get("problem") or "").strip()
+        nuser = sum(1 for x in state["turns"] if x.get("role") == "user")
+        # deterministic lock: the model's own lock, or after 2 answers, or on an affirmative
+        do_lock = (p.get("locked") and prob) or (prob and (nuser >= 2 or _affirmative(text)))
+        if do_lock:
+            state["phase"] = "locked"; state["problem"] = prob
+            reply = p.get("reply") if p.get("locked") else \
+                (("إذاً المشكلة هي: " + prob + " — هل أعمل على حلّها؟") if lang == "ar"
+                 else ("So the problem is: " + prob + ". Shall I work out how to solve it?"))
+            turns.append({"role": "assistant", "content": reply}); state["turns"] = turns[-16:]
+            return {"reply": reply, "phase": "locked", "problem": state["problem"], "confidence": 22, "state": state}
         reply = p.get("reply") or "Tell me a little more about the problem you'd like to solve."
         turns.append({"role": "assistant", "content": reply}); state["turns"] = turns[-16:]
-        if p.get("locked") and (p.get("problem") or "").strip():
-            state["phase"] = "locked"; state["problem"] = p["problem"].strip()
-            return {"reply": reply, "phase": "locked", "problem": state["problem"], "confidence": 22, "state": state}
         state["phase"] = "problem"
         return {"reply": reply, "phase": "problem", "confidence": 8, "state": state}
 
