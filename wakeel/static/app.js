@@ -625,7 +625,7 @@ function openTalk() {
               <div class="canvas-empty-state" id="vlEmpty">
                 <div class="canvas-narrator-orbit"><span class="canvas-narrator-avatar">✨</span><i></i><i></i><i></i></div>
                 <span class="canvas-narrator-label">🔊 ${L("Wakeel · your work-shadowing assistant", "وكيل · مساعدك الذي يرافق عملك")}</span>
-                <h1>${L("What's the problem?<br>I'll work out how to solve it.", "ما المشكلة؟<br>سأتوصّل إلى طريقة حلّها.")}</h1>
+                <h1>${L("Tell me about your day.<br>I'll sketch what I hear.", "أخبرني عن يومك.<br>سأرسم ما أسمعه.")}</h1>
                 <p>${L("Start with your role. There's nothing technical to set up, and messy answers are completely fine.", "ابدأ بدورك. لا شيء تقني لإعداده، والإجابات غير المرتّبة مقبولة تماماً.")}</p>
                 <button type="button" id="vlStart">🎤 ${L("Say hello to Wakeel", "قل مرحباً لوكيل")}</button>
                 <small>${L("Or answer the first question in the chat.", "أو أجب على السؤال الأول في المحادثة.")}</small>
@@ -660,7 +660,8 @@ function openTalk() {
           </header>
           <div class="assistant-float-body">
             <div class="assistant-now" aria-live="polite"><small id="vlNowLabel">${L("Wakeel says", "يقول وكيل")}</small><p id="vlNow">…</p></div>
-            <div class="assistant-current-question"><span><small id="vlStepLabel">${L("Step 1 of 5", "الخطوة 1 من 5")}</small><strong id="vlQuestion">${L("What problem would you like to solve?", "ما المشكلة التي تريد حلّها؟")}</strong></span></div>
+            <div class="assistant-context-row" id="vlNoteRow" hidden><span class="assistant-latest-note">📝 <span><small>${L("Just noted", "سجّلت للتو")}</small><strong id="vlNote"></strong></span></span></div>
+            <div class="assistant-current-question"><span><small id="vlStepLabel">${L("Step 1 of 5", "الخطوة 1 من 5")}</small><strong id="vlQuestion">${L("What should I call you, and whose role should we step into today?", "بماذا أناديك، ودور من نتقمّص اليوم؟")}</strong></span></div>
             <form class="assistant-float-composer" id="vlForm">
               <button class="assistant-float-mic idle" id="vlMic" type="button" title="${L("Talk to Wakeel", "تحدّث إلى وكيل")}">🎤</button>
               <textarea id="vlInput" placeholder="${L("Talk naturally, or type here…", "تحدّث بطبيعية أو اكتب هنا…")}" rows="1"></textarea>
@@ -739,20 +740,19 @@ function openTalk() {
     } catch (e) { if (TALK) { TALK.built = false; $$("vlBuilding").hidden = true; $$("vlStory").hidden = false; setState("idle"); } }
   };
   const showThinking = (title, sub) => { $$("vlEmpty").hidden = true; $$("vlStory").hidden = true; const b = $$("vlBuilding"); b.hidden = false; b.querySelector("strong").textContent = title; b.querySelector("small").textContent = sub; };
+  const showNote = (txt) => { if (!txt) return; $$("vlNoteRow").hidden = false; $$("vlNote").textContent = txt; };
+  const STEP_LABEL = (st) => (st >= 5 ? L("Refine together", "لنحسّنها معاً") : L("Step " + (st + 1) + " of 5", "الخطوة " + (st + 1) + " من 5"));
   const send = async (text) => {
     if (!text || !TALK || TALK.busy) return;
     TALK.busy = true; $$("vlInput").value = "";
-    const confirming = TALK.phase === "locked";  // confirming the locked problem -> Wakeel will THINK
-    if (confirming) showThinking(L("Wakeel is thinking it through…", "وكيل يفكّر في الحل…"), L("Designing the solution to your problem", "يصمّم الحل لمشكلتك"));
     setState("thinking", L("Wakeel is thinking…", "وكيل يفكّر…")); $$("vlNowLabel").textContent = L("Wakeel is thinking", "وكيل يفكّر");
     try {
       const r = await api("POST", "talk", { text, state: TALK.state, lang: TALK.lang });
       if (!TALK) return;
       TALK.state = r.state || TALK.state; TALK.phase = r.phase;
-      if (r.problem) { $$("vlProblem").hidden = false; $$("vlProblemText").textContent = r.problem; }
-      if (r.phase === "story" && r.sketch) { $$("vlBuilding").hidden = true; renderStory(r.sketch); $$("vlProblem").hidden = false; }
-      else if (r.phase === "locked") { $$("vlBuilding").hidden = true; $$("vlEmpty").hidden = true; $$("vlStory").hidden = true; }
-      else if (r.phase === "problem") { $$("vlBuilding").hidden = true; if ($$("vlProblem").hidden) $$("vlEmpty").hidden = false; }
+      if (r.sketch && (r.sketch.nodes || []).length) { $$("vlBuilding").hidden = true; renderStory(r.sketch); }
+      if (r.notepad) showNote(r.notepad);
+      if (typeof r.stage === "number") $$("vlStepLabel").textContent = STEP_LABEL(r.stage);
       updateNow(r.reply, r.confidence);
       setState("idle", L("Ready when you are", "جاهز متى شئت"));
       await speak(r.reply);
@@ -777,7 +777,7 @@ function openTalk() {
   $$("vlInput").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $$("vlForm").requestSubmit(); } });
   $$("vlBack").onclick = closeTalk;
   $$("vlReset").onclick = () => { closeTalk(); openTalk(); };
-  const greet = ar ? "مرحباً! أنا وكيل. ما المشكلة التي تريد حلّها — العمل المتكرّر الذي تريد تسليمه؟" : "Hi, I'm Wakeel. What's the problem you'd like to solve — the repetitive work you want to hand off?";
+  const greet = ar ? "مرحباً، أنا وكيل. خذ نفساً — لا شيء تقني لإعداده. سأرافقك خلال يوم عمل عادي. بماذا أناديك، ودور من نتقمّص اليوم؟" : "Hi, I'm Wakeel. Take a breath—there's nothing technical to set up. I'll simply follow you through a normal workday. What should I call you, and whose role should we step into today?";
   updateNow(greet, 0); speak(greet);
 }
 function closeTalk() { try { window.speechSynthesis.cancel(); if (TALK && TALK.recog) TALK.recog.abort(); } catch (e) {} const o = document.getElementById("talkOv"); if (o) o.remove(); TALK = null; }
