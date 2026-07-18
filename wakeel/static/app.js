@@ -592,93 +592,67 @@ function openTalk() {
   const supported = !!SR;
   const L = (en, arr) => ar ? arr : en;
   const ov = document.createElement("div"); ov.className = "talk-ov"; ov.id = "talkOv";
-  if (ar) { ov.setAttribute("dir", "rtl"); }
+  if (ar) ov.setAttribute("dir", "rtl");
   ov.innerHTML = `
-    <div class="voice-lab-shell guided-lab" id="vlShell">
-      <audio id="tkAudio" autoplay class="sr-only"></audio>
-      <header class="voice-lab-topbar">
-        <div class="voice-lab-title">
-          <button class="vl-icon-btn" id="vlBack" aria-label="Close">✕</button>
-          <span class="wakeel-logo-mark"><span>و</span></span>
-          <span><strong>${L("New agent", "وكيل جديد")}</strong><small id="vlTitle">${L("Built with Wakeel", "مبني بواسطة وكيل")}</small></span>
-          <i class="voice-lab-beta">${L("Guided build", "بناء موجّه")}</i>
+    <div class="tf-shell">
+      <div class="flow-head tf-head">
+        <div><h1>${L("Build by voice", "بناء بالصوت")}</h1>
+          <p id="tfSub">${L("Just talk — I'll build the flow for you, step by step.", "تحدّث فقط — سأبني المخطط لك خطوة بخطوة.")}</p></div>
+        <div class="ctrls">
+          <span class="tf-badge" id="tfBadge">🟢 ${L("Natural voice", "صوت طبيعي")}</span>
+          <button class="draft-btn ghost" id="tfReset">↺ ${L("Start over", "ابدأ من جديد")}</button>
+          <button class="btn primary sm" id="tfOpen" hidden>${L("Open agent", "افتح الوكيل")}</button>
+          <button class="draft-btn ghost" id="tfClose">✕</button>
         </div>
-        <div class="voice-lab-actions">
-          <span class="voice-mode-badge ready" id="vlBadge"><i></i> ${L("Natural voice", "صوت طبيعي")}</span>
-          <button type="button" id="vlReset">↺ ${L("Start over", "ابدأ من جديد")}</button>
-          <button class="voice-publish-button" id="vlPublish" disabled>✨ <span>${L("Publish agent", "نشر الوكيل")}</span></button>
+      </div>
+      <div class="tf-body">
+        <div class="rf-stage" id="tfStage">
+          <div class="rf-world" id="tfWorld"><svg class="rf-wires" id="tfWires"></svg></div>
+          <div class="tf-empty" id="tfEmpty">🎙️ ${L("Your flow will build itself as you talk", "سيُبنى مخططك أثناء حديثك")}</div>
+          <div class="rf-ctrls" id="tfCtrls"><button id="tfZi" title="Zoom in">${SVGI.plus}</button><button id="tfZo" title="Zoom out">${SVGI.minus}</button><button id="tfZf" title="Fit">${SVGI.expand}</button></div>
         </div>
-      </header>
-      <main class="voice-lab-main assistant-overlay-layout">
-        <section class="voice-canvas-panel story-canvas-panel">
-          <div class="voice-canvas-toolbar">
-            <div>
-              <span class="canvas-live-dot"><i></i> ${L("Building together", "نبني معاً")}</span>
-              <strong id="vlCanvasTitle">${L("Your canvas starts empty", "لوحتك تبدأ فارغة")}</strong>
-              <small id="vlCanvasSub">${L("We'll begin gently with your role", "سنبدأ بلطف بدورك")}</small>
-            </div>
-            <div class="story-read-direction" id="vlReadDir" hidden><span>1</span> → <b id="vlStepCount">0</b> ${L("Read left to right", "اقرأ من اليمين لليسار")}</div>
+        <aside class="tf-voice">
+          <audio id="tkAudio" autoplay class="sr-only"></audio>
+          <div class="tf-v-top">
+            <span class="tf-orb">✨</span>
+            <div style="flex:1"><div class="tf-nm">Wakeel</div><div class="tf-st" id="tfState">${L("Ready when you are", "جاهز متى شئت")}</div></div>
+            <span class="tf-prog"><b id="tfPct">0%</b><i><em id="tfBar" style="width:0%"></em></i></span>
           </div>
-          <div class="voice-canvas-scroll" id="vlScroll">
-            <div class="agent-story-world is-empty" id="vlWorld">
-              <div class="canvas-grid"></div>
-              <div class="canvas-empty-state" id="vlEmpty">
-                <div class="canvas-narrator-orbit"><span class="canvas-narrator-avatar">✨</span><i></i><i></i><i></i></div>
-                <span class="canvas-narrator-label">🔊 ${L("Wakeel · your work-shadowing assistant", "وكيل · مساعدك الذي يرافق عملك")}</span>
-                <h1>${L("Tell me about your day.<br>I'll sketch what I hear.", "أخبرني عن يومك.<br>سأرسم ما أسمعه.")}</h1>
-                <p>${L("Start with your role. There's nothing technical to set up, and messy answers are completely fine.", "ابدأ بدورك. لا شيء تقني لإعداده، والإجابات غير المرتّبة مقبولة تماماً.")}</p>
-                <button type="button" id="vlStart">🎤 ${L("Say hello to Wakeel", "قل مرحباً لوكيل")}</button>
-                <small>${L("Or answer the first question in the chat.", "أو أجب على السؤال الأول في المحادثة.")}</small>
-              </div>
-              <div class="vl-problem" id="vlProblem" hidden>
-                <span class="vl-lock">🔒</span>
-                <div><small>${L("The problem — locked", "المشكلة — مثبّتة")}</small><strong id="vlProblemText"></strong></div>
-              </div>
-              <div class="agent-story" id="vlStory" hidden>
-                <div class="agent-story-heading"><span>✨ ${L("What I understood from you", "ما فهمته منك")}</span>
-                  <h2>${L("Here's the work story we're building together", "هذه قصة العمل التي نبنيها معاً")}</h2>
-                  <p>${L("I'll explain every change as it appears. Follow the numbered steps.", "سأشرح كل تغيير عند ظهوره. اتبع الخطوات المرقّمة.")}</p></div>
-                <div class="agent-story-flow" id="vlFlow"></div>
-                <div class="story-safety-rail" id="vlSafety" hidden></div>
-              </div>
-              <div class="canvas-building-state" id="vlBuilding" hidden>
-                <span>🔊</span><strong>${L("I'm building your assistant now", "أبني مساعدك الآن")}</strong><small>${L("This takes about a minute…", "يستغرق هذا حوالي دقيقة…")}</small>
-              </div>
-            </div>
-          </div>
-          <div class="voice-canvas-footer">
-            <div class="story-human-control" id="vlHuman" hidden>👤 <span><small>${L("You stay in control", "أنت المتحكم")}</small><strong>${L("Wakeel prepares the work. A person approves sensitive actions.", "وكيل يجهّز العمل. شخص يوافق على الإجراءات الحساسة.")}</strong></span></div>
-            <div class="canvas-empty-footer" id="vlEmptyFoot">✨ <span>${L("Start with your role. I'll draw only after I understand the work.", "ابدأ بدورك. لن أرسم إلا بعد أن أفهم العمل.")}</span></div>
-            <div class="canvas-integrations" id="vlInteg" hidden><small>${L("Apps in this story", "التطبيقات في هذه القصة")}</small></div>
-          </div>
-        </section>
-        <aside class="assistant-float open state-idle" id="vlFloat">
-          <header class="assistant-float-header">
-            <span class="assistant-live-orb">✨<i></i><i></i></span>
-            <span class="assistant-float-identity"><strong>Wakeel</strong><small id="vlState">${L("Ready when you are", "جاهز متى شئت")}</small></span>
-            <span class="assistant-mini-progress"><b id="vlPct">0%</b><i><em id="vlPctBar" style="width:0%"></em></i></span>
-          </header>
-          <div class="assistant-float-body">
-            <div class="assistant-now" aria-live="polite"><small id="vlNowLabel">${L("Wakeel says", "يقول وكيل")}</small><p id="vlNow">…</p></div>
-            <div class="assistant-context-row" id="vlNoteRow" hidden><span class="assistant-latest-note">📝 <span><small>${L("Just noted", "سجّلت للتو")}</small><strong id="vlNote"></strong></span></span></div>
-            <div class="assistant-current-question"><span><small id="vlStepLabel">${L("Step 1 of 5", "الخطوة 1 من 5")}</small><strong id="vlQuestion">${L("What should I call you, and whose role should we step into today?", "بماذا أناديك، ودور من نتقمّص اليوم؟")}</strong></span></div>
-            <form class="assistant-float-composer" id="vlForm">
-              <button class="assistant-float-mic idle" id="vlMic" type="button" title="${L("Talk to Wakeel", "تحدّث إلى وكيل")}">🎤</button>
-              <textarea id="vlInput" placeholder="${L("Talk naturally, or type here…", "تحدّث بطبيعية أو اكتب هنا…")}" rows="1"></textarea>
-              <span class="assistant-listening-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span>
-              <button class="assistant-float-send" id="vlSend" type="submit" title="${L("Send", "إرسال")}">➤</button>
-            </form>
-            <p class="assistant-float-foot">🛡️ ${L("Nothing runs until you publish.", "لا شيء يعمل حتى تنشر.")}</p>
-          </div>
+          <div class="tf-now-label" id="tfNowLabel">${L("Wakeel says", "يقول وكيل")}</div>
+          <div class="tf-now" id="tfNow">…</div>
+          <div class="tf-note" id="tfNote" hidden>📝 <span><small>${L("Just noted", "سجّلت للتو")}</small><b id="tfNoteT"></b></span></div>
+          <div class="tf-step" id="tfStep">${L("Step 1 of 5", "الخطوة 1 من 5")}</div>
+          <div class="tf-mic-wrap"><button class="tf-mic idle" id="tfMic" title="${L("Tap and speak", "اضغط وتحدّث")}">🎤</button>
+            <span class="tf-wave" id="tfWave"><i></i><i></i><i></i><i></i><i></i></span></div>
+          <div class="tf-status" id="tfStatus"></div>
+          <div class="tf-fallback"><input id="tfInput" placeholder="${L("or type your answer…", "أو اكتب إجابتك…")}"/><button id="tfSend">➤</button></div>
+          <div class="tf-foot">🛡️ ${L("Nothing runs until you open & publish it.", "لا شيء يعمل حتى تفتحه وتنشره.")}</div>
         </aside>
-      </main>
+      </div>
     </div>`;
   document.body.appendChild(ov);
-  TALK = { state: {}, lang: ar ? "ar" : "en", recog: null, busy: false, speaking: false, built: false, title: "", phase: "problem" };
+  TALK = { state: {}, lang: ar ? "ar" : "en", recog: null, busy: false, speaking: false, built: false, ctl: null };
   const $$ = (id) => ov.querySelector("#" + id);
   const audio = $$("tkAudio");
-  const setState = (s, label) => { $$("vlFloat").className = "assistant-float open state-" + s; if (label != null) $$("vlState").textContent = label; $$("vlMic").className = "assistant-float-mic " + s; $$("vlForm").className = "assistant-float-composer" + (s === "listening" || s === "live" ? " is-listening" : ""); };
-  // natural voice via OpenAI TTS, browser fallback
+  const setStatus = (s) => { $$("tfStatus").textContent = s || ""; };
+  const setState = (s, label) => { if (label != null) $$("tfState").textContent = label; $$("tfMic").className = "tf-mic " + s; };
+  const updateNow = (reply, conf) => { $$("tfNow").textContent = reply; $$("tfNowLabel").textContent = L("Wakeel says", "يقول وكيل"); if (conf != null) { $$("tfPct").textContent = Math.round(conf) + "%"; $$("tfBar").style.width = Math.round(conf) + "%"; } };
+  const showNote = (txt) => { if (!txt) return; $$("tfNote").hidden = false; $$("tfNoteT").textContent = txt; };
+  const STEP = (st) => (st >= 5 ? L("Refine together", "لنحسّنها معاً") : L("Step " + (st + 1) + " of 5", "الخطوة " + (st + 1) + " من 5"));
+  // convert the voice "sketch" to the same graph shape the Flow tab renders
+  const sketchGraph = (sk) => ({
+    nodes: (sk.nodes || []).map(n => ({ id: n.id, data: { type: n.kind, title: n.title, desc: n.desc }, position: { x: 0, y: 0 } })),
+    edges: (sk.edges || []).map((e, i) => ({ id: "e" + i, source: e.source, target: e.target, sourceHandle: e.label || "source" })),
+  });
+  const wireZoom = () => { const c = TALK.ctl; if (!c) return; $$("tfZi").onclick = () => c.zoom(1.2); $$("tfZo").onclick = () => c.zoom(1 / 1.2); $$("tfZf").onclick = () => c.fit(); };
+  const renderFlow = (sk) => {
+    if (!sk || !(sk.nodes || []).length) return;
+    $$("tfEmpty").style.display = "none";
+    TALK.ctl = buildRailwayFlow("tfStage", "tfWorld", "tfWires", sketchGraph(sk));
+    wireZoom();
+    $$("tfCtrls").addEventListener("mousedown", e => e.stopPropagation());
+  };
+  // natural voice (OpenAI TTS) with browser fallback
   const speakBrowser = (text) => new Promise(res => { try { window.speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = ar ? "ar-SA" : "en-US"; u.rate = 0.98; u.pitch = 1.03; u.onend = res; u.onerror = res; TALK.speaking = true; window.speechSynthesis.speak(u); } catch (e) { res(); } }).then(() => { TALK.speaking = false; });
   const speak = async (text) => {
     if (!text || !TALK) return;
@@ -691,94 +665,56 @@ function openTalk() {
       TALK.speaking = false; URL.revokeObjectURL(url);
     } catch (e) { await speakBrowser(text); }
   };
-  const renderStory = (sk) => {
-    const nodes = (sk && sk.nodes || []).filter(n => n && VL_LABEL[n.kind]);
-    const steps = nodes.filter(n => n.kind !== "guardrail");
-    if (!steps.length) return;
-    $$("vlEmpty").hidden = true; $$("vlStory").hidden = false; $$("vlBuilding").hidden = true;
-    $$("vlWorld").className = "agent-story-world has-story";
-    $$("vlEmptyFoot").hidden = true; $$("vlHuman").hidden = false;
-    $$("vlReadDir").hidden = false; $$("vlStepCount").textContent = steps.length;
-    $$("vlFlow").style.gridTemplateColumns = `repeat(${steps.length}, minmax(150px,1fr))`;
-    $$("vlFlow").innerHTML = steps.map((n, i) => `
-      <article class="story-step kind-${n.kind} progressive">
-        <span class="story-step-number">${i + 1}</span>
-        <span class="story-step-icon">${VL_ICON[n.kind] || "•"}</span>
-        <small>${esc((ar ? VL_LABEL_AR : VL_LABEL)[n.kind] || n.kind)}</small>
-        <strong>${esc(n.title || "")}</strong>
-        <p>${esc(n.desc || "")}</p>
-        ${i < steps.length - 1 ? `<span class="story-next" aria-hidden="true">→</span>` : ""}
-      </article>`).join("");
-    const guard = nodes.find(n => n.kind === "guardrail");
-    if (guard) { $$("vlSafety").hidden = false; $$("vlSafety").innerHTML = `<span>🛡️</span><div><small>${L("Always protecting every step", "يحمي كل خطوة دائماً")}</small><strong>${esc(guard.title || "")}</strong><p>${esc(guard.desc || "")}</p></div><div class="story-safety-rules">${(sk.guardrails || []).slice(0, 2).map(r => `<i>✓ ${esc(r)}</i>`).join("")}</div>`; }
-    else $$("vlSafety").hidden = true;
-    const integ = sk.integrations || [];
-    if (integ.length) { $$("vlInteg").hidden = false; $$("vlInteg").innerHTML = `<small>${L("Apps in this story", "التطبيقات في هذه القصة")}</small>` + integ.map(x => `<span>${esc(x)}</span>`).join(""); }
-    if (TALK.title) { $$("vlCanvasTitle").textContent = TALK.title; $$("vlTitle").textContent = TALK.title; }
-  };
-  const updateNow = (reply, conf) => {
-    $$("vlNow").textContent = reply; $$("vlNowLabel").textContent = L("Wakeel says", "يقول وكيل");
-    $$("vlQuestion").textContent = reply;
-    if (conf != null) { $$("vlPct").textContent = Math.round(conf) + "%"; $$("vlPctBar").style.width = Math.round(conf) + "%"; }
-  };
   const doBuild = async (brief) => {
     if (!TALK || TALK.built) return; TALK.built = true;
-    $$("vlStory").hidden = true; $$("vlBuilding").hidden = false; setState("thinking", L("Building your assistant…", "أبني مساعدك…"));
+    setState("thinking", L("Building the real agent…", "أبني الوكيل الحقيقي…")); setStatus(L("Building your agent… (about a minute)", "أبني وكيلك… (حوالي دقيقة)"));
+    $$("tfSub").textContent = L("Building the real agent…", "أبني الوكيل الحقيقي…");
     try {
       const bd = await api("POST", "talk-build", { brief, lang: TALK.lang });
       if (!TALK) return;
-      $$("vlBuilding").hidden = true; $$("vlStory").hidden = false;
       if (bd.done && bd.agent_id) {
-        TALK.title = bd.name || TALK.title;
-        $$("vlTitle").textContent = bd.name || $$("vlTitle").textContent;
-        const line = ar ? `تم! ${bd.name || ""} جاهز.` : `Done! ${bd.name || "Your assistant"} is ready.`;
-        updateNow(line, 100); await speak(line);
-        const pb = $$("vlPublish"); pb.disabled = false; pb.classList.add("published"); pb.querySelector("span").textContent = L("Open agent", "افتح الوكيل");
-        pb.onclick = () => { closeTalk(); openAgent(bd.agent_id, "overview"); };
-        setState("idle", L("Ready", "جاهز"));
-      } else { TALK.built = false; setState("idle", L("Let's adjust", "لنعدّل")); }
-    } catch (e) { if (TALK) { TALK.built = false; $$("vlBuilding").hidden = true; $$("vlStory").hidden = false; setState("idle"); } }
+        updateNow((ar ? "تم! " : "Done! ") + (bd.name || "Your agent") + (ar ? " جاهز." : " is ready."), 100); await speak((ar ? "تم بناء " : "I've built ") + (bd.name || "your agent") + (ar ? "." : "."));
+        $$("tfSub").textContent = (bd.name || "Your agent") + " — " + L("ready", "جاهز");
+        const ob = $$("tfOpen"); ob.hidden = false; ob.onclick = () => { closeTalk(); openAgent(bd.agent_id, "flow"); };
+        setState("idle", L("Ready", "جاهز")); setStatus("");
+      } else { TALK.built = false; setStatus(L("Let's adjust — what should change?", "لنعدّل — ما الذي تريد تغييره؟")); }
+    } catch (e) { if (TALK) { TALK.built = false; setStatus(""); } }
   };
-  const showThinking = (title, sub) => { $$("vlEmpty").hidden = true; $$("vlStory").hidden = true; const b = $$("vlBuilding"); b.hidden = false; b.querySelector("strong").textContent = title; b.querySelector("small").textContent = sub; };
-  const showNote = (txt) => { if (!txt) return; $$("vlNoteRow").hidden = false; $$("vlNote").textContent = txt; };
-  const STEP_LABEL = (st) => (st >= 5 ? L("Refine together", "لنحسّنها معاً") : L("Step " + (st + 1) + " of 5", "الخطوة " + (st + 1) + " من 5"));
   const send = async (text) => {
     if (!text || !TALK || TALK.busy) return;
-    TALK.busy = true; $$("vlInput").value = "";
-    setState("thinking", L("Wakeel is thinking…", "وكيل يفكّر…")); $$("vlNowLabel").textContent = L("Wakeel is thinking", "وكيل يفكّر");
+    TALK.busy = true; $$("tfInput").value = ""; setState("thinking", L("Wakeel is thinking…", "وكيل يفكّر…")); $$("tfNowLabel").textContent = L("Wakeel is thinking", "وكيل يفكّر");
     try {
       const r = await api("POST", "talk", { text, state: TALK.state, lang: TALK.lang });
       if (!TALK) return;
       TALK.state = r.state || TALK.state; TALK.phase = r.phase;
-      if (r.sketch && (r.sketch.nodes || []).length) { $$("vlBuilding").hidden = true; renderStory(r.sketch); }
+      if (r.sketch && (r.sketch.nodes || []).length) renderFlow(r.sketch);
       if (r.notepad) showNote(r.notepad);
-      if (typeof r.stage === "number") $$("vlStepLabel").textContent = STEP_LABEL(r.stage);
+      if (typeof r.stage === "number") $$("tfStep").textContent = STEP(r.stage);
       updateNow(r.reply, r.confidence);
-      setState("idle", L("Ready when you are", "جاهز متى شئت"));
+      setState("idle", L("Ready when you are", "جاهز متى شئت")); setStatus(supported ? L("Tap the mic and reply", "اضغط الميكروفون وأجب") : L("Type your answer below", "اكتب إجابتك بالأسفل"));
       await speak(r.reply);
       if (!TALK) return;
       if (r.phase === "building" && r.brief) doBuild(r.brief);
-    } catch (e) { updateNow("⚠️ " + (e.message || "error")); setState("idle"); $$("vlBuilding").hidden = true; }
+    } catch (e) { updateNow("⚠️ " + (e.message || "error")); setState("idle"); }
     finally { if (TALK) TALK.busy = false; }
   };
   const listen = () => {
     if (!supported || !TALK || TALK.busy || TALK.speaking) return;
     const rec = new SR(); TALK.recog = rec; rec.lang = ar ? "ar-AE" : "en-US"; rec.interimResults = false; rec.maxAlternatives = 1;
-    rec.onstart = () => setState("listening", L("Listening…", "أستمع…"));
+    rec.onstart = () => { setState("listening", L("Listening…", "أستمع…")); setStatus(L("Listening… speak now", "أستمع… تحدّث الآن")); };
     rec.onresult = (e) => { setState("idle"); send(e.results[0][0].transcript); };
-    rec.onerror = () => setState("idle", L("Tap the mic to talk", "اضغط الميكروفون للتحدث"));
-    rec.onend = () => { if ($$("vlMic").classList.contains("listening")) setState("idle"); };
+    rec.onerror = () => { setState("idle"); setStatus(L("Tap the mic to talk", "اضغط الميكروفون للتحدث")); };
+    rec.onend = () => { if ($$("tfMic").classList.contains("listening")) setState("idle"); };
     try { rec.start(); } catch (e) {}
   };
-  const toggleMic = () => { if (!TALK) return; if (TALK.speaking) { try { audio.pause(); window.speechSynthesis.cancel(); } catch (e) {} TALK.speaking = false; } if ($$("vlMic").classList.contains("listening")) { try { TALK.recog && TALK.recog.stop(); } catch (e) {} setState("idle"); } else listen(); };
-  $$("vlMic").onclick = toggleMic;
-  $$("vlStart").onclick = toggleMic;
-  $$("vlForm").addEventListener("submit", (e) => { e.preventDefault(); const v = $$("vlInput").value.trim(); if (v) send(v); });
-  $$("vlInput").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $$("vlForm").requestSubmit(); } });
-  $$("vlBack").onclick = closeTalk;
-  $$("vlReset").onclick = () => { closeTalk(); openTalk(); };
+  const toggleMic = () => { if (!TALK) return; if (TALK.speaking) { try { audio.pause(); window.speechSynthesis.cancel(); } catch (e) {} TALK.speaking = false; } if ($$("tfMic").classList.contains("listening")) { try { TALK.recog && TALK.recog.stop(); } catch (e) {} setState("idle"); } else listen(); };
+  $$("tfMic").onclick = toggleMic;
+  $$("tfSend").onclick = () => { const v = $$("tfInput").value.trim(); if (v) send(v); };
+  $$("tfInput").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); const v = $$("tfInput").value.trim(); if (v) send(v); } });
+  $$("tfClose").onclick = closeTalk;
+  $$("tfReset").onclick = () => { closeTalk(); openTalk(); };
   const greet = ar ? "مرحباً، أنا وكيل. خذ نفساً — لا شيء تقني لإعداده. سأرافقك خلال يوم عمل عادي. بماذا أناديك، ودور من نتقمّص اليوم؟" : "Hi, I'm Wakeel. Take a breath—there's nothing technical to set up. I'll simply follow you through a normal workday. What should I call you, and whose role should we step into today?";
-  updateNow(greet, 0); speak(greet);
+  updateNow(greet, 0); setStatus(supported ? L("Tap the mic and speak", "اضغط الميكروفون وتحدّث") : L("Type your answer below", "اكتب إجابتك بالأسفل")); speak(greet);
 }
 function closeTalk() { try { window.speechSynthesis.cancel(); if (TALK && TALK.recog) TALK.recog.abort(); } catch (e) {} const o = document.getElementById("talkOv"); if (o) o.remove(); TALK = null; }
 // grow the composer to fit its content (up to a max), then scroll — so long prompts stay readable
@@ -1758,6 +1694,13 @@ const NODE_KIND = {
   loop: { icon: "🔁", acc: "purple", type: "Loop" },
   "answer": { icon: "✅", acc: "green", type: "Reply" },
   "end": { icon: "✅", acc: "green", type: "End" },
+  // voice "kinds" (so the same Flow diagram renders the live sketch during Talk)
+  trigger: { icon: "📥", acc: "green", type: "Trigger" },
+  knowledge: { icon: "📚", acc: "blue", type: "Knowledge" },
+  decision: { icon: "🔀", acc: "gold", type: "Decision" },
+  guardrail: { icon: "🛡️", acc: "amber", type: "Guardrail" },
+  approval: { icon: "🙋", acc: "red", type: "Approval" },
+  output: { icon: "✅", acc: "green", type: "Result" },
 };
 function dfKind(t) { return NODE_KIND[t] || { icon: "●", acc: "blue", type: (t || "Step").replace(/-/g, " ") }; }
 // Railway-style card colors per accent
