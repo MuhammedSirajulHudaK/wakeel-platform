@@ -609,6 +609,7 @@ function openTalk() {
         <div class="rf-stage" id="tfStage">
           <div class="rf-world" id="tfWorld"><svg class="rf-wires" id="tfWires"></svg></div>
           <div class="tf-empty" id="tfEmpty">🎙️ ${L("Your flow will build itself as you talk", "سيُبنى مخططك أثناء حديثك")}</div>
+          <div class="tf-building" id="tfBuilding" hidden><div class="spin"></div><div class="tfb-t">${L("Building your real agent…", "أبني وكيلك الحقيقي…")}</div><div class="tfb-s">${L("Wiring it up in the backend — about a minute", "أوصله في الخلفية — حوالي دقيقة")}</div></div>
           <div class="rf-ctrls" id="tfCtrls"><button id="tfZi" title="Zoom in">${SVGI.plus}</button><button id="tfZo" title="Zoom out">${SVGI.minus}</button><button id="tfZf" title="Fit">${SVGI.expand}</button></div>
         </div>
         <aside class="tf-voice">
@@ -670,9 +671,12 @@ function openTalk() {
     try { stopRealtime(); } catch (e) {} TALK.cont = false;
     setState("thinking", L("Building the real agent…", "أبني الوكيل الحقيقي…")); setStatus(L("Building your agent… (about a minute)", "أبني وكيلك… (حوالي دقيقة)"));
     $$("tfSub").textContent = L("Building the real agent…", "أبني الوكيل الحقيقي…");
+    $$("tfEmpty").style.display = "none"; $$("tfBuilding").hidden = false;
+    const ob0 = $$("tfOpen"); ob0.hidden = false; ob0.disabled = true; ob0.textContent = L("Building…", "أبني…");
     try {
-      const bd = await api("POST", "talk-build", { brief: brief || TALK.brief || "", lang: TALK.lang });
+      const bd = await api("POST", "talk-build", { brief: brief || TALK.brief || "", name: TALK.name || "", lang: TALK.lang });
       if (!TALK) return;
+      $$("tfBuilding").hidden = true; ob0.disabled = false;
       if (bd.done && bd.agent_id) {
         // swap the voice sketch for the REAL backend graph — identical to a chat build
         try {
@@ -683,8 +687,8 @@ function openTalk() {
         $$("tfSub").textContent = (bd.name || "Your agent") + " — " + L("real agent, ready", "وكيل حقيقي، جاهز");
         const ob = $$("tfOpen"); ob.hidden = false; ob.dataset.mode = "open"; ob.textContent = L("Open agent", "افتح الوكيل"); ob.onclick = () => { closeTalk(); openAgent(bd.agent_id, "flow"); };
         setState("idle", L("Ready", "جاهز")); setStatus("");
-      } else { TALK.built = false; setStatus(L("Let's adjust — what should change?", "لنعدّل — ما الذي تريد تغييره؟")); }
-    } catch (e) { if (TALK) { TALK.built = false; setStatus(""); } }
+      } else { TALK.built = false; ob0.textContent = L("Build agent", "ابنِ الوكيل"); setState("idle"); setStatus((L("Couldn't build that: ", "تعذّر البناء: ")) + (bd.error || "try again")); }
+    } catch (e) { if (TALK) { TALK.built = false; $$("tfBuilding").hidden = true; const o = $$("tfOpen"); o.disabled = false; o.textContent = L("Build agent", "ابنِ الوكيل"); setState("idle"); setStatus(L("Build failed — tap Build agent to retry", "فشل البناء — اضغط ابنِ الوكيل للمحاولة")); } }
   };
   const showBuildBtn = () => { const ob = $$("tfOpen"); if (TALK.built || ob.dataset.mode === "open") return; ob.hidden = false; ob.dataset.mode = "build"; ob.textContent = L("Build agent", "ابنِ الوكيل"); ob.onclick = () => doBuild(TALK.brief || ""); };
   // ---- OpenAI Realtime: true speech-to-speech (S2S) ----

@@ -2173,16 +2173,20 @@ def talk(sess, text, state, lang="en"):
             "brief": state.get("brief", ""), "phase": ("complete" if done else "interview"), "state": state}
 
 
-def talk_build(sess, brief, lang="en"):
-    """Do the actual build for the voice flow: design → generate → deploy."""
+def talk_build(sess, brief, lang="en", name=""):
+    """Build the real agent from the voice brief. Generate straight from the brief (the
+    brief is already a plain-language spec) → deploy. Skips the extra design pass for speed."""
     try:
-        d = design(sess, brief, lang=lang)
-        g = generate(sess, "workflow", design_to_instruction(d))
+        brief = (brief or "").strip()
+        if not brief:
+            return {"done": False, "error": "no brief"}
+        g = generate(sess, "workflow", brief)
         if not (g.get("graph") or {}).get("nodes"):
             return {"done": False, "error": g.get("error") or "could not build the flow"}
-        dep = deploy(sess, "workflow", d.get("name", "Wakeel Agent"), g["graph"])
-        log_act(sess, "build", "voice: " + d.get("name", ""))
-        return {"done": True, "agent_id": dep["id"], "name": d.get("name", "Your assistant"), "design": d}
+        nm = (name or "").strip()[:60] or "Voice-built agent"
+        dep = deploy(sess, "workflow", nm, g["graph"])
+        log_act(sess, "build", "voice: " + nm)
+        return {"done": True, "agent_id": dep["id"], "name": nm}
     except Exception as e:
         return {"done": False, "error": str(e)[:200]}
 
@@ -3311,7 +3315,7 @@ class H(BaseHTTPRequestHandler):
                 except Exception as e:
                     return self._send(500, {"error": str(e)[:200]})
             if p == "/api/talk-build":
-                return self._send(200, talk_build(sess, b.get("brief", ""), b.get("lang", "en")))
+                return self._send(200, talk_build(sess, b.get("brief", ""), b.get("lang", "en"), b.get("name", "")))
             if p == "/api/knowledge":
                 r = knowledge_add(sess, b.get("name", ""), b.get("text", ""))
                 log_act(sess, "data", b.get("name", ""))

@@ -1153,3 +1153,6 @@ textarea.input{padding:12px 14px;min-height:auto;resize:none}
 @media (max-width:860px){.tf-body{flex-direction:column}.tf-voice{width:auto;max-height:44%}.tf-body .rf-stage{border-right:0;border-bottom:1px solid var(--line)}}
 .tf-mic.live{animation:micpulse 1.4s ease-in-out infinite;box-shadow:0 0 0 3px rgba(62,224,138,.35),0 10px 30px -8px rgba(32,180,107,.6)}
 .tf-mic.thinking{opacity:.65;animation:none}
+.tf-building{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:rgba(7,16,13,.72);z-index:5;text-align:center;padding:20px}
+.tf-building .tfb-t{font-size:16px;font-weight:750;color:var(--text)}
+.tf-building .tfb-s{font-size:12.5px;color:var(--muted)}
