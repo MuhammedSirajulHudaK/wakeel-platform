@@ -1151,3 +1151,5 @@ textarea.input{padding:12px 14px;min-height:auto;resize:none}
 .tf-foot{font-size:11px;color:var(--muted);text-align:center;margin-top:auto;padding-top:8px}
 .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 @media (max-width:860px){.tf-body{flex-direction:column}.tf-voice{width:auto;max-height:44%}.tf-body .rf-stage{border-right:0;border-bottom:1px solid var(--line)}}
+.tf-mic.live{animation:micpulse 1.4s ease-in-out infinite;box-shadow:0 0 0 3px rgba(62,224,138,.35),0 10px 30px -8px rgba(32,180,107,.6)}
+.tf-mic.thinking{opacity:.65;animation:none}

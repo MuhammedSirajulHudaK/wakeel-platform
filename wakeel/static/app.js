@@ -694,27 +694,39 @@ function openTalk() {
       setState("idle", L("Ready when you are", "جاهز متى شئت")); setStatus(supported ? L("Tap the mic and reply", "اضغط الميكروفون وأجب") : L("Type your answer below", "اكتب إجابتك بالأسفل"));
       await speak(r.reply);
       if (!TALK) return;
-      if (r.phase === "building" && r.brief) doBuild(r.brief);
+      if (r.phase === "building" && r.brief) { TALK.cont = false; $$("tfMic").classList.remove("live"); doBuild(r.brief); }
+      else if (TALK.cont) setTimeout(() => { if (TALK && TALK.cont && !TALK.busy && !TALK.speaking) listen(); }, 250);
     } catch (e) { updateNow("⚠️ " + (e.message || "error")); setState("idle"); }
     finally { if (TALK) TALK.busy = false; }
   };
   const listen = () => {
     if (!supported || !TALK || TALK.busy || TALK.speaking) return;
     const rec = new SR(); TALK.recog = rec; rec.lang = ar ? "ar-AE" : "en-US"; rec.interimResults = false; rec.maxAlternatives = 1;
-    rec.onstart = () => { setState("listening", L("Listening…", "أستمع…")); setStatus(L("Listening… speak now", "أستمع… تحدّث الآن")); };
+    rec.onstart = () => { setState("listening", L("Listening…", "أستمع…")); setStatus(TALK.cont ? L("Just talk — I'm listening", "تحدّث فقط — أنا أستمع") : L("Listening… speak now", "أستمع… تحدّث الآن")); };
     rec.onresult = (e) => { setState("idle"); send(e.results[0][0].transcript); };
-    rec.onerror = () => { setState("idle"); setStatus(L("Tap the mic to talk", "اضغط الميكروفون للتحدث")); };
-    rec.onend = () => { if ($$("tfMic").classList.contains("listening")) setState("idle"); };
+    rec.onerror = () => { if (TALK && TALK.cont && !TALK.busy && !TALK.speaking) setTimeout(() => { if (TALK && TALK.cont && !TALK.busy && !TALK.speaking) listen(); }, 500); else setState("idle"); };
+    rec.onend = () => { if (!TALK) return; if (TALK.cont && !TALK.busy && !TALK.speaking) setTimeout(() => { if (TALK && TALK.cont && !TALK.busy && !TALK.speaking) listen(); }, 350); else if (!TALK.cont && $$("tfMic").classList.contains("listening")) setState("idle"); };
     try { rec.start(); } catch (e) {}
   };
-  const toggleMic = () => { if (!TALK) return; if (TALK.speaking) { try { audio.pause(); window.speechSynthesis.cancel(); } catch (e) {} TALK.speaking = false; } if ($$("tfMic").classList.contains("listening")) { try { TALK.recog && TALK.recog.stop(); } catch (e) {} setState("idle"); } else listen(); };
+  // continuous, hands-free conversation (no tapping per turn)
+  const stopCont = () => { if (!TALK) return; TALK.cont = false; try { TALK.recog && TALK.recog.abort(); } catch (e) {} try { audio.pause(); window.speechSynthesis.cancel(); } catch (e) {} TALK.speaking = false; $$("tfMic").classList.remove("live"); setState("idle", L("Paused", "متوقّف")); setStatus(L("Tap the mic to talk again", "اضغط الميكروفون للتحدث مجدداً")); };
+  const startCont = async () => {
+    if (!TALK) return; TALK.cont = true; $$("tfMic").classList.add("live");
+    setStatus(L("Just talk — I'm listening the whole time", "تحدّث فقط — أنا أستمع طوال الوقت"));
+    if (!TALK.greeted) { TALK.greeted = true; setState("thinking", L("Speaking…", "أتحدّث…")); await speak(greet); if (!TALK || !TALK.cont) return; }
+    listen();
+  };
+  const toggleMic = () => { if (!TALK) return; if (TALK.cont) stopCont(); else startCont(); };
   $$("tfMic").onclick = toggleMic;
   $$("tfSend").onclick = () => { const v = $$("tfInput").value.trim(); if (v) send(v); };
   $$("tfInput").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); const v = $$("tfInput").value.trim(); if (v) send(v); } });
   $$("tfClose").onclick = closeTalk;
   $$("tfReset").onclick = () => { closeTalk(); openTalk(); };
   const greet = ar ? "مرحباً، أنا وكيل. خذ نفساً — لا شيء تقني لإعداده. سأرافقك خلال يوم عمل عادي. بماذا أناديك، ودور من نتقمّص اليوم؟" : "Hi, I'm Wakeel. Take a breath—there's nothing technical to set up. I'll simply follow you through a normal workday. What should I call you, and whose role should we step into today?";
-  updateNow(greet, 0); setStatus(supported ? L("Tap the mic and speak", "اضغط الميكروفون وتحدّث") : L("Type your answer below", "اكتب إجابتك بالأسفل")); speak(greet);
+  // No auto-greeting sound. Show the text; the voice starts on the first mic press (a real
+  // user gesture, so it plays cleanly), then the conversation is continuous — no more tapping.
+  updateNow(greet, 0);
+  setStatus(supported ? L("Tap the mic once, then just talk — hands-free", "اضغط الميكروفون مرة ثم تحدّث بحرّية — بلا نقر") : L("Type your answer below", "اكتب إجابتك بالأسفل"));
 }
 function closeTalk() { try { window.speechSynthesis.cancel(); if (TALK && TALK.recog) TALK.recog.abort(); } catch (e) {} const o = document.getElementById("talkOv"); if (o) o.remove(); TALK = null; }
 // grow the composer to fit its content (up to a max), then scroll — so long prompts stay readable
