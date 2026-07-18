@@ -667,18 +667,85 @@ function openTalk() {
   };
   const doBuild = async (brief) => {
     if (!TALK || TALK.built) return; TALK.built = true;
+    try { stopRealtime(); } catch (e) {} TALK.cont = false;
     setState("thinking", L("Building the real agent…", "أبني الوكيل الحقيقي…")); setStatus(L("Building your agent… (about a minute)", "أبني وكيلك… (حوالي دقيقة)"));
     $$("tfSub").textContent = L("Building the real agent…", "أبني الوكيل الحقيقي…");
     try {
-      const bd = await api("POST", "talk-build", { brief, lang: TALK.lang });
+      const bd = await api("POST", "talk-build", { brief: brief || TALK.brief || "", lang: TALK.lang });
       if (!TALK) return;
       if (bd.done && bd.agent_id) {
         updateNow((ar ? "تم! " : "Done! ") + (bd.name || "Your agent") + (ar ? " جاهز." : " is ready."), 100); await speak((ar ? "تم بناء " : "I've built ") + (bd.name || "your agent") + (ar ? "." : "."));
         $$("tfSub").textContent = (bd.name || "Your agent") + " — " + L("ready", "جاهز");
-        const ob = $$("tfOpen"); ob.hidden = false; ob.onclick = () => { closeTalk(); openAgent(bd.agent_id, "flow"); };
+        const ob = $$("tfOpen"); ob.hidden = false; ob.dataset.mode = "open"; ob.textContent = L("Open agent", "افتح الوكيل"); ob.onclick = () => { closeTalk(); openAgent(bd.agent_id, "flow"); };
         setState("idle", L("Ready", "جاهز")); setStatus("");
       } else { TALK.built = false; setStatus(L("Let's adjust — what should change?", "لنعدّل — ما الذي تريد تغييره؟")); }
     } catch (e) { if (TALK) { TALK.built = false; setStatus(""); } }
+  };
+  const showBuildBtn = () => { const ob = $$("tfOpen"); if (TALK.built || ob.dataset.mode === "open") return; ob.hidden = false; ob.dataset.mode = "build"; ob.textContent = L("Build agent", "ابنِ الوكيل"); ob.onclick = () => doBuild(TALK.brief || ""); };
+  // ---- OpenAI Realtime: true speech-to-speech (S2S) ----
+  const rtSend = (o) => { try { if (TALK && TALK.dc && TALK.dc.readyState === "open") TALK.dc.send(JSON.stringify(o)); } catch (e) {} };
+  const CONF = [10, 26, 45, 64, 82, 96];
+  const recordStep = async (a, callId) => {
+    const stage = Math.max(0, Math.min(5, a.stage || 0));
+    if (a.notepad) showNote(a.notepad);
+    $$("tfStep").textContent = STEP(stage);
+    TALK.stage = stage; if ((a.brief || "").trim()) TALK.brief = a.brief;
+    let explanation = "Noted.";
+    try {
+      if ((a.brief || "").trim() && stage >= 1) {
+        const bp = await api("POST", "blueprint", { brief: a.brief, stage, lang: TALK.lang });
+        TALK.name = bp.name || TALK.name;
+        if (bp.sketch && (bp.sketch.nodes || []).length) renderFlow(bp.sketch);
+        const c = CONF[Math.min(stage, 5)]; $$("tfPct").textContent = c + "%"; $$("tfBar").style.width = c + "%";
+        explanation = bp.explanation || explanation;
+        if (stage >= 4) showBuildBtn();
+      }
+    } catch (e) {}
+    rtSend({ type: "conversation.item.create", item: { type: "function_call_output", call_id: callId, output: JSON.stringify({ explanation }) } });
+    rtSend({ type: "response.create" });
+  };
+  const configureSession = (cfg) => {
+    const tools = [{ type: "function", name: "record_interview_step",
+      description: "Record the interview after each substantive answer. Returns an explanation of what changed on the canvas.",
+      parameters: { type: "object", properties: {
+        stage: { type: "integer", description: "0-5, the exact interview stage" },
+        brief: { type: "string", description: "cumulative plain-language description of the whole job so far" },
+        notepad: { type: "string", description: "a short notepad item for this answer" } }, required: ["stage", "brief"] } }];
+    rtSend({ type: "session.update", session: { type: "realtime", instructions: cfg.instructions,
+      audio: { input: { transcription: { model: "whisper-1" }, turn_detection: { type: "server_vad", silence_duration_ms: 700 } }, output: { voice: "marin" } },
+      tools, tool_choice: "auto" } });
+    rtSend({ type: "response.create", response: { instructions: cfg.warmup } });
+  };
+  const handleRt = (data) => {
+    let ev; try { ev = JSON.parse(data); } catch (e) { return; }
+    const t = ev.type || "";
+    if (t === "response.function_call_arguments.done") {
+      let a = {}; try { a = JSON.parse(ev.arguments || "{}"); } catch (e) {}
+      if (ev.name === "record_interview_step") recordStep(a, ev.call_id);
+      else { rtSend({ type: "conversation.item.create", item: { type: "function_call_output", call_id: ev.call_id, output: "{}" } }); rtSend({ type: "response.create" }); }
+    } else if (t === "response.audio_transcript.done") { if (ev.transcript) updateNow(ev.transcript.trim()); }
+  };
+  const stopRealtime = () => { try { if (TALK && TALK.stream) TALK.stream.getTracks().forEach(x => x.stop()); } catch (e) {} try { if (TALK && TALK.pc) TALK.pc.close(); } catch (e) {} if (TALK) { TALK.rtLive = false; TALK.pc = null; TALK.dc = null; TALK.stream = null; } $$("tfMic").classList.remove("live"); };
+  const startRealtime = async () => {
+    if (!TALK || TALK.rtLive || TALK.rtConnecting) return true;
+    TALK.rtConnecting = true; setState("thinking", L("Connecting…", "جارٍ الاتصال…")); setStatus(L("Connecting to live voice…", "جارٍ الاتصال بالصوت المباشر…")); $$("tfMic").classList.add("live");
+    try {
+      const cfg = await api("GET", "realtime");
+      if (!cfg || !cfg.configured) throw new Error("not configured");
+      const pc = new RTCPeerConnection(); TALK.pc = pc;
+      pc.ontrack = (e) => { audio.srcObject = e.streams[0]; const p = audio.play && audio.play(); if (p && p.catch) p.catch(() => {}); };
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+      TALK.stream = stream; stream.getTracks().forEach(tr => pc.addTrack(tr, stream));
+      const dc = pc.createDataChannel("oai-events"); TALK.dc = dc; dc.onopen = () => configureSession(cfg); dc.onmessage = (e) => handleRt(e.data);
+      const offer = await pc.createOffer(); await pc.setLocalDescription(offer);
+      const resp = await fetch("api/realtime", { method: "POST", headers: { "Content-Type": "application/sdp" }, body: offer.sdp, credentials: "include" });
+      if (!resp.ok) throw new Error("handshake " + resp.status);
+      await pc.setRemoteDescription({ type: "answer", sdp: await resp.text() });
+      TALK.rtLive = true; TALK.rtConnecting = false;
+      setState("live", L("Live — just talk", "مباشر — تحدّث فقط")); setStatus(L("Live voice on — just talk, I'm listening the whole time", "الصوت المباشر يعمل — تحدّث، أنا أستمع طوال الوقت"));
+      $$("tfSub").textContent = L("Live conversation — speak naturally", "محادثة مباشرة — تحدّث بطبيعية");
+      return true;
+    } catch (e) { TALK.rtConnecting = false; TALK.rt = false; stopRealtime(); return false; }
   };
   const send = async (text) => {
     if (!text || !TALK || TALK.busy) return;
@@ -716,7 +783,14 @@ function openTalk() {
     if (!TALK.greeted) { TALK.greeted = true; setState("thinking", L("Speaking…", "أتحدّث…")); await speak(greet); if (!TALK || !TALK.cont) return; }
     listen();
   };
-  const toggleMic = () => { if (!TALK) return; if (TALK.cont) stopCont(); else startCont(); };
+  const toggleMic = async () => {
+    if (!TALK) return;
+    if (TALK.rtLive) { stopRealtime(); setState("idle", L("Paused", "متوقّف")); setStatus(L("Tap the mic to talk again", "اضغط الميكروفون للتحدث مجدداً")); return; }
+    if (TALK.cont) { stopCont(); return; }
+    // primary: true speech-to-speech realtime; fall back to continuous voice if it can't connect
+    const ok = await startRealtime();
+    if (!ok && TALK) { setStatus(L("Live voice unavailable — using continuous voice", "الصوت المباشر غير متاح — أستخدم الصوت المتواصل")); startCont(); }
+  };
   $$("tfMic").onclick = toggleMic;
   $$("tfSend").onclick = () => { const v = $$("tfInput").value.trim(); if (v) send(v); };
   $$("tfInput").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); const v = $$("tfInput").value.trim(); if (v) send(v); } });

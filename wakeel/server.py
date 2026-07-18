@@ -2203,12 +2203,71 @@ def tts(text, voice="nova"):
     return urllib.request.urlopen(req, timeout=30).read()
 
 
-# ---- OpenAI Realtime ("GPT live") voice : server-side SDP proxy -------------
+# ---- OpenAI Realtime (speech-to-speech) voice : server-side SDP proxy -------
 REALTIME_MODEL = os.environ.get("REALTIME_MODEL", "gpt-realtime")
+
+# The voice assistant prompt (verbatim), used as the Realtime session instructions.
+REALTIME_INSTRUCTIONS = (
+    "# Role & objective\n"
+    "You are Wakeel, a calm female-voiced work-shadowing assistant. Help a nontechnical person describe a "
+    "normal workday, then quietly turn it into a useful helper on the canvas. Success means the user feels "
+    "heard, oriented, and never tested.\n\n"
+    "# Personality & tone\n"
+    "Warm, unhurried, curious, and plain-spoken. Keep each turn to 1-2 short sentences. Use varied natural "
+    "acknowledgements. Never sound like a form, consultant, or software architect. Give the user permission "
+    "to answer messily.\n\n"
+    "# Words to avoid\n"
+    "Do not say architecture, workflow, node, trigger, guardrail, integration, requirements, or decision "
+    "logic. Prefer simple phrases such as what arrives, what you do next, what I added on the left, and "
+    "where a person checks.\n\n"
+    "# Conversation flow\n"
+    "0. Greet and settle in: reassure the user that nothing technical needs setting up. Ask what to call them "
+    "and whose role to step into together. After the answer, call record_interview_step with stage 0.\n"
+    "1. Normal day: ask for one repeated task they wish were easier. After the answer, call the tool with "
+    "stage 1.\n"
+    "2. What arrives: ask whether the work starts with an email, sheet, form, call, schedule, or something "
+    "else. After the answer, call the tool with stage 2.\n"
+    "3. Shadow the work: ask them to talk through what they do next, one small step at a time, and say it "
+    "does not need to be neat. After the answer, call the tool with stage 3.\n"
+    "4. Human pause: ask where they double-check, pause, or ask another person before continuing. After the "
+    "answer, call the tool with stage 4.\n"
+    "5. Complete: say they have done the hard part, summarize the simple story, and invite one change.\n\n"
+    "# Tool behavior\n"
+    "After every substantive answer, call record_interview_step before asking the next question. Send a "
+    "cumulative plain-language brief, a short notepad item, and the exact stage. After the tool returns, "
+    "briefly explain what changed using its explanation field, then ask only the next question. Never jump "
+    "ahead or ask two questions at once."
+)
+REALTIME_WARMUP = (
+    "Begin the warm-up now. Greet the user calmly, reassure them that there is nothing technical to "
+    "configure, then ask what to call them and whose role you should step into together. Ask only that one "
+    "question."
+)
 
 
 def realtime_config():
-    return {"configured": bool(OPENAI_KEY), "model": REALTIME_MODEL}
+    return {"configured": bool(OPENAI_KEY), "model": REALTIME_MODEL,
+            "instructions": REALTIME_INSTRUCTIONS, "warmup": REALTIME_WARMUP}
+
+
+def blueprint(brief, stage, lang="en"):
+    """Turn the cumulative brief into the staged agent story (the record_interview_step tool result)."""
+    bp = _talk_llm(BLUEPRINT_SYS, [], "JOB:\n" + (brief or ""), lang)
+    full = _full_from_blocks(bp.get("blocks"))
+    if not full:
+        full = {k: {"title": v, "desc": ""} for k, v in _KIND_DEFAULT.items()}
+    reveal = max(1, min(4, int(stage) if isinstance(stage, (int, float)) else 1))
+    sketch = _staged_sketch(full, reveal)
+    integ = [str(x)[:40] for x in (bp.get("integrations") or [])][:8]
+    guard = [str(x)[:80] for x in (bp.get("guardrails") or [])][:6]
+    sketch["integrations"] = integ if reveal >= 3 else []
+    sketch["guardrails"] = guard if reveal >= 4 else []
+    expl = {1: "I sketched the start, what I read, and the result on the left.",
+            2: "I added the check step in the middle.",
+            3: "I added the source it uses and the action it takes.",
+            4: "I added a safety limit and a person who approves before it acts."}.get(reveal, "I updated the picture on the left.")
+    return {"sketch": sketch, "name": ((bp.get("name") or "").strip()[:60]) or "Your assistant",
+            "brief": brief, "stage": reveal, "explanation": expl, "integrations": integ, "guardrails": guard}
 
 
 def realtime_sdp(offer_sdp):
@@ -3215,6 +3274,8 @@ class H(BaseHTTPRequestHandler):
                     return self._send(500, {"error": str(e)[:160]})
             if p == "/api/talk":
                 return self._send(200, talk(sess, b.get("text", ""), b.get("state"), b.get("lang", "en")))
+            if p == "/api/blueprint":
+                return self._send(200, blueprint(b.get("brief", ""), b.get("stage", 1), b.get("lang", "en")))
             if p == "/api/talk-build":
                 return self._send(200, talk_build(sess, b.get("brief", ""), b.get("lang", "en")))
             if p == "/api/knowledge":
