@@ -704,18 +704,6 @@ function openTalk() {
     rtSend({ type: "conversation.item.create", item: { type: "function_call_output", call_id: callId, output: JSON.stringify({ explanation }) } });
     rtSend({ type: "response.create" });
   };
-  const configureSession = (cfg) => {
-    const tools = [{ type: "function", name: "record_interview_step",
-      description: "Record the interview after each substantive answer. Returns an explanation of what changed on the canvas.",
-      parameters: { type: "object", properties: {
-        stage: { type: "integer", description: "0-5, the exact interview stage" },
-        brief: { type: "string", description: "cumulative plain-language description of the whole job so far" },
-        notepad: { type: "string", description: "a short notepad item for this answer" } }, required: ["stage", "brief"] } }];
-    rtSend({ type: "session.update", session: { type: "realtime", instructions: cfg.instructions,
-      audio: { input: { transcription: { model: "whisper-1" }, turn_detection: { type: "server_vad", silence_duration_ms: 700 } }, output: { voice: "marin" } },
-      tools, tool_choice: "auto" } });
-    rtSend({ type: "response.create", response: { instructions: cfg.warmup } });
-  };
   const handleRt = (data) => {
     let ev; try { ev = JSON.parse(data); } catch (e) { return; }
     const t = ev.type || "";
@@ -730,22 +718,26 @@ function openTalk() {
     if (!TALK || TALK.rtLive || TALK.rtConnecting) return true;
     TALK.rtConnecting = true; setState("thinking", L("Connecting…", "جارٍ الاتصال…")); setStatus(L("Connecting to live voice…", "جارٍ الاتصال بالصوت المباشر…")); $$("tfMic").classList.add("live");
     try {
-      const cfg = await api("GET", "realtime");
-      if (!cfg || !cfg.configured) throw new Error("not configured");
+      // ephemeral session (instructions + tool + voice baked in server-side); browser connects direct to OpenAI
+      const s = await api("POST", "realtime-session", {});
+      if (!s || !s.value) throw new Error("no session token");
       const pc = new RTCPeerConnection(); TALK.pc = pc;
       pc.ontrack = (e) => { audio.srcObject = e.streams[0]; const p = audio.play && audio.play(); if (p && p.catch) p.catch(() => {}); };
       const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
       TALK.stream = stream; stream.getTracks().forEach(tr => pc.addTrack(tr, stream));
-      const dc = pc.createDataChannel("oai-events"); TALK.dc = dc; dc.onopen = () => configureSession(cfg); dc.onmessage = (e) => handleRt(e.data);
+      const dc = pc.createDataChannel("oai-events"); TALK.dc = dc;
+      dc.onopen = () => rtSend({ type: "response.create", response: { instructions: s.warmup } });  // just the warm-up; config is in the session
+      dc.onmessage = (e) => handleRt(e.data);
       const offer = await pc.createOffer(); await pc.setLocalDescription(offer);
-      const resp = await fetch("api/realtime", { method: "POST", headers: { "Content-Type": "application/sdp" }, body: offer.sdp, credentials: "include" });
+      const resp = await fetch("https://api.openai.com/v1/realtime/calls?model=" + encodeURIComponent(s.model || "gpt-realtime"), {
+        method: "POST", headers: { "Authorization": "Bearer " + s.value, "Content-Type": "application/sdp" }, body: offer.sdp });
       if (!resp.ok) throw new Error("handshake " + resp.status);
       await pc.setRemoteDescription({ type: "answer", sdp: await resp.text() });
       TALK.rtLive = true; TALK.rtConnecting = false;
       setState("live", L("Live — just talk", "مباشر — تحدّث فقط")); setStatus(L("Live voice on — just talk, I'm listening the whole time", "الصوت المباشر يعمل — تحدّث، أنا أستمع طوال الوقت"));
       $$("tfSub").textContent = L("Live conversation — speak naturally", "محادثة مباشرة — تحدّث بطبيعية");
       return true;
-    } catch (e) { TALK.rtConnecting = false; TALK.rt = false; stopRealtime(); return false; }
+    } catch (e) { try { console.error("[realtime]", e); } catch (x) {} TALK.rtConnecting = false; TALK.rt = false; stopRealtime(); return false; }
   };
   const send = async (text) => {
     if (!text || !TALK || TALK.busy) return;

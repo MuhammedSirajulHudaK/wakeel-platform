@@ -2250,6 +2250,35 @@ def realtime_config():
             "instructions": REALTIME_INSTRUCTIONS, "warmup": REALTIME_WARMUP}
 
 
+def _realtime_tools():
+    return [{"type": "function", "name": "record_interview_step",
+             "description": "Record the interview after each substantive answer. Returns an explanation of what changed on the canvas.",
+             "parameters": {"type": "object", "properties": {
+                 "stage": {"type": "integer", "description": "0-5, the exact interview stage"},
+                 "brief": {"type": "string", "description": "cumulative plain-language description of the whole job so far"},
+                 "notepad": {"type": "string", "description": "a short notepad item for this answer"}},
+                 "required": ["stage", "brief"]}}]
+
+
+def realtime_session():
+    """Create an ephemeral Realtime session with the voice prompt + record_interview_step tool +
+    voice baked in server-side (the browser then connects directly to OpenAI with the token)."""
+    if not OPENAI_KEY:
+        raise RuntimeError("OpenAI key not configured for realtime")
+    session = {"type": "realtime", "model": REALTIME_MODEL, "instructions": REALTIME_INSTRUCTIONS,
+               "audio": {"input": {"transcription": {"model": "whisper-1"},
+                                   "turn_detection": {"type": "server_vad", "silence_duration_ms": 700}},
+                         "output": {"voice": "marin"}},
+               "tools": _realtime_tools(), "tool_choice": "auto"}
+    req = urllib.request.Request("https://api.openai.com/v1/realtime/client_secrets",
+                                 data=json.dumps({"session": session}).encode(),
+                                 headers={"Authorization": "Bearer " + OPENAI_KEY, "Content-Type": "application/json"},
+                                 method="POST")
+    r = json.loads(urllib.request.urlopen(req, timeout=20).read())
+    tok = r.get("value") or (r.get("client_secret") or {}).get("value")
+    return {"value": tok, "model": REALTIME_MODEL, "warmup": REALTIME_WARMUP, "expires_at": r.get("expires_at")}
+
+
 def blueprint(brief, stage, lang="en"):
     """Turn the cumulative brief into the staged agent story (the record_interview_step tool result)."""
     bp = _talk_llm(BLUEPRINT_SYS, [], "JOB:\n" + (brief or ""), lang)
@@ -3276,6 +3305,11 @@ class H(BaseHTTPRequestHandler):
                 return self._send(200, talk(sess, b.get("text", ""), b.get("state"), b.get("lang", "en")))
             if p == "/api/blueprint":
                 return self._send(200, blueprint(b.get("brief", ""), b.get("stage", 1), b.get("lang", "en")))
+            if p == "/api/realtime-session":
+                try:
+                    return self._send(200, realtime_session())
+                except Exception as e:
+                    return self._send(500, {"error": str(e)[:200]})
             if p == "/api/talk-build":
                 return self._send(200, talk_build(sess, b.get("brief", ""), b.get("lang", "en")))
             if p == "/api/knowledge":
