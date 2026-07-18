@@ -674,8 +674,13 @@ function openTalk() {
       const bd = await api("POST", "talk-build", { brief: brief || TALK.brief || "", lang: TALK.lang });
       if (!TALK) return;
       if (bd.done && bd.agent_id) {
-        updateNow((ar ? "تم! " : "Done! ") + (bd.name || "Your agent") + (ar ? " جاهز." : " is ready."), 100); await speak((ar ? "تم بناء " : "I've built ") + (bd.name || "your agent") + (ar ? "." : "."));
-        $$("tfSub").textContent = (bd.name || "Your agent") + " — " + L("ready", "جاهز");
+        // swap the voice sketch for the REAL backend graph — identical to a chat build
+        try {
+          const info = await api("GET", "app-info?id=" + bd.agent_id);
+          if (info && info.graph && (info.graph.nodes || []).length) { $$("tfEmpty").style.display = "none"; TALK.ctl = buildRailwayFlow("tfStage", "tfWorld", "tfWires", info.graph); wireZoom(); $$("tfCtrls").addEventListener("mousedown", e => e.stopPropagation()); }
+        } catch (e) {}
+        updateNow((ar ? "تم! " : "Done! ") + (bd.name || "Your agent") + (ar ? " جاهز — هذا هو المخطط الحقيقي." : " is ready — this is the real agent."), 100); await speak((ar ? "تم بناء " : "I've built ") + (bd.name || "your agent") + (ar ? "." : "."));
+        $$("tfSub").textContent = (bd.name || "Your agent") + " — " + L("real agent, ready", "وكيل حقيقي، جاهز");
         const ob = $$("tfOpen"); ob.hidden = false; ob.dataset.mode = "open"; ob.textContent = L("Open agent", "افتح الوكيل"); ob.onclick = () => { closeTalk(); openAgent(bd.agent_id, "flow"); };
         setState("idle", L("Ready", "جاهز")); setStatus("");
       } else { TALK.built = false; setStatus(L("Let's adjust — what should change?", "لنعدّل — ما الذي تريد تغييره؟")); }
