@@ -587,7 +587,7 @@ const VL_LABEL = { trigger: "It starts", agent: "Wakeel reads & understands", kn
 const VL_LABEL_AR = { trigger: "تبدأ", agent: "وكيل يقرأ ويفهم", knowledge: "تستخدم سياقاً موثوقاً", decision: "تتحقق", tool: "تتخذ إجراءً", guardrail: "تبقى آمنة", approval: "شخص يراجع", output: "تحصل على" };
 const VL_ICON = { trigger: "⏰", agent: "🤖", knowledge: "📚", decision: "🔀", tool: "⚡", guardrail: "🛡️", approval: "🙋", output: "✅" };
 function openTalk() {
-  const ar = LANG === "ar";
+  const ar = false;  // Talk is always in English (voice + prompts), regardless of app language
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   const supported = !!SR;
   const L = (en, arr) => ar ? arr : en;
@@ -626,6 +626,7 @@ function openTalk() {
           <div class="tf-mic-wrap"><button class="tf-mic idle" id="tfMic" title="${L("Tap and speak", "اضغط وتحدّث")}">🎤</button>
             <span class="tf-wave" id="tfWave"><i></i><i></i><i></i><i></i><i></i></span></div>
           <div class="tf-status" id="tfStatus"></div>
+          <div class="tf-connect" id="tfConnect" hidden></div>
           <div class="tf-fallback"><input id="tfInput" placeholder="${L("or type your answer…", "أو اكتب إجابتك…")}"/><button id="tfSend">➤</button></div>
           <div class="tf-foot">🛡️ ${L("Nothing runs until you open & publish it.", "لا شيء يعمل حتى تفتحه وتنشره.")}</div>
         </aside>
@@ -686,11 +687,20 @@ function openTalk() {
         updateNow((ar ? "تم! " : "Done! ") + (bd.name || "Your agent") + (ar ? " جاهز — هذا هو المخطط الحقيقي." : " is ready — this is the real agent."), 100); await speak((ar ? "تم بناء " : "I've built ") + (bd.name || "your agent") + (ar ? "." : "."));
         $$("tfSub").textContent = (bd.name || "Your agent") + " — " + L("real agent, ready", "وكيل حقيقي، جاهز");
         const ob = $$("tfOpen"); ob.hidden = false; ob.dataset.mode = "open"; ob.textContent = L("Open agent", "افتح الوكيل"); ob.onclick = () => { closeTalk(); openAgent(bd.agent_id, "flow"); };
+        showConnect();
         setState("idle", L("Ready", "جاهز")); setStatus("");
       } else { TALK.built = false; ob0.textContent = L("Build agent", "ابنِ الوكيل"); setState("idle"); setStatus((L("Couldn't build that: ", "تعذّر البناء: ")) + (bd.error || "try again")); }
     } catch (e) { if (TALK) { TALK.built = false; $$("tfBuilding").hidden = true; const o = $$("tfOpen"); o.disabled = false; o.textContent = L("Build agent", "ابنِ الوكيل"); setState("idle"); setStatus(L("Build failed — tap Build agent to retry", "فشل البناء — اضغط ابنِ الوكيل للمحاولة")); } }
   };
   const showBuildBtn = () => { const ob = $$("tfOpen"); if (TALK.built || ob.dataset.mode === "open") return; ob.hidden = false; ob.dataset.mode = "build"; ob.textContent = L("Build agent", "ابنِ الوكيل"); ob.onclick = () => doBuild(TALK.brief || ""); };
+  const SVC_MATCH = [[/sheet/i, "sheets", "Google Sheets"], [/gmail|e-?mail|inbox/i, "gmail", "Gmail"], [/drive/i, "drive", "Google Drive"], [/calendar/i, "calendar", "Google Calendar"]];
+  const showConnect = () => {
+    const svcs = []; (TALK.integrations || []).forEach(x => SVC_MATCH.forEach(([re, key, label]) => { if (re.test(x) && !svcs.find(s => s.key === key)) svcs.push({ key, label }); }));
+    const c = $$("tfConnect"); if (!svcs.length) { c.hidden = true; return; }
+    c.hidden = false;
+    c.innerHTML = `<small>${L("Connect these so it can run:", "اربط هذه ليعمل:")}</small>` + svcs.map(s => `<button data-svc="${s.key}">🔗 ${esc(s.label)}</button>`).join("");
+    c.querySelectorAll("button").forEach(b => b.onclick = () => { const lbl = b.textContent; b.textContent = "…"; connectSvc(b.dataset.svc, () => { b.textContent = "✓ " + lbl.replace(/^🔗 /, ""); b.disabled = true; b.classList.add("done"); }); });
+  };
   // ---- OpenAI Realtime: true speech-to-speech (S2S) ----
   const rtSend = (o) => { try { if (TALK && TALK.dc && TALK.dc.readyState === "open") TALK.dc.send(JSON.stringify(o)); } catch (e) {} };
   const CONF = [10, 26, 45, 64, 82, 96];
@@ -704,6 +714,7 @@ function openTalk() {
       if ((a.brief || "").trim() && stage >= 1) {
         const bp = await api("POST", "blueprint", { brief: a.brief, stage, lang: TALK.lang });
         TALK.name = bp.name || TALK.name;
+        if (bp.integrations && bp.integrations.length) TALK.integrations = bp.integrations;
         if (bp.sketch && (bp.sketch.nodes || []).length) renderFlow(bp.sketch);
         const c = CONF[Math.min(stage, 5)]; $$("tfPct").textContent = c + "%"; $$("tfBar").style.width = c + "%";
         explanation = bp.explanation || explanation;
@@ -756,6 +767,7 @@ function openTalk() {
       if (!TALK) return;
       TALK.state = r.state || TALK.state; TALK.phase = r.phase;
       if (r.sketch && (r.sketch.nodes || []).length) renderFlow(r.sketch);
+      if (r.sketch && (r.sketch.integrations || []).length) TALK.integrations = r.sketch.integrations;
       if (r.notepad) showNote(r.notepad);
       if (typeof r.stage === "number") $$("tfStep").textContent = STEP(r.stage);
       updateNow(r.reply, r.confidence);
