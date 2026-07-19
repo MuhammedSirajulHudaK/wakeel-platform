@@ -714,7 +714,7 @@ function openTalk() {
       if ((a.brief || "").trim() && stage >= 1) {
         const bp = await api("POST", "blueprint", { brief: a.brief, stage, lang: TALK.lang });
         TALK.name = bp.name || TALK.name;
-        if (bp.integrations && bp.integrations.length) TALK.integrations = bp.integrations;
+        if (bp.integrations && bp.integrations.length) { TALK.integrations = bp.integrations; showConnect(); }
         if (bp.sketch && (bp.sketch.nodes || []).length) renderFlow(bp.sketch);
         const c = CONF[Math.min(stage, 5)]; $$("tfPct").textContent = c + "%"; $$("tfBar").style.width = c + "%";
         explanation = bp.explanation || explanation;
@@ -767,7 +767,7 @@ function openTalk() {
       if (!TALK) return;
       TALK.state = r.state || TALK.state; TALK.phase = r.phase;
       if (r.sketch && (r.sketch.nodes || []).length) renderFlow(r.sketch);
-      if (r.sketch && (r.sketch.integrations || []).length) TALK.integrations = r.sketch.integrations;
+      if (r.sketch && (r.sketch.integrations || []).length) { TALK.integrations = r.sketch.integrations; showConnect(); }
       if (r.notepad) showNote(r.notepad);
       if (typeof r.stage === "number") $$("tfStep").textContent = STEP(r.stage);
       updateNow(r.reply, r.confidence);

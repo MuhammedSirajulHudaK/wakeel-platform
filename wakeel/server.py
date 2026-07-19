@@ -2036,7 +2036,9 @@ VOICE_SYS = (
     "{\"reply\":\"<what to say out loud: briefly explain what you added on the left, then ask ONLY the next "
     "question>\",\"stage\":<0-5>,\"brief\":\"<cumulative plain-language description of the whole job so "
     "far>\",\"notepad\":\"<short notepad item for this answer>\",\"done\":<true only once stage 5 is "
-    "reached>}. Never jump ahead or ask two questions at once."
+    "reached>}. Never jump ahead or ask two questions at once. When the work touches an app the assistant "
+    "will use (a Google Sheet, Gmail, a drive, a calendar), name it plainly and once gently mention the user "
+    "can link it with the buttons on the right so it can actually do the work."
 )
 # 2) Agent blueprint prompt (verbatim), adapted to emit JSON blocks.
 BLUEPRINT_SYS = (
@@ -2240,7 +2242,11 @@ REALTIME_INSTRUCTIONS = (
     "After every substantive answer, call record_interview_step before asking the next question. Send a "
     "cumulative plain-language brief, a short notepad item, and the exact stage. After the tool returns, "
     "briefly explain what changed using its explanation field, then ask only the next question. Never jump "
-    "ahead or ask two questions at once."
+    "ahead or ask two questions at once.\n\n"
+    "# Connecting the apps\n"
+    "When the work touches an app the assistant will use (a Google Sheet, Gmail, a drive, a calendar), name "
+    "it plainly and, ONCE, gently let the user know they can link it with the buttons on the right so their "
+    "assistant can actually do the work — then keep the conversation flowing. Don't dwell on it."
 )
 REALTIME_WARMUP = (
     "Begin the warm-up now. Greet the user calmly, reassure them that there is nothing technical to "
