@@ -609,7 +609,7 @@ function openTalk() {
         <div class="rf-stage" id="tfStage">
           <div class="rf-world" id="tfWorld"><svg class="rf-wires" id="tfWires"></svg></div>
           <div class="tf-empty" id="tfEmpty">🎙️ ${L("Your flow will build itself as you talk", "سيُبنى مخططك أثناء حديثك")}</div>
-          <div class="tf-building" id="tfBuilding" hidden><div class="spin"></div><div class="tfb-t">${L("Building your real agent…", "أبني وكيلك الحقيقي…")}</div><div class="tfb-s">${L("Wiring it up in the backend — about a minute", "أوصله في الخلفية — حوالي دقيقة")}</div></div>
+          <div class="tf-building" id="tfBuilding" hidden><div class="tfb-dots"><i></i><i></i><i></i></div><div class="tfb-t">${L("Building your real agent…", "أبني وكيلك الحقيقي…")}</div><div class="tfb-s">${L("Wiring it up in the backend — about a minute", "أوصله في الخلفية — حوالي دقيقة")}</div><div class="tfb-bar"><em></em></div></div>
           <div class="rf-ctrls" id="tfCtrls"><button id="tfZi" title="Zoom in">${SVGI.plus}</button><button id="tfZo" title="Zoom out">${SVGI.minus}</button><button id="tfZf" title="Fit">${SVGI.expand}</button></div>
         </div>
         <aside class="tf-voice">

@@ -1161,3 +1161,14 @@ textarea.input{padding:12px 14px;min-height:auto;resize:none}
 .tf-connect button{border:1px solid var(--line);background:var(--bg);color:var(--text);font:inherit;font-size:12.5px;font-weight:650;padding:7px 11px;border-radius:9px;cursor:pointer}
 .tf-connect button:hover{border-color:#3ee08a}
 .tf-connect button.done{color:#3ee08a;border-color:#3ee08a}
+
+/* calmer build indicator — soft pulsing dots + smooth indeterminate bar (no spinner) */
+.tf-building .tfb-dots{display:flex;gap:9px}
+.tf-building .tfb-dots i{width:9px;height:9px;border-radius:50%;background:#3ee08a;opacity:.35;animation:tfbdot 1.4s ease-in-out infinite}
+.tf-building .tfb-dots i:nth-child(2){animation-delay:.2s}
+.tf-building .tfb-dots i:nth-child(3){animation-delay:.4s}
+@keyframes tfbdot{0%,100%{opacity:.3;transform:scale(.85)}50%{opacity:1;transform:scale(1)}}
+.tf-building .tfb-bar{width:200px;max-width:60%;height:5px;border-radius:99px;background:var(--panel-3);overflow:hidden;margin-top:4px}
+.tf-building .tfb-bar em{display:block;width:38%;height:100%;border-radius:99px;background:linear-gradient(90deg,transparent,#3ee08a,transparent);animation:tfbslide 1.5s ease-in-out infinite}
+@keyframes tfbslide{0%{transform:translateX(-120%)}100%{transform:translateX(320%)}}
+@media (prefers-reduced-motion:reduce){.tf-building .tfb-dots i,.tf-building .tfb-bar em{animation:none}.tf-building .tfb-bar em{width:100%;opacity:.6}}
