@@ -626,6 +626,7 @@ function openTalk() {
           <div class="tf-mic-wrap"><button class="tf-mic idle" id="tfMic" title="${L("Tap and speak", "اضغط وتحدّث")}">🎤</button>
             <span class="tf-wave" id="tfWave"><i></i><i></i><i></i><i></i><i></i></span></div>
           <div class="tf-status" id="tfStatus"></div>
+          <div class="tf-inputs" id="tfInputs"><button id="tfSheet">📊 ${L("Link your sheet", "اربط جدولك")}</button><button id="tfSop">📄 ${L("Add rules (SOP)", "أضف القواعد (SOP)")}</button></div>
           <div class="tf-connect" id="tfConnect" hidden></div>
           <div class="tf-fallback"><input id="tfInput" placeholder="${L("or type your answer…", "أو اكتب إجابتك…")}"/><button id="tfSend">➤</button></div>
           <div class="tf-foot">🛡️ ${L("Nothing runs until you open & publish it.", "لا شيء يعمل حتى تفتحه وتنشره.")}</div>
@@ -633,7 +634,7 @@ function openTalk() {
       </div>
     </div>`;
   document.body.appendChild(ov);
-  TALK = { state: {}, lang: ar ? "ar" : "en", recog: null, busy: false, speaking: false, built: false, ctl: null };
+  TALK = { state: {}, lang: ar ? "ar" : "en", recog: null, busy: false, speaking: false, built: false, ctl: null, d: {} };
   const $$ = (id) => ov.querySelector("#" + id);
   const audio = $$("tkAudio");
   const setStatus = (s) => { $$("tfStatus").textContent = s || ""; };
@@ -675,7 +676,7 @@ function openTalk() {
     $$("tfEmpty").style.display = "none"; $$("tfBuilding").hidden = false;
     const ob0 = $$("tfOpen"); ob0.hidden = false; ob0.disabled = true; ob0.textContent = L("Building…", "أبني…");
     try {
-      const bd = await api("POST", "talk-build", { brief: brief || TALK.brief || "", name: TALK.name || "", lang: TALK.lang });
+      const bd = await api("POST", "talk-build", { brief: brief || TALK.brief || "", name: TALK.name || "", lang: TALK.lang, sheet: (TALK.d || {}).sheet || null, sop: (TALK.d || {}).sop || null });
       if (!TALK) return;
       $$("tfBuilding").hidden = true; ob0.disabled = false;
       if (bd.done && bd.agent_id) {
@@ -807,6 +808,9 @@ function openTalk() {
   $$("tfMic").onclick = toggleMic;
   $$("tfSend").onclick = () => { const v = $$("tfInput").value.trim(); if (v) send(v); };
   $$("tfInput").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); const v = $$("tfInput").value.trim(); if (v) send(v); } });
+  TALK.d.name = TALK.d.name || "Voice agent";
+  $$("tfSheet").onclick = () => openSheetLink(TALK.d, () => { const s = TALK.d.sheet || {}; $$("tfSheet").textContent = "✓ " + (s.title || L("Sheet linked", "تم ربط الجدول")); $$("tfSheet").classList.add("done"); });
+  $$("tfSop").onclick = () => openSopUpload(TALK.d, () => { const s = TALK.d.sop || {}; $$("tfSop").textContent = "✓ " + (s.name || L("Rules added", "أُضيفت القواعد")); $$("tfSop").classList.add("done"); });
   $$("tfClose").onclick = closeTalk;
   $$("tfReset").onclick = () => { closeTalk(); openTalk(); };
   const greet = ar ? "مرحباً، أنا وكيل. خذ نفساً — لا شيء تقني لإعداده. سأرافقك خلال يوم عمل عادي. بماذا أناديك، ودور من نتقمّص اليوم؟" : "Hi, I'm Wakeel. Take a breath—there's nothing technical to set up. I'll simply follow you through a normal workday. What should I call you, and whose role should we step into today?";

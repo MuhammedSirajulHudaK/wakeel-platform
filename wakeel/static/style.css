@@ -1172,3 +1172,7 @@ textarea.input{padding:12px 14px;min-height:auto;resize:none}
 .tf-building .tfb-bar em{display:block;width:38%;height:100%;border-radius:99px;background:linear-gradient(90deg,transparent,#3ee08a,transparent);animation:tfbslide 1.5s ease-in-out infinite}
 @keyframes tfbslide{0%{transform:translateX(-120%)}100%{transform:translateX(320%)}}
 @media (prefers-reduced-motion:reduce){.tf-building .tfb-dots i,.tf-building .tfb-bar em{animation:none}.tf-building .tfb-bar em{width:100%;opacity:.6}}
+.tf-inputs{display:flex;gap:8px}
+.tf-inputs button{flex:1;border:1px solid var(--line);background:var(--panel-3);color:var(--text);font:inherit;font-size:12.5px;font-weight:650;padding:9px 10px;border-radius:10px;cursor:pointer}
+.tf-inputs button:hover{border-color:#3ee08a}
+.tf-inputs button.done{color:#3ee08a;border-color:#3ee08a}

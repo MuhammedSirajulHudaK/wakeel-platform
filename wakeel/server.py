@@ -2175,14 +2175,23 @@ def talk(sess, text, state, lang="en"):
             "brief": state.get("brief", ""), "phase": ("complete" if done else "interview"), "state": state}
 
 
-def talk_build(sess, brief, lang="en", name=""):
-    """Build the real agent from the voice brief. Generate straight from the brief (the
-    brief is already a plain-language spec) → deploy. Skips the extra design pass for speed."""
+def talk_build(sess, brief, lang="en", name="", sheet=None, sop=None):
+    """Build the real agent from the voice brief + the linked sheet + attached SOP. Generate
+    straight from that instruction → deploy. Skips the extra design pass for speed."""
     try:
-        brief = (brief or "").strip()
-        if not brief:
+        instr = (brief or "").strip()
+        if not instr:
             return {"done": False, "error": "no brief"}
-        g = generate(sess, "workflow", brief)
+        if isinstance(sheet, dict) and sheet.get("url"):
+            instr += ("\n\nLive Google Sheet to read and update: " + sheet["url"]
+                      + (f" (tab: {sheet.get('tab')})" if sheet.get("tab") else "")
+                      + (f"; columns: {', '.join(sheet.get('columns', []))}" if sheet.get("columns") else ""))
+        if isinstance(sop, dict) and (sop.get("text") or "").strip():
+            instr += ("\n\nOFFICIAL SOP / RULES the agent MUST evaluate responses against ("
+                      + (sop.get("name") or "SOP & rules") + "). Use these exact rules to judge "
+                      "completeness and compliance, quote the relevant rule when flagging a gap, and never "
+                      "invent rules beyond these:\n" + sop["text"][:8000])
+        g = generate(sess, "workflow", instr)
         if not (g.get("graph") or {}).get("nodes"):
             return {"done": False, "error": g.get("error") or "could not build the flow"}
         nm = (name or "").strip()[:60] or "Voice-built agent"
@@ -2243,10 +2252,12 @@ REALTIME_INSTRUCTIONS = (
     "cumulative plain-language brief, a short notepad item, and the exact stage. After the tool returns, "
     "briefly explain what changed using its explanation field, then ask only the next question. Never jump "
     "ahead or ask two questions at once.\n\n"
-    "# Connecting the apps\n"
-    "When the work touches an app the assistant will use (a Google Sheet, Gmail, a drive, a calendar), name "
-    "it plainly and, ONCE, gently let the user know they can link it with the buttons on the right so their "
-    "assistant can actually do the work — then keep the conversation flowing. Don't dwell on it."
+    "# Connecting the apps, the sheet, and the rules\n"
+    "When the work involves a list or sheet, gently invite the user to link their sheet with the 'Link your "
+    "sheet' button on the right. When the work follows official rules or a policy, invite them to add it with "
+    "the 'Add rules (SOP)' button. When it uses an app (Gmail, a drive, a calendar), let them know they can "
+    "connect it with the buttons on the right. Mention each ONCE, plainly, then keep the conversation flowing "
+    "— never dwell on it."
 )
 REALTIME_WARMUP = (
     "Begin the warm-up now. Greet the user calmly, reassure them that there is nothing technical to "
@@ -3321,7 +3332,7 @@ class H(BaseHTTPRequestHandler):
                 except Exception as e:
                     return self._send(500, {"error": str(e)[:200]})
             if p == "/api/talk-build":
-                return self._send(200, talk_build(sess, b.get("brief", ""), b.get("lang", "en"), b.get("name", "")))
+                return self._send(200, talk_build(sess, b.get("brief", ""), b.get("lang", "en"), b.get("name", ""), b.get("sheet"), b.get("sop")))
             if p == "/api/knowledge":
                 r = knowledge_add(sess, b.get("name", ""), b.get("text", ""))
                 log_act(sess, "data", b.get("name", ""))
