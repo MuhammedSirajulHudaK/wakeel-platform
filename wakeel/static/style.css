@@ -1176,3 +1176,10 @@ textarea.input{padding:12px 14px;min-height:auto;resize:none}
 .tf-inputs button{flex:1;border:1px solid var(--line);background:var(--panel-3);color:var(--text);font:inherit;font-size:12.5px;font-weight:650;padding:9px 10px;border-radius:10px;cursor:pointer}
 .tf-inputs button:hover{border-color:#3ee08a}
 .tf-inputs button.done{color:#3ee08a;border-color:#3ee08a}
+
+/* build indicator: small badge in the top-right corner (not a full-canvas overlay) */
+.tf-building{position:absolute!important;top:14px!important;right:14px!important;left:auto!important;bottom:auto!important;
+  flex-direction:row!important;align-items:center;gap:9px;width:auto!important;height:auto!important;background:var(--panel);
+  border:1px solid var(--line);border-radius:11px;padding:8px 13px;z-index:6;box-shadow:0 10px 26px -12px rgba(0,0,0,.6)}
+.tf-building .tfb-t{font-size:13px;font-weight:700;margin:0}
+.tf-building .tfb-s,.tf-building .tfb-bar{display:none!important}
