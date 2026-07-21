@@ -612,6 +612,10 @@ function openTalk() {
           <div class="tf-empty" id="tfEmpty">🎙️ ${L("Your flow will build itself as you talk", "سيُبنى مخططك أثناء حديثك")}</div>
           <div class="tf-building" id="tfBuilding" hidden><div class="tfb-dots"><i></i><i></i><i></i></div><div class="tfb-t">${L("Building your real agent…", "أبني وكيلك الحقيقي…")}</div><div class="tfb-s">${L("Wiring it up in the backend — about a minute", "أوصله في الخلفية — حوالي دقيقة")}</div><div class="tfb-bar"><em></em></div></div>
           <div class="rf-ctrls" id="tfCtrls"><button id="tfZi" title="Zoom in">${SVGI.plus}</button><button id="tfZo" title="Zoom out">${SVGI.minus}</button><button id="tfZf" title="Fit">${SVGI.expand}</button></div>
+          <div class="tf-cv-tools" id="tfCvTools">
+            <div class="tf-inputs" id="tfInputs"><button id="tfSheet">📊 ${L("Link your sheet", "اربط جدولك")}</button><button id="tfSop">📄 ${L("Add rules (SOP)", "أضف القواعد (SOP)")}</button></div>
+            <div class="tf-connect" id="tfConnect" hidden></div>
+          </div>
         </div>
         <aside class="tf-voice">
           <audio id="tkAudio" autoplay class="sr-only"></audio>
@@ -627,8 +631,6 @@ function openTalk() {
           <div class="tf-mic-wrap"><button class="tf-mic idle" id="tfMic" title="${L("Tap and speak", "اضغط وتحدّث")}">🎤</button>
             <span class="tf-wave" id="tfWave"><i></i><i></i><i></i><i></i><i></i></span></div>
           <div class="tf-status" id="tfStatus"></div>
-          <div class="tf-inputs" id="tfInputs"><button id="tfSheet">📊 ${L("Link your sheet", "اربط جدولك")}</button><button id="tfSop">📄 ${L("Add rules (SOP)", "أضف القواعد (SOP)")}</button></div>
-          <div class="tf-connect" id="tfConnect" hidden></div>
           <div class="tf-fallback"><input id="tfInput" placeholder="${L("or type your answer…", "أو اكتب إجابتك…")}"/><button id="tfSend">➤</button></div>
           <div class="tf-foot">🛡️ ${L("Nothing runs until you open & publish it.", "لا شيء يعمل حتى تفتحه وتنشره.")}</div>
         </aside>
