@@ -601,6 +601,7 @@ function openTalk() {
         <div class="ctrls">
           <span class="tf-badge" id="tfBadge">🟢 ${L("Natural voice", "صوت طبيعي")}</span>
           <button class="draft-btn ghost" id="tfReset">↺ ${L("Start over", "ابدأ من جديد")}</button>
+          <button class="draft-btn ghost" id="tfDeploy" hidden>${IC.bolt || "🚀"} ${L("Deploy", "نشر")}</button>
           <button class="btn primary sm" id="tfOpen" hidden>${L("Open agent", "افتح الوكيل")}</button>
           <button class="draft-btn ghost" id="tfClose">✕</button>
         </div>
@@ -705,7 +706,20 @@ function openTalk() {
   const gateConnectors = async (agentId) => {
     const needed = neededSvcs();
     const ob = $$("tfOpen"), c = $$("tfConnect");
-    const goTest = () => { ob.hidden = false; ob.disabled = false; ob.dataset.mode = "open"; ob.textContent = L("Test it", "جرّبه"); ob.onclick = () => { closeTalk(); openAgent(agentId, "flow"); }; };
+    const goTest = () => {
+      ob.hidden = false; ob.disabled = false; ob.dataset.mode = "open"; ob.textContent = L("Test it", "جرّبه");
+      ob.onclick = () => { closeTalk(); openAgent(agentId, "flow"); };
+      const dp = $$("tfDeploy"); dp.hidden = false; dp.disabled = false;
+      dp.onclick = async () => {
+        const o = dp.innerHTML; dp.disabled = true; dp.textContent = L("Deploying…", "جارٍ النشر…");
+        try {
+          await api("POST", "publish", { app_id: agentId });
+          dp.textContent = "✓ " + L("Deployed", "تم النشر");
+          const line = L("Deployed — it's live now. Its triggers and the API run this version.", "تم النشر — أصبح مباشراً الآن. تعمل مشغّلاته وواجهته بهذه النسخة.");
+          updateNow(line, 100); speak(line);
+        } catch (e) { dp.disabled = false; dp.innerHTML = o; }
+      };
+    };
     let connected = new Set(); try { const s = await api("GET", "services"); connected = new Set(s.connected || []); } catch (e) {}
     const missing = () => needed.filter(n => !connected.has(n.key));
     if (!needed.length) { goTest(); c.hidden = true; return; }
@@ -723,7 +737,7 @@ function openTalk() {
     const recheck = async () => {
       try { const s = await api("GET", "services"); connected = new Set(s.connected || []); } catch (e) {}
       render();
-      if (!missing().length) { const ok = L("Great — everything's connected. Tap Test it to run it.", "رائع — كل شيء متصل. اضغط جرّبه لتشغيله."); updateNow(ok, 100); speak(ok); goTest(); }
+      if (!missing().length) { const ok = L("Great — everything's connected. Tap Test it to try it, or Deploy to make it live.", "رائع — كل شيء متصل. اضغط جرّبه للتجربة، أو نشر لجعله مباشراً."); updateNow(ok, 100); speak(ok); goTest(); }
     };
     render();
   };
