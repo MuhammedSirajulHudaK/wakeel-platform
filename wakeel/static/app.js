@@ -685,22 +685,47 @@ function openTalk() {
           const info = await api("GET", "app-info?id=" + bd.agent_id);
           if (info && info.graph && (info.graph.nodes || []).length) { $$("tfEmpty").style.display = "none"; TALK.ctl = buildRailwayFlow("tfStage", "tfWorld", "tfWires", info.graph); wireZoom(); $$("tfCtrls").addEventListener("mousedown", e => e.stopPropagation()); }
         } catch (e) {}
-        updateNow((ar ? "تم! " : "Done! ") + (bd.name || "Your agent") + (ar ? " جاهز — هذا هو المخطط الحقيقي." : " is ready — this is the real agent."), 100); await speak((ar ? "تم بناء " : "I've built ") + (bd.name || "your agent") + (ar ? "." : "."));
+        updateNow("Done! " + (bd.name || "Your agent") + " is ready — this is the real agent.", 100); await speak("I've built " + (bd.name || "your agent") + ".");
         $$("tfSub").textContent = (bd.name || "Your agent") + " — " + L("real agent, ready", "وكيل حقيقي، جاهز");
-        const ob = $$("tfOpen"); ob.hidden = false; ob.dataset.mode = "open"; ob.textContent = L("Open agent", "افتح الوكيل"); ob.onclick = () => { closeTalk(); openAgent(bd.agent_id, "flow"); };
-        showConnect();
         setState("idle", L("Ready", "جاهز")); setStatus("");
+        await gateConnectors(bd.agent_id);   // MANDATORY: connect required services before Test
       } else { TALK.built = false; ob0.textContent = L("Build agent", "ابنِ الوكيل"); setState("idle"); setStatus((L("Couldn't build that: ", "تعذّر البناء: ")) + (bd.error || "try again")); }
     } catch (e) { if (TALK) { TALK.built = false; $$("tfBuilding").hidden = true; const o = $$("tfOpen"); o.disabled = false; o.textContent = L("Build agent", "ابنِ الوكيل"); setState("idle"); setStatus(L("Build failed — tap Build agent to retry", "فشل البناء — اضغط ابنِ الوكيل للمحاولة")); } }
   };
   const showBuildBtn = () => { const ob = $$("tfOpen"); if (TALK.built || ob.dataset.mode === "open") return; ob.hidden = false; ob.dataset.mode = "build"; ob.textContent = L("Build agent", "ابنِ الوكيل"); ob.onclick = () => doBuild(TALK.brief || ""); };
   const SVC_MATCH = [[/sheet/i, "sheets", "Google Sheets"], [/gmail|e-?mail|inbox/i, "gmail", "Gmail"], [/drive/i, "drive", "Google Drive"], [/calendar/i, "calendar", "Google Calendar"]];
-  const showConnect = () => {
-    const svcs = []; (TALK.integrations || []).forEach(x => SVC_MATCH.forEach(([re, key, label]) => { if (re.test(x) && !svcs.find(s => s.key === key)) svcs.push({ key, label }); }));
-    const c = $$("tfConnect"); if (!svcs.length) { c.hidden = true; return; }
+  const neededSvcs = () => { const out = []; (TALK.integrations || []).forEach(x => SVC_MATCH.forEach(([re, key, label]) => { if (re.test(x) && !out.find(o => o.key === key)) out.push({ key, label }); })); return out; };
+  const showConnect = () => {   // non-mandatory hint during the conversation
+    const svcs = neededSvcs(); const c = $$("tfConnect"); if (!svcs.length) { c.hidden = true; return; }
     c.hidden = false;
     c.innerHTML = `<small>${L("Connect these so it can run:", "اربط هذه ليعمل:")}</small>` + svcs.map(s => `<button data-svc="${s.key}">🔗 ${esc(s.label)}</button>`).join("");
     c.querySelectorAll("button").forEach(b => b.onclick = () => { const lbl = b.textContent; b.textContent = "…"; connectSvc(b.dataset.svc, () => { b.textContent = "✓ " + lbl.replace(/^🔗 /, ""); b.disabled = true; b.classList.add("done"); }); });
+  };
+  // MANDATORY gate after build: connect the required services before Test is available.
+  const gateConnectors = async (agentId) => {
+    const needed = neededSvcs();
+    const ob = $$("tfOpen"), c = $$("tfConnect");
+    const goTest = () => { ob.hidden = false; ob.disabled = false; ob.dataset.mode = "open"; ob.textContent = L("Test it", "جرّبه"); ob.onclick = () => { closeTalk(); openAgent(agentId, "flow"); }; };
+    let connected = new Set(); try { const s = await api("GET", "services"); connected = new Set(s.connected || []); } catch (e) {}
+    const missing = () => needed.filter(n => !connected.has(n.key));
+    if (!needed.length) { goTest(); c.hidden = true; return; }
+    if (!missing().length) { goTest(); return; }
+    ob.hidden = true;  // no Test until connected
+    const line = L("Before we test it, connect " + missing().map(m => m.label).join(" and ") + " using the buttons on the right.", "قبل التجربة، اربط " + missing().map(m => m.label).join(" و ") + " من الأزرار على اليمين.");
+    updateNow(line, 100); speak(line);
+    const render = () => {
+      c.hidden = false;
+      c.innerHTML = `<small>${L("Connect to test (required):", "اربط للتجربة (مطلوب):")}</small>` + needed.map(s => connected.has(s.key)
+        ? `<button class="done" disabled>✓ ${esc(s.label)}</button>`
+        : `<button data-svc="${s.key}">🔗 ${esc(s.label)}</button>`).join("");
+      c.querySelectorAll("button[data-svc]").forEach(b => b.onclick = () => { const lbl = b.textContent; b.textContent = "…"; connectSvc(b.dataset.svc, recheck); });
+    };
+    const recheck = async () => {
+      try { const s = await api("GET", "services"); connected = new Set(s.connected || []); } catch (e) {}
+      render();
+      if (!missing().length) { const ok = L("Great — everything's connected. Tap Test it to run it.", "رائع — كل شيء متصل. اضغط جرّبه لتشغيله."); updateNow(ok, 100); speak(ok); goTest(); }
+    };
+    render();
   };
   // ---- OpenAI Realtime: true speech-to-speech (S2S) ----
   const rtSend = (o) => { try { if (TALK && TALK.dc && TALK.dc.readyState === "open") TALK.dc.send(JSON.stringify(o)); } catch (e) {} };
