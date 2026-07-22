@@ -2205,6 +2205,34 @@ def talk_build(sess, brief, lang="en", name="", sheet=None, sop=None):
         return {"done": False, "error": str(e)[:200]}
 
 
+# ---- One-tap demo sample: the MoHRE registry sheet + SOP ---------------------
+SAMPLE_SHEET_URL = os.environ.get("WAKEEL_SAMPLE_SHEET",
+                                  "https://docs.google.com/spreadsheets/d/1oBcqv5PM7M9_qwuZrpObMxlNZdzyY49ENQNvLcZE4co/edit")
+SAMPLE_COLUMNS = ["Business Name", "Contact Email", "Sector", "Compliance Status", "Last Outreach Date",
+                  "Last Response Date", "Assigned Officer", "Notes", "Next Action"]
+
+
+def sample_demo():
+    sop_text = ""
+    try:
+        with open(os.path.join(HERE, "sample_sop.md"), encoding="utf-8") as f:
+            sop_text = f.read()
+    except Exception:
+        pass
+    return {
+        "sop": {"name": "MoHRE Emiratization SOP", "text": sop_text},
+        "sheet": {"url": SAMPLE_SHEET_URL, "title": "MoHRE Emiratization Registry (Sample)",
+                  "tab": "Registry", "columns": SAMPLE_COLUMNS},
+        "integrations": ["Google Sheets", "Gmail"],
+        "name": "MoHRE Emiratization Compliance Agent",
+        "brief": ("A MoHRE Emiratization compliance assistant: read the business registry sheet, and for each "
+                  "business decide the next action against the SOP (send the initial report request, send a "
+                  "follow-up reminder, request the specific missing items, or escalate to an officer), draft "
+                  "the email in a professional MoHRE tone quoting the relevant SOP rule, update the tracking "
+                  "status, and let a human officer approve any sensitive action before anything is sent."),
+    }
+
+
 # ---- Natural voice via OpenAI TTS (reliable, works in every browser) --------
 TTS_MODEL = os.environ.get("TTS_MODEL", "gpt-4o-mini-tts")
 
@@ -3058,6 +3086,8 @@ class H(BaseHTTPRequestHandler):
             return self._send(200, {"ok": True, "sessions": len(SESSIONS), "asset_v": self._asset_version()})
         if p == "/api/realtime":
             return self._send(200, realtime_config())
+        if p == "/api/sample-demo":
+            return self._send(200, sample_demo())
         if p == "/api/oauth/google/callback":
             # top-level redirect back from Google — no session guard (uses signed state)
             q = dict(x.split("=", 1) for x in (self.path.split("?", 1) + [""])[1].split("&") if "=" in x)

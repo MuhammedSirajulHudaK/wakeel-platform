@@ -613,6 +613,7 @@ function openTalk() {
           <div class="tf-building" id="tfBuilding" hidden><div class="tfb-dots"><i></i><i></i><i></i></div><div class="tfb-t">${L("Building your real agent…", "أبني وكيلك الحقيقي…")}</div><div class="tfb-s">${L("Wiring it up in the backend — about a minute", "أوصله في الخلفية — حوالي دقيقة")}</div><div class="tfb-bar"><em></em></div></div>
           <div class="rf-ctrls" id="tfCtrls"><button id="tfZi" title="Zoom in">${SVGI.plus}</button><button id="tfZo" title="Zoom out">${SVGI.minus}</button><button id="tfZf" title="Fit">${SVGI.expand}</button></div>
           <div class="tf-cv-tools" id="tfCvTools">
+            <button class="tf-sample" id="tfSample">📋 ${L("Use sample (MoHRE demo)", "استخدم عيّنة (تجربة MoHRE)")}</button>
             <div class="tf-inputs" id="tfInputs"><button id="tfSheet">📊 ${L("Link your sheet", "اربط جدولك")}</button><button id="tfSop">📄 ${L("Add rules (SOP)", "أضف القواعد (SOP)")}</button></div>
             <div class="tf-connect" id="tfConnect" hidden></div>
           </div>
@@ -850,6 +851,19 @@ function openTalk() {
   $$("tfSend").onclick = () => { const v = $$("tfInput").value.trim(); if (v) send(v); };
   $$("tfInput").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); const v = $$("tfInput").value.trim(); if (v) send(v); } });
   TALK.d.name = TALK.d.name || "Voice agent";
+  $$("tfSample").onclick = async () => {
+    const b = $$("tfSample"); b.disabled = true; b.textContent = L("Loading sample…", "جارٍ تحميل العيّنة…");
+    try {
+      const r = await api("GET", "sample-demo");
+      TALK.d.sop = r.sop; TALK.d.sheet = r.sheet; TALK.d.name = r.name;
+      TALK.name = r.name; TALK.brief = r.brief; TALK.integrations = r.integrations || [];
+      $$("tfSop").textContent = "✓ " + (r.sop.name || "SOP"); $$("tfSop").classList.add("done"); $$("tfSop").disabled = true;
+      $$("tfSheet").textContent = "✓ " + (r.sheet.title || "Sheet"); $$("tfSheet").classList.add("done"); $$("tfSheet").disabled = true;
+      b.textContent = "✓ " + L("Sample loaded", "تم تحميل العيّنة"); b.classList.add("done");
+      const line = L("Loaded the MoHRE sample — the registry sheet and the SOP rules. Tap Build agent to create it.", "تم تحميل عيّنة MoHRE — جدول السجل وقواعد الـ SOP. اضغط ابنِ الوكيل لإنشائه.");
+      updateNow(line, 60); speak(line); showBuildBtn();
+    } catch (e) { b.disabled = false; b.textContent = "📋 " + L("Use sample (MoHRE demo)", "استخدم عيّنة (تجربة MoHRE)"); }
+  };
   $$("tfSheet").onclick = () => openSheetLink(TALK.d, () => { const s = TALK.d.sheet || {}; $$("tfSheet").textContent = "✓ " + (s.title || L("Sheet linked", "تم ربط الجدول")); $$("tfSheet").classList.add("done"); });
   $$("tfSop").onclick = () => openSopUpload(TALK.d, () => { const s = TALK.d.sop || {}; $$("tfSop").textContent = "✓ " + (s.name || L("Rules added", "أُضيفت القواعد")); $$("tfSop").classList.add("done"); });
   $$("tfClose").onclick = closeTalk;

@@ -1190,3 +1190,7 @@ textarea.input{padding:12px 14px;min-height:auto;resize:none}
 .tf-cv-tools .tf-inputs{display:flex;gap:8px}
 .tf-cv-tools .tf-inputs button{flex:0 0 auto;background:var(--panel);box-shadow:0 10px 26px -12px rgba(0,0,0,.6)}
 .tf-cv-tools .tf-connect{margin:0;background:var(--panel);box-shadow:0 10px 26px -12px rgba(0,0,0,.6);max-width:520px}
+.tf-sample{border:1px solid #3ee08a;background:linear-gradient(180deg,rgba(62,224,138,.16),rgba(62,224,138,.04));color:var(--text);font:inherit;font-size:13px;font-weight:750;padding:9px 15px;border-radius:10px;cursor:pointer;box-shadow:0 10px 26px -12px rgba(0,0,0,.6)}
+.tf-sample:hover{border-color:#3ee08a}
+.tf-sample.done{background:#3ee08a;color:#04240f}
+.tf-sample:disabled{opacity:.75;cursor:default}
