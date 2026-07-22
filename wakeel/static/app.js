@@ -723,6 +723,8 @@ function openTalk() {
         } catch (e) { dp.disabled = false; dp.innerHTML = o; }
       };
     };
+    // Sample/demo: don't block Test+Deploy on real OAuth — go straight through, connectors stay optional.
+    if (TALK.sampleMode) { goTest(); showConnect(); return; }
     let connected = new Set(); try { const s = await api("GET", "services"); connected = new Set(s.connected || []); } catch (e) {}
     const missing = () => needed.filter(n => !connected.has(n.key));
     if (!needed.length) { goTest(); c.hidden = true; return; }
@@ -856,7 +858,7 @@ function openTalk() {
     try {
       const r = await api("GET", "sample-demo");
       TALK.d.sop = r.sop; TALK.d.sheet = r.sheet; TALK.d.name = r.name;
-      TALK.name = r.name; TALK.brief = r.brief; TALK.integrations = r.integrations || [];
+      TALK.name = r.name; TALK.brief = r.brief; TALK.integrations = r.integrations || []; TALK.sampleMode = true;
       $$("tfSop").textContent = "✓ " + (r.sop.name || "SOP"); $$("tfSop").classList.add("done"); $$("tfSop").disabled = true;
       $$("tfSheet").textContent = "✓ " + (r.sheet.title || "Sheet"); $$("tfSheet").classList.add("done"); $$("tfSheet").disabled = true;
       b.textContent = "✓ " + L("Sample loaded", "تم تحميل العيّنة"); b.classList.add("done");
