@@ -1197,6 +1197,7 @@ textarea.input{padding:12px 14px;min-height:auto;resize:none}
 
 /* ---- Talk: post-build launch popup (connect → sample data → test → deploy) ---- */
 .tf-launch{position:absolute;left:0;right:0;bottom:0;z-index:20;display:flex;justify-content:center;padding:0 14px 14px;pointer-events:none;background:linear-gradient(0deg,rgba(6,10,16,.62) 34%,rgba(6,10,16,.12) 78%,transparent)}
+.talk-ov [hidden]{display:none!important}  /* class selectors were overriding the hidden attribute */
 .tf-lcard{pointer-events:auto;position:relative;width:min(520px,96%);max-height:calc(100% - 20px);overflow:auto;background:var(--panel,#0f1720);border:1px solid var(--line,#22323f);border-radius:16px;padding:18px 20px;box-shadow:0 30px 80px -20px rgba(0,0,0,.75);animation:tflIn .3s cubic-bezier(.2,.8,.2,1)}
 @keyframes tflIn{from{transform:translateY(18px);opacity:0}to{transform:translateY(0);opacity:1}}
 .tf-lx{position:absolute;top:12px;right:12px;width:28px;height:28px;border-radius:8px;border:1px solid var(--line,#22323f);background:transparent;color:var(--muted,#8aa);cursor:pointer;font-size:14px}
