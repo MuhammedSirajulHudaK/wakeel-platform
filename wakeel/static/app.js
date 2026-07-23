@@ -616,7 +616,7 @@ function openTalk() {
             <div class="tf-lcard">
               <button class="tf-lx" id="tfLx" title="${L("Keep editing the flow", "تابع تعديل المخطط")}">✕</button>
               <div class="tf-lh"><span class="tf-lic">✅</span>
-                <div><b id="tfLName">${L("Your agent", "وكيلك")}</b><small>${L("is ready — connect it, test it, then go live.", "جاهز — اربطه، جرّبه، ثم انشره.")}</small></div>
+                <div><b id="tfLName">${L("Your agent", "وكيلك")}</b><small>${L("built — your flow is above. Now connect it, test it, then go live.", "تم البناء — مخططك بالأعلى. الآن اربطه، جرّبه، ثم انشره.")}</small></div>
               </div>
               <ol class="tf-steps2">
                 <li class="tf-s2" id="tfLs1"><span class="tf-sn2">1</span>
@@ -772,14 +772,16 @@ function openTalk() {
   const openLaunch = (agentId, name) => {
     TALK.agentId = agentId;
     $$("tfLName").textContent = name || L("Your agent", "وكيلك");
-    $$("tfLaunch").hidden = false;
     renderConnect(neededSvcs());
     markStep(2, !!((TALK.d || {}).sheet));
     $$("tfTest").onclick = () => runTest(agentId);
     $$("tfLDeploy").onclick = () => doDeploy(agentId, $$("tfLDeploy"));
     $$("tfLx").onclick = () => { $$("tfLaunch").hidden = true; };
-    const line = L("Your agent is built. Connect the apps it needs, add some data, and run a quick test — then deploy.", "تم بناء وكيلك. اربط التطبيقات المطلوبة، أضف بيانات، وشغّل تجربة سريعة — ثم انشر.");
+    // Show the finished flow FIRST — frame it so the user sees the real agent — then reveal the popup.
+    try { TALK.ctl && TALK.ctl.fit(); } catch (e) {}
+    const line = L("Here's your flow — this is the real agent. Now let's connect it, test it, then deploy.", "هذا مخططك — هذا هو الوكيل الحقيقي. الآن لنربطه، ونجرّبه، ثم ننشره.");
     updateNow(line, 100); speak(line);
+    setTimeout(() => { if (TALK && TALK.agentId === agentId) { $$("tfLaunch").hidden = false; try { TALK.ctl && TALK.ctl.fit(); } catch (e) {} } }, 1100);
   };
   // ---- OpenAI Realtime: true speech-to-speech (S2S) ----
   const rtSend = (o) => { try { if (TALK && TALK.dc && TALK.dc.readyState === "open") TALK.dc.send(JSON.stringify(o)); } catch (e) {} };
