@@ -612,10 +612,30 @@ function openTalk() {
           <div class="tf-empty" id="tfEmpty">🎙️ ${L("Your flow will build itself as you talk", "سيُبنى مخططك أثناء حديثك")}</div>
           <div class="tf-building" id="tfBuilding" hidden><div class="tfb-dots"><i></i><i></i><i></i></div><div class="tfb-t">${L("Building your real agent…", "أبني وكيلك الحقيقي…")}</div><div class="tfb-s">${L("Wiring it up in the backend — about a minute", "أوصله في الخلفية — حوالي دقيقة")}</div><div class="tfb-bar"><em></em></div></div>
           <div class="rf-ctrls" id="tfCtrls"><button id="tfZi" title="Zoom in">${SVGI.plus}</button><button id="tfZo" title="Zoom out">${SVGI.minus}</button><button id="tfZf" title="Fit">${SVGI.expand}</button></div>
-          <div class="tf-cv-tools" id="tfCvTools">
-            <button class="tf-sample" id="tfSample">📋 ${L("Use sample (MoHRE demo)", "استخدم عيّنة (تجربة MoHRE)")}</button>
-            <div class="tf-inputs" id="tfInputs"><button id="tfSheet">📊 ${L("Link your sheet", "اربط جدولك")}</button><button id="tfSop">📄 ${L("Add rules (SOP)", "أضف القواعد (SOP)")}</button></div>
-            <div class="tf-connect" id="tfConnect" hidden></div>
+          <div class="tf-launch" id="tfLaunch" hidden>
+            <div class="tf-lcard">
+              <button class="tf-lx" id="tfLx" title="${L("Keep editing the flow", "تابع تعديل المخطط")}">✕</button>
+              <div class="tf-lh"><span class="tf-lic">✅</span>
+                <div><b id="tfLName">${L("Your agent", "وكيلك")}</b><small>${L("is ready — connect it, test it, then go live.", "جاهز — اربطه، جرّبه، ثم انشره.")}</small></div>
+              </div>
+              <ol class="tf-steps2">
+                <li class="tf-s2" id="tfLs1"><span class="tf-sn2">1</span>
+                  <div class="tf-sbody"><b>${L("Connect the apps it needs", "اربط التطبيقات المطلوبة")}</b>
+                    <div class="tf-connect" id="tfConnect"></div></div></li>
+                <li class="tf-s2" id="tfLs2"><span class="tf-sn2">2</span>
+                  <div class="tf-sbody"><b>${L("Add data to test with", "أضف بيانات للتجربة")}</b>
+                    <div class="tf-drow">
+                      <button class="tf-sample" id="tfSample">📋 ${L("Use sample (MoHRE registry)", "استخدم عيّنة (سجل MoHRE)")}</button>
+                      <span class="tf-or">${L("or", "أو")}</span>
+                      <div class="tf-inputs" id="tfInputs"><button id="tfSheet">📊 ${L("Link your sheet", "اربط جدولك")}</button><button id="tfSop">📄 ${L("Add rules (SOP)", "أضف القواعد")}</button></div>
+                    </div></div></li>
+                <li class="tf-s2" id="tfLs3"><span class="tf-sn2">3</span>
+                  <div class="tf-sbody"><b>${L("Test it, then deploy", "جرّبه، ثم انشر")}</b>
+                    <div class="tf-lbtns"><button class="btn primary sm" id="tfTest">▶ ${L("Run a test", "شغّل تجربة")}</button>
+                      <button class="draft-btn ghost" id="tfLDeploy">${IC.bolt || "🚀"} ${L("Deploy — go live", "انشر — للمباشر")}</button></div>
+                    <div class="tf-tres" id="tfTestRes" hidden></div></div></li>
+              </ol>
+            </div>
           </div>
         </div>
         <aside class="tf-voice">
@@ -692,59 +712,74 @@ function openTalk() {
         updateNow("Done! " + (bd.name || "Your agent") + " is ready — this is the real agent.", 100); await speak("I've built " + (bd.name || "your agent") + ".");
         $$("tfSub").textContent = (bd.name || "Your agent") + " — " + L("real agent, ready", "وكيل حقيقي، جاهز");
         setState("idle", L("Ready", "جاهز")); setStatus("");
-        await gateConnectors(bd.agent_id);   // MANDATORY: connect required services before Test
+        ob0.hidden = true;   // the launch popup drives connect → test → deploy from here
+        openLaunch(bd.agent_id, bd.name);   // flow defined → popup: connect → sample data → test → deploy
       } else { TALK.built = false; ob0.textContent = L("Build agent", "ابنِ الوكيل"); setState("idle"); setStatus((L("Couldn't build that: ", "تعذّر البناء: ")) + (bd.error || "try again")); }
     } catch (e) { if (TALK) { TALK.built = false; $$("tfBuilding").hidden = true; const o = $$("tfOpen"); o.disabled = false; o.textContent = L("Build agent", "ابنِ الوكيل"); setState("idle"); setStatus(L("Build failed — tap Build agent to retry", "فشل البناء — اضغط ابنِ الوكيل للمحاولة")); } }
   };
   const showBuildBtn = () => { const ob = $$("tfOpen"); if (TALK.built || ob.dataset.mode === "open") return; ob.hidden = false; ob.dataset.mode = "build"; ob.textContent = L("Build agent", "ابنِ الوكيل"); ob.onclick = () => doBuild(TALK.brief || ""); };
   const SVC_MATCH = [[/sheet/i, "sheets", "Google Sheets"], [/gmail|e-?mail|inbox/i, "gmail", "Gmail"], [/drive/i, "drive", "Google Drive"], [/calendar/i, "calendar", "Google Calendar"]];
   const neededSvcs = () => { const out = []; (TALK.integrations || []).forEach(x => SVC_MATCH.forEach(([re, key, label]) => { if (re.test(x) && !out.find(o => o.key === key)) out.push({ key, label }); })); return out; };
-  const showConnect = () => {   // non-mandatory hint during the conversation
-    const svcs = neededSvcs(); const c = $$("tfConnect"); if (!svcs.length) { c.hidden = true; return; }
-    c.hidden = false;
-    c.innerHTML = `<small>${L("Connect these so it can run:", "اربط هذه ليعمل:")}</small>` + svcs.map(s => `<button data-svc="${s.key}">🔗 ${esc(s.label)}</button>`).join("");
-    c.querySelectorAll("button").forEach(b => b.onclick = () => { const lbl = b.textContent; b.textContent = "…"; connectSvc(b.dataset.svc, () => { b.textContent = "✓ " + lbl.replace(/^🔗 /, ""); b.disabled = true; b.classList.add("done"); }); });
-  };
-  // MANDATORY gate after build: connect the required services before Test is available.
-  const gateConnectors = async (agentId) => {
-    const needed = neededSvcs();
-    const ob = $$("tfOpen"), c = $$("tfConnect");
-    const goTest = () => {
-      ob.hidden = false; ob.disabled = false; ob.dataset.mode = "open"; ob.textContent = L("Test it", "جرّبه");
-      ob.onclick = () => { closeTalk(); openAgent(agentId, "flow"); };
-      const dp = $$("tfDeploy"); dp.hidden = false; dp.disabled = false;
-      dp.onclick = async () => {
-        const o = dp.innerHTML; dp.disabled = true; dp.textContent = L("Deploying…", "جارٍ النشر…");
-        try {
-          await api("POST", "publish", { app_id: agentId });
-          dp.textContent = "✓ " + L("Deployed", "تم النشر");
-          const line = L("Deployed — it's live now. Its triggers and the API run this version.", "تم النشر — أصبح مباشراً الآن. تعمل مشغّلاته وواجهته بهذه النسخة.");
-          updateNow(line, 100); speak(line);
-        } catch (e) { dp.disabled = false; dp.innerHTML = o; }
-      };
-    };
-    // Sample/demo: don't block Test+Deploy on real OAuth — go straight through, connectors stay optional.
-    if (TALK.sampleMode) { goTest(); showConnect(); return; }
+  const showConnect = () => {};  // connectors are asked in the post-build popup, not during the talk
+  const markStep = (n, done) => { const li = $$("tfLs" + n); if (li) li.classList.toggle("done", !!done); };
+  // Populate step 1 (connect) inside the launch popup — asked, but never blocks Test.
+  const renderConnect = async (needed) => {
+    const c = $$("tfConnect");
+    if (!needed.length) { c.innerHTML = `<small class="tf-cnone">${L("No apps needed — it runs on its own.", "لا حاجة لتطبيقات — يعمل من تلقاء نفسه.")}</small>`; markStep(1, true); return; }
     let connected = new Set(); try { const s = await api("GET", "services"); connected = new Set(s.connected || []); } catch (e) {}
-    const missing = () => needed.filter(n => !connected.has(n.key));
-    if (!needed.length) { goTest(); c.hidden = true; return; }
-    if (!missing().length) { goTest(); return; }
-    ob.hidden = true;  // no Test until connected
-    const line = L("Before we test it, connect " + missing().map(m => m.label).join(" and ") + " using the buttons on the right.", "قبل التجربة، اربط " + missing().map(m => m.label).join(" و ") + " من الأزرار على اليمين.");
-    updateNow(line, 100); speak(line);
-    const render = () => {
-      c.hidden = false;
-      c.innerHTML = `<small>${L("Connect to test (required):", "اربط للتجربة (مطلوب):")}</small>` + needed.map(s => connected.has(s.key)
+    const draw = () => {
+      c.innerHTML = needed.map(s => connected.has(s.key)
         ? `<button class="done" disabled>✓ ${esc(s.label)}</button>`
         : `<button data-svc="${s.key}">🔗 ${esc(s.label)}</button>`).join("");
-      c.querySelectorAll("button[data-svc]").forEach(b => b.onclick = () => { const lbl = b.textContent; b.textContent = "…"; connectSvc(b.dataset.svc, recheck); });
+      c.querySelectorAll("button[data-svc]").forEach(b => b.onclick = () => { const lbl = b.textContent; b.textContent = "…"; connectSvc(b.dataset.svc, async () => { try { const s = await api("GET", "services"); connected = new Set(s.connected || []); } catch (e) {} draw(); }); });
+      markStep(1, needed.every(s => connected.has(s.key)));
     };
-    const recheck = async () => {
-      try { const s = await api("GET", "services"); connected = new Set(s.connected || []); } catch (e) {}
-      render();
-      if (!missing().length) { const ok = L("Great — everything's connected. Tap Test it to try it, or Deploy to make it live.", "رائع — كل شيء متصل. اضغط جرّبه للتجربة، أو نشر لجعله مباشراً."); updateNow(ok, 100); speak(ok); goTest(); }
-    };
-    render();
+    draw();
+  };
+  const doDeploy = async (agentId, dp) => {
+    const o = dp.innerHTML; dp.disabled = true; dp.textContent = L("Deploying…", "جارٍ النشر…");
+    try {
+      await api("POST", "publish", { app_id: agentId });
+      dp.textContent = "✓ " + L("Deployed — live", "تم النشر — مباشر"); dp.classList.add("done");
+      const line = L("Deployed — it's live now. Its triggers and the API run this version.", "تم النشر — أصبح مباشراً الآن. تعمل مشغّلاته وواجهته بهذه النسخة.");
+      updateNow(line, 100); speak(line);
+    } catch (e) { dp.disabled = false; dp.innerHTML = o; }
+  };
+  const runTest = async (agentId) => {
+    const d = TALK.d || {}; const url = (d.sheet || {}).url || ""; const sop = (d.sop || {}).text || "";
+    const res = $$("tfTestRes"), btn = $$("tfTest");
+    if (!url) { markStep(2, false); const m = L("Add some data first — tap “Use sample”, or link your own sheet.", "أضف بيانات أولاً — اضغط «استخدم عيّنة» أو اربط جدولك."); res.hidden = false; res.innerHTML = `<div class="tf-tnote">👆 ${m}</div>`; updateNow(m, 100); speak(m); return; }
+    const o = btn.innerHTML; btn.disabled = true; btn.textContent = L("Running…", "يشغّل…");
+    res.hidden = false; res.innerHTML = `<div class="tf-tnote"><span class="spin"></span> ${L("Reading the sheet and drafting actions against your rules…", "يقرأ الجدول ويسوّد الإجراءات وفق قواعدك…")}</div>`;
+    try {
+      const r = await api("POST", "run-live-plan", { url, sop });
+      if (r.ok === false) throw new Error(r.error || "couldn't read the sheet");
+      const acts = (r.actions || []).slice(0, 4);
+      if (!acts.length) { res.innerHTML = `<div class="tf-tnote">✅ ${L("It ran — nothing needs action right now.", "تم التشغيل — لا شيء يحتاج إجراءً الآن.")}</div>`; }
+      else {
+        res.innerHTML = `<div class="tf-tok">✅ ${L("It works — here's what it would do:", "إنه يعمل — هذا ما سيفعله:")}</div>` +
+          acts.map(a => `<div class="tf-tcard"><b>${esc(a.business || ("Row " + a.row) || "")}</b><span>${esc(a.action || "")}</span><small>${esc(a.why || a.sop_ref || "")}</small></div>`).join("");
+      }
+      markStep(3, true);
+      const line = L("The test worked — it drafted the right actions from your rules. Deploy when you're ready.", "نجحت التجربة — سوّدت الإجراءات الصحيحة من قواعدك. انشر متى شئت.");
+      updateNow(line, 100); speak(line);
+    } catch (e) {
+      res.innerHTML = `<div class="tf-tnote">⚠️ ${esc(e.message || "couldn't read the sheet")} — <a id="tfOpenB" href="#">${L("open it in the builder", "افتحه في المُنشئ")}</a></div>`;
+      const ob = res.querySelector("#tfOpenB"); if (ob) ob.onclick = (ev) => { ev.preventDefault(); closeTalk(); openAgent(agentId, "flow"); };
+    } finally { btn.disabled = false; btn.innerHTML = o; }
+  };
+  // After the flow is defined & built → the story popup: connect → sample data → test → deploy.
+  const openLaunch = (agentId, name) => {
+    TALK.agentId = agentId;
+    $$("tfLName").textContent = name || L("Your agent", "وكيلك");
+    $$("tfLaunch").hidden = false;
+    renderConnect(neededSvcs());
+    markStep(2, !!((TALK.d || {}).sheet));
+    $$("tfTest").onclick = () => runTest(agentId);
+    $$("tfLDeploy").onclick = () => doDeploy(agentId, $$("tfLDeploy"));
+    $$("tfLx").onclick = () => { $$("tfLaunch").hidden = true; };
+    const line = L("Your agent is built. Connect the apps it needs, add some data, and run a quick test — then deploy.", "تم بناء وكيلك. اربط التطبيقات المطلوبة، أضف بيانات، وشغّل تجربة سريعة — ثم انشر.");
+    updateNow(line, 100); speak(line);
   };
   // ---- OpenAI Realtime: true speech-to-speech (S2S) ----
   const rtSend = (o) => { try { if (TALK && TALK.dc && TALK.dc.readyState === "open") TALK.dc.send(JSON.stringify(o)); } catch (e) {} };
@@ -853,21 +888,22 @@ function openTalk() {
   $$("tfSend").onclick = () => { const v = $$("tfInput").value.trim(); if (v) send(v); };
   $$("tfInput").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); const v = $$("tfInput").value.trim(); if (v) send(v); } });
   TALK.d.name = TALK.d.name || "Voice agent";
+  // Step 2: sample test data — loads the registry sheet + SOP so the built agent can be tested.
   $$("tfSample").onclick = async () => {
     const b = $$("tfSample"); b.disabled = true; b.textContent = L("Loading sample…", "جارٍ تحميل العيّنة…");
     try {
       const r = await api("GET", "sample-demo");
-      TALK.d.sop = r.sop; TALK.d.sheet = r.sheet; TALK.d.name = r.name;
-      TALK.name = r.name; TALK.brief = r.brief; TALK.integrations = r.integrations || []; TALK.sampleMode = true;
+      TALK.d.sop = r.sop; TALK.d.sheet = r.sheet; TALK.sampleMode = true;
+      if (r.integrations && r.integrations.length) { TALK.integrations = r.integrations; renderConnect(neededSvcs()); }
       $$("tfSop").textContent = "✓ " + (r.sop.name || "SOP"); $$("tfSop").classList.add("done"); $$("tfSop").disabled = true;
       $$("tfSheet").textContent = "✓ " + (r.sheet.title || "Sheet"); $$("tfSheet").classList.add("done"); $$("tfSheet").disabled = true;
-      b.textContent = "✓ " + L("Sample loaded", "تم تحميل العيّنة"); b.classList.add("done");
-      const line = L("Loaded the MoHRE sample — the registry sheet and the SOP rules. Tap Build agent to create it.", "تم تحميل عيّنة MoHRE — جدول السجل وقواعد الـ SOP. اضغط ابنِ الوكيل لإنشائه.");
-      updateNow(line, 60); speak(line); showBuildBtn();
-    } catch (e) { b.disabled = false; b.textContent = "📋 " + L("Use sample (MoHRE demo)", "استخدم عيّنة (تجربة MoHRE)"); }
+      b.textContent = "✓ " + L("Sample loaded", "تم تحميل العيّنة"); b.classList.add("done"); markStep(2, true);
+      const line = L("Loaded the MoHRE sample — the registry sheet and the SOP rules. Tap Run a test to see it work.", "تم تحميل عيّنة MoHRE — جدول السجل وقواعد الـ SOP. اضغط شغّل تجربة لتراه يعمل.");
+      updateNow(line, 100); speak(line);
+    } catch (e) { b.disabled = false; b.textContent = "📋 " + L("Use sample (MoHRE registry)", "استخدم عيّنة (سجل MoHRE)"); }
   };
-  $$("tfSheet").onclick = () => openSheetLink(TALK.d, () => { const s = TALK.d.sheet || {}; $$("tfSheet").textContent = "✓ " + (s.title || L("Sheet linked", "تم ربط الجدول")); $$("tfSheet").classList.add("done"); });
-  $$("tfSop").onclick = () => openSopUpload(TALK.d, () => { const s = TALK.d.sop || {}; $$("tfSop").textContent = "✓ " + (s.name || L("Rules added", "أُضيفت القواعد")); $$("tfSop").classList.add("done"); });
+  $$("tfSheet").onclick = () => openSheetLink(TALK.d, () => { const s = TALK.d.sheet || {}; $$("tfSheet").textContent = "✓ " + (s.title || L("Sheet linked", "تم ربط الجدول")); $$("tfSheet").classList.add("done"); markStep(2, true); });
+  $$("tfSop").onclick = () => openSopUpload(TALK.d, () => { const s = TALK.d.sop || {}; $$("tfSop").textContent = "✓ " + (s.name || L("Rules added", "أُضيفت القواعد")); $$("tfSop").classList.add("done"); markStep(2, true); });
   $$("tfClose").onclick = closeTalk;
   $$("tfReset").onclick = () => { closeTalk(); openTalk(); };
   const greet = ar ? "مرحباً، أنا وكيل. خذ نفساً — لا شيء تقني لإعداده. سأرافقك خلال يوم عمل عادي. بماذا أناديك، ودور من نتقمّص اليوم؟" : "Hi, I'm Wakeel. Take a breath—there's nothing technical to set up. I'll simply follow you through a normal workday. What should I call you, and whose role should we step into today?";
