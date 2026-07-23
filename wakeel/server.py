@@ -1115,11 +1115,35 @@ def sheet_update(sess, url, row, updates):
     return {"ok": True, "updated": wrote, "row": row}
 
 
+SAMPLE_REGISTRY_FILE = os.path.join(HERE, "sample_registry.csv")
+
+
+def _sample_sheet_data(limit=12):
+    """Bundled MoHRE registry so the sample demo can run its test with no live Google read."""
+    import csv
+    try:
+        with open(SAMPLE_REGISTRY_FILE, newline="", encoding="utf-8") as f:
+            reader = [r for r in csv.reader(f) if r]
+    except Exception as e:
+        return {"ok": False, "error": "sample data unavailable: " + str(e)[:120]}
+    if len(reader) < 2:
+        return {"ok": False, "error": "sample data empty"}
+    return {"ok": True, "columns": reader[0], "rows": reader[1:limit + 1],
+            "sheet_title": "MoHRE Emiratization Registry (Sample)", "url": SAMPLE_SHEET_URL,
+            "total": len(reader) - 1}
+
+
+def _is_sample_url(url):
+    sid = _sheet_id(url)
+    return bool(sid) and sid == _sheet_id(SAMPLE_SHEET_URL)
+
+
 def run_live_plan(sess, url, sop_text="", limit=12):
     """The REAL compliance cycle (advisory): read the sheet, and for every business
     that needs action, draft the MoHRE email + recommend the next status against the
     SOP. Nothing is sent or written here — the officer approves each action."""
-    data = sheets_read(sess, url, preview=limit)
+    # The bundled sample runs without any Google connection so the demo always works.
+    data = _sample_sheet_data(limit) if _is_sample_url(url) else sheets_read(sess, url, preview=limit)
     if not data.get("ok"):
         return data
     cols, rows = data["columns"], data["rows"]
