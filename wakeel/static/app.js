@@ -706,22 +706,37 @@ function openTalk() {
   const SVC_MATCH = [[/sheet/i, "sheets", "Google Sheets"], [/gmail|e-?mail|inbox/i, "gmail", "Gmail"], [/drive/i, "drive", "Google Drive"], [/calendar/i, "calendar", "Google Calendar"]];
   const neededSvcs = () => { const out = []; (TALK.integrations || []).forEach(x => SVC_MATCH.forEach(([re, key, label]) => { if (re.test(x) && !out.find(o => o.key === key)) out.push({ key, label }); })); return out; };
   const showConnect = () => {};  // connectors are asked in the popup after the flow, not during the talk
-  // Step 1 — connect the apps the flow needs; advancing to step 2 (Create) when done.
-  const renderConnect = async (needed) => {
+  // The voice is a helping tool: it describes what to do at each step of the setup.
+  const phaseGuide = (n) => {
+    const svcs = neededSvcs().map(s => s.label);
+    if (n === 1) return svcs.length
+      ? L(`Step 1 — connect the apps it needs: ${svcs.join(" and ")}. Tap the connect buttons, sign in, and come back.`, `الخطوة 1 — اربط التطبيقات المطلوبة: ${svcs.join(" و ")}. اضغط أزرار الربط وسجّل الدخول ثم عُد.`)
+      : L("No apps are needed — go straight to creating the agent.", "لا حاجة لتطبيقات — انتقل مباشرةً لإنشاء الوكيل.");
+    if (n === 2) return L("Step 2 — tap “Create the agent”. I'll wire it up in the backend; it takes about a minute.", "الخطوة 2 — اضغط «أنشئ الوكيل». سأوصله في الخلفية؛ يستغرق حوالي دقيقة.");
+    if (n === 3) return L("Step 3 — add a sample input to test with. Tap “Use sample” for the ready MoHRE registry, or link your own sheet and rules.", "الخطوة 3 — أضف مدخلاً تجريبياً. اضغط «استخدم عيّنة» لسجل MoHRE الجاهز، أو اربط جدولك وقواعدك.");
+    if (n === 4) return L("Step 4 — tap “Run a test”. I'll read the input and draft the actions against your rules so you can see it work.", "الخطوة 4 — اضغط «شغّل تجربة». سأقرأ المدخل وأسوّد الإجراءات وفق قواعدك لتراه يعمل.");
+    if (n === 5) return L("Step 5 — when you're happy with the test, tap “Deploy” to make it live.", "الخطوة 5 — عندما تقتنع بالتجربة، اضغط «انشر» لجعله مباشراً.");
+    return "";
+  };
+  const goPhase = (n) => { setPhase(n); const g = phaseGuide(n); if (g) { updateNow(g, 100); speak(g); } };
+  // Step 1 — render the connect buttons; the connect-click callback advances to step 2 (Create).
+  // Returns whether everything needed is already connected (so the caller can skip step 1).
+  const renderConnect = async () => {
+    const needed = neededSvcs();
     const c = $$("tfConnect");
-    if (!needed.length) { c.innerHTML = `<small class="tf-cnone">${L("No apps needed — it runs on its own.", "لا حاجة لتطبيقات — يعمل من تلقاء نفسه.")}</small>`; if (TALK.phase === 1) setPhase(2); return; }
+    if (!needed.length) { c.innerHTML = `<small class="tf-cnone">${L("No apps needed — it runs on its own.", "لا حاجة لتطبيقات — يعمل من تلقاء نفسه.")}</small>`; return true; }
     let connected = new Set(); try { const s = await api("GET", "services"); connected = new Set(s.connected || []); } catch (e) {}
+    const allNow = () => needed.every(s => connected.has(s.key));
     const draw = () => {
-      const all = needed.every(s => connected.has(s.key));
       c.innerHTML = needed.map(s => connected.has(s.key)
         ? `<button class="done" disabled>✓ ${esc(s.label)}</button>`
         : `<button data-svc="${s.key}">🔗 ${esc(s.label)}</button>`).join("")
-        + (all ? "" : ` <a href="#" class="tf-later" id="tfConnLater">${L("connect later →", "اربط لاحقاً →")}</a>`);
-      c.querySelectorAll("button[data-svc]").forEach(b => b.onclick = () => { b.textContent = "…"; connectSvc(b.dataset.svc, async () => { try { const s = await api("GET", "services"); connected = new Set(s.connected || []); } catch (e) {} draw(); }); });
-      const later = c.querySelector("#tfConnLater"); if (later) later.onclick = (e) => { e.preventDefault(); if (TALK.phase === 1) setPhase(2); };
-      if (all && TALK.phase === 1) { const ok = L("Connected. Now let's create the agent.", "تم الربط. الآن لننشئ الوكيل."); updateNow(ok, 100); speak(ok); setPhase(2); }
+        + (allNow() ? "" : ` <a href="#" class="tf-later" id="tfConnLater">${L("connect later →", "اربط لاحقاً →")}</a>`);
+      c.querySelectorAll("button[data-svc]").forEach(b => b.onclick = () => { b.textContent = "…"; connectSvc(b.dataset.svc, async () => { try { const s = await api("GET", "services"); connected = new Set(s.connected || []); } catch (e) {} draw(); if (allNow() && TALK.phase === 1) { const ok = L("Connected. ", "تم الربط. "); updateNow(ok, 100); speak(ok); goPhase(2); } }); });
+      const later = c.querySelector("#tfConnLater"); if (later) later.onclick = (e) => { e.preventDefault(); if (TALK.phase === 1) goPhase(2); };
     };
     draw();
+    return allNow();
   };
   // Step 2 — create the real agent from what was gathered by voice.
   const createAgent = async () => {
@@ -743,9 +758,8 @@ function openTalk() {
         note.innerHTML = `✅ ${L("Created — the real flow is on the left.", "تم الإنشاء — المخطط الحقيقي على اليسار.")}`;
         $$("tfTest").onclick = () => runTest(bd.agent_id);
         $$("tfLDeploy").onclick = () => doDeploy(bd.agent_id, $$("tfLDeploy"));
-        setPhase(3);
-        const line = L("Your agent is created — here's the real flow. Now add a sample input and we'll test it.", "تم إنشاء وكيلك — هذا المخطط الحقيقي. الآن أضف مدخلاً تجريبياً ولنجرّبه.");
-        updateNow(line, 100); speak(line);
+        const done = L("Your agent is created — here's the real flow. ", "تم إنشاء وكيلك — هذا المخطط الحقيقي. "); updateNow(done, 100); await speak(done);
+        goPhase(3);
       } else { btn.disabled = false; btn.innerHTML = o; note.innerHTML = `⚠️ ${esc(bd.error || L("couldn't create it — try again", "تعذّر الإنشاء — أعد المحاولة"))}`; }
     } catch (e) { if (TALK) { btn.disabled = false; btn.innerHTML = o; note.innerHTML = `⚠️ ${esc(e.message || "failed — try again")}`; } }
   };
@@ -775,29 +789,42 @@ function openTalk() {
         res.innerHTML = `<div class="tf-tok">✅ ${L("It works — here's what it would do:", "إنه يعمل — هذا ما سيفعله:")}</div>` +
           acts.map(a => `<div class="tf-tcard"><b>${esc(a.business || ("Row " + a.row) || "")}</b><span>${esc(a.action || "")}</span><small>${esc(a.why || a.sop_ref || "")}</small></div>`).join("");
       }
-      setPhase(5);
-      const line = L("The test worked — it drafted the right actions from your rules. Deploy when you're ready.", "نجحت التجربة — سوّدت الإجراءات الصحيحة من قواعدك. انشر متى شئت.");
-      updateNow(line, 100); speak(line);
+      const ok = L("The test worked — it drafted the right actions from your rules. ", "نجحت التجربة — سوّدت الإجراءات الصحيحة من قواعدك. "); updateNow(ok, 100); await speak(ok);
+      goPhase(5);
     } catch (e) {
       res.innerHTML = `<div class="tf-tnote">⚠️ ${esc(e.message || "couldn't read the sheet")} — <a id="tfOpenB" href="#">${L("open it in the builder", "افتحه في المُنشئ")}</a></div>`;
       const ob = res.querySelector("#tfOpenB"); if (ob) ob.onclick = (ev) => { ev.preventDefault(); closeTalk(); openAgent(agentId, "flow"); };
     } finally { btn.disabled = false; btn.innerHTML = o; }
   };
-  // Opens once the flow is gathered by voice — the staged setup runs from here.
-  const openLaunch = () => {
+  // Opens once the user locks the finished flow — the staged, voice-guided setup runs from here.
+  const openLaunch = async () => {
     if (TALK.launchOpen) return; TALK.launchOpen = true;
     $$("tfLName").textContent = TALK.name || L("Your agent", "وكيلك");
     $$("tfCreate").onclick = createAgent;
     $$("tfLx").onclick = () => { $$("tfLaunch").hidden = true; TALK.launchOpen = false; };
     setPhase(1);
-    renderConnect(neededSvcs());
-    try { TALK.ctl && TALK.ctl.fit(); } catch (e) {}
     $$("tfLaunch").hidden = false;
-    const line = L("Your flow's ready. First, connect the apps it needs — then we'll create the agent.", "مخططك جاهز. أولاً اربط التطبيقات المطلوبة — ثم ننشئ الوكيل.");
-    updateNow(line, 100); speak(line);
+    try { TALK.ctl && TALK.ctl.fit(); } catch (e) {}
+    const allConnected = await renderConnect();
+    if (!TALK || !TALK.launchOpen) return;
+    const locked = L("Done — flow locked. Now I'll guide you through the setup, step by step. ", "تم — المخطط مقفل. الآن سأرشدك خلال الإعداد خطوة بخطوة. ");
+    updateNow(locked, 100); await speak(locked);
+    if (!TALK || !TALK.launchOpen) return;
+    goPhase(allConnected ? 2 : 1);   // skip connect if the flow needs no apps or they're already linked
   };
-  // When the voice interview has shaped the flow, offer to move into setup.
-  const showBuildBtn = () => { const ob = $$("tfOpen"); if (TALK.launchOpen || ob.dataset.mode === "setup") return; ob.hidden = false; ob.disabled = false; ob.dataset.mode = "setup"; ob.textContent = L("Flow's ready → set it up", "المخطط جاهز → جهّزه"); ob.onclick = () => { ob.hidden = true; openLaunch(); }; };
+  // When the voice interview has shaped the flow, ask if they want to add more — else offer the Done/lock button.
+  const showBuildBtn = () => {
+    const ob = $$("tfOpen");
+    if (TALK.launchOpen || ob.dataset.mode === "lock") return;
+    ob.hidden = false; ob.disabled = false; ob.dataset.mode = "lock";
+    ob.textContent = L("✓ Done — lock the flow", "✓ تم — اقفل المخطط");
+    ob.onclick = () => { ob.hidden = true; openLaunch(); };
+    if (!TALK.askedLock) {
+      TALK.askedLock = true;
+      const q = L("Your flow's taking shape. Do you want to add anything else to it? If not, tap “Done” and I'll lock it — then I'll walk you through connecting, testing and deploying.", "مخططك يتشكّل. هل تريد إضافة أي شيء آخر إليه؟ إن لا، اضغط «تم» وسأقفله — ثم سأرشدك خلال الربط والتجربة والنشر.");
+      updateNow(q, 90); speak(q);
+    }
+  };
   // ---- OpenAI Realtime: true speech-to-speech (S2S) ----
   const rtSend = (o) => { try { if (TALK && TALK.dc && TALK.dc.readyState === "open") TALK.dc.send(JSON.stringify(o)); } catch (e) {} };
   const CONF = [10, 26, 45, 64, 82, 96];
@@ -911,15 +938,15 @@ function openTalk() {
     try {
       const r = await api("GET", "sample-demo");
       TALK.d.sop = r.sop; TALK.d.sheet = r.sheet; TALK.sampleMode = true;
-      if (r.integrations && r.integrations.length) { TALK.integrations = r.integrations; renderConnect(neededSvcs()); }
+      if (r.integrations && r.integrations.length) { TALK.integrations = r.integrations; renderConnect(); }
       $$("tfSop").textContent = "✓ " + (r.sop.name || "SOP"); $$("tfSop").classList.add("done"); $$("tfSop").disabled = true;
       $$("tfSheet").textContent = "✓ " + (r.sheet.title || "Sheet"); $$("tfSheet").classList.add("done"); $$("tfSheet").disabled = true;
-      b.textContent = "✓ " + L("Sample loaded", "تم تحميل العيّنة"); b.classList.add("done"); if (TALK.phase === 3) setPhase(4);
-      const line = L("Loaded the MoHRE sample — the registry sheet and the SOP rules. Tap Run a test to see it work.", "تم تحميل عيّنة MoHRE — جدول السجل وقواعد الـ SOP. اضغط شغّل تجربة لتراه يعمل.");
-      updateNow(line, 100); speak(line);
+      b.textContent = "✓ " + L("Sample loaded", "تم تحميل العيّنة"); b.classList.add("done");
+      const line = L("Loaded the MoHRE sample — the registry sheet and the SOP rules. ", "تم تحميل عيّنة MoHRE — جدول السجل وقواعد الـ SOP. "); updateNow(line, 100); await speak(line);
+      if (TALK.phase === 3) goPhase(4); else if (TALK.phase < 4) setPhase(4);
     } catch (e) { b.disabled = false; b.textContent = "📋 " + L("Use sample (MoHRE registry)", "استخدم عيّنة (سجل MoHRE)"); }
   };
-  $$("tfSheet").onclick = () => openSheetLink(TALK.d, () => { const s = TALK.d.sheet || {}; $$("tfSheet").textContent = "✓ " + (s.title || L("Sheet linked", "تم ربط الجدول")); $$("tfSheet").classList.add("done"); if (TALK.phase === 3) setPhase(4); });
+  $$("tfSheet").onclick = () => openSheetLink(TALK.d, () => { const s = TALK.d.sheet || {}; $$("tfSheet").textContent = "✓ " + (s.title || L("Sheet linked", "تم ربط الجدول")); $$("tfSheet").classList.add("done"); if (TALK.phase === 3) goPhase(4); });
   $$("tfSop").onclick = () => openSopUpload(TALK.d, () => { const s = TALK.d.sop || {}; $$("tfSop").textContent = "✓ " + (s.name || L("Rules added", "أُضيفت القواعد")); $$("tfSop").classList.add("done"); });
   $$("tfClose").onclick = closeTalk;
   $$("tfReset").onclick = () => { closeTalk(); openTalk(); };
