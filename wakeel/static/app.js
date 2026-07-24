@@ -639,7 +639,8 @@ function openTalk() {
                     <div class="tf-tres" id="tfTestRes" hidden></div></div></li>
                 <li class="tf-s2" id="tfLs5"><span class="tf-sn2">5</span>
                   <div class="tf-sbody"><b>${L("Deploy — go live", "انشر — للمباشر")}</b>
-                    <div class="tf-lbtns"><button class="draft-btn ghost" id="tfLDeploy">${IC.bolt || "🚀"} ${L("Deploy — go live", "انشر — للمباشر")}</button></div></div></li>
+                    <div class="tf-lbtns"><button class="draft-btn ghost" id="tfLDeploy">${IC.bolt || "🚀"} ${L("Deploy — go live", "انشر — للمباشر")}</button></div>
+                    <div class="tf-tres" id="tfDeployRes" hidden></div></div></li>
               </ol>
             </div>
           </div>
@@ -764,13 +765,23 @@ function openTalk() {
       } else { btn.disabled = false; btn.innerHTML = o; note.innerHTML = `⚠️ ${esc(bd.error || L("couldn't create it — try again", "تعذّر الإنشاء — أعد المحاولة"))}`; }
     } catch (e) { if (TALK) { btn.disabled = false; btn.innerHTML = o; note.innerHTML = `⚠️ ${esc(e.message || "failed — try again")}`; } }
   };
-  // Step 5 — deploy.
+  // Step 5 — deploy, then show WHERE the live agent lives (open it + a copyable link).
   const doDeploy = async (agentId, dp) => {
     const o = dp.innerHTML; dp.disabled = true; dp.textContent = L("Deploying…", "جارٍ النشر…");
     try {
       await api("POST", "publish", { app_id: agentId });
       dp.textContent = "✓ " + L("Deployed — live", "تم النشر — مباشر"); dp.classList.add("done");
-      const line = L("Deployed — it's live now. Its triggers and the API run this version.", "تم النشر — أصبح مباشراً الآن. تعمل مشغّلاته وواجهته بهذه النسخة.");
+      const link = location.origin + location.pathname + "#agent/" + agentId;
+      const res = $$("tfDeployRes"); res.hidden = false;
+      res.innerHTML =
+        `<div class="tf-tok">✅ ${L("It's live. Here's where to find it:", "أصبح مباشراً. هنا تجده:")}</div>` +
+        `<div class="tf-where">${L("It's now in your", "أصبح الآن في")} <b>${L("Agents", "الوكلاء")}</b> ${L("list. Open it to test, get its API, or share it:", ". افتحه للتجربة أو للحصول على الواجهة أو للمشاركة:")}</div>` +
+        `<div class="tf-lbtns"><button class="btn primary sm" id="tfOpenAgent">${L("Open your agent →", "افتح وكيلك →")}</button>` +
+        `<button class="draft-btn ghost" id="tfCopyLink">🔗 ${L("Copy link", "انسخ الرابط")}</button></div>` +
+        `<div class="tf-link" id="tfLinkTxt">${esc(link)}</div>`;
+      res.querySelector("#tfOpenAgent").onclick = () => { closeTalk(); openAgent(agentId, "overview"); };
+      res.querySelector("#tfCopyLink").onclick = (ev) => { const b = ev.currentTarget; try { navigator.clipboard.writeText(link); } catch (e) {} const t = b.innerHTML; b.textContent = "✓ " + L("Copied", "تم النسخ"); setTimeout(() => { b.innerHTML = t; }, 1500); };
+      const line = L("Deployed — it's live now. You'll find it in your Agents list; I've put a direct link right here so you know exactly where it is.", "تم النشر — أصبح مباشراً الآن. ستجده في قائمة الوكلاء؛ وضعت رابطاً مباشراً هنا لتعرف أين هو بالضبط.");
       updateNow(line, 100); speak(line);
     } catch (e) { dp.disabled = false; dp.innerHTML = o; }
   };
