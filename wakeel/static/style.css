@@ -1190,14 +1190,14 @@ textarea.input{padding:12px 14px;min-height:auto;resize:none}
 .tf-sample:disabled{opacity:.75;cursor:default}
 
 /* ---- Talk: post-build launch popup (connect → sample data → test → deploy) ---- */
-.tf-launch{position:absolute;left:0;right:0;bottom:0;z-index:20;display:flex;justify-content:center;padding:0 14px 14px;pointer-events:none;background:linear-gradient(0deg,rgba(6,10,16,.62) 34%,rgba(6,10,16,.12) 78%,transparent)}
+.tf-launch{position:absolute;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;padding:20px;pointer-events:none;background:rgba(6,10,16,.55);-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px)}
 .talk-ov [hidden]{display:none!important}  /* class selectors were overriding the hidden attribute */
-.tf-lcard{pointer-events:auto;position:relative;width:min(680px,97%);max-height:calc(100% - 16px);overflow:auto;background:var(--panel,#0f1720);border:1px solid var(--line,#22323f);border-radius:18px;padding:22px 26px;box-shadow:0 30px 80px -20px rgba(0,0,0,.75);animation:tflIn .3s cubic-bezier(.2,.8,.2,1)}
+.tf-lcard{pointer-events:auto;position:relative;width:min(680px,94%);max-height:calc(100% - 40px);overflow:auto;background:var(--panel,#0f1720);border:1px solid var(--line,#22323f);border-radius:18px;padding:22px 26px;box-shadow:0 40px 90px -24px rgba(0,0,0,.8);animation:tflIn .28s cubic-bezier(.2,.8,.2,1)}
 .tf-lcard .tf-lh b{font-size:17px}
 .tf-lcard .tf-steps2{gap:17px}
 .tf-lcard .tf-sbody>b{font-size:14.5px}
 .tf-lcard .tf-sn2{width:28px;height:28px;font-size:14px}
-@keyframes tflIn{from{transform:translateY(18px);opacity:0}to{transform:translateY(0);opacity:1}}
+@keyframes tflIn{from{transform:scale(.96);opacity:0}to{transform:scale(1);opacity:1}}
 .tf-lx{position:absolute;top:12px;right:12px;width:28px;height:28px;border-radius:8px;border:1px solid var(--line,#22323f);background:transparent;color:var(--muted,#8aa);cursor:pointer;font-size:14px}
 .tf-lx:hover{color:var(--text,#eef)}
 .tf-lh{display:flex;gap:12px;align-items:center;margin-bottom:16px;padding-right:30px}
