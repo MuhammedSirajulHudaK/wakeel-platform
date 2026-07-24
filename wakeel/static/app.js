@@ -351,7 +351,7 @@ const GOOGLE_G = '<svg viewBox="0 0 24 24" width="17" height="17"><path fill="#4
 
 function renderLogin() {
   applyDir();
-  const partners = [["Innoventures", PLOGO.inno], ["Takalam", PLOGO.takalam], ["notension.ai", PLOGO.notension]];
+  const partners = [["Innoventures", PLOGO.inno], ["notension.ai", PLOGO.notension]];
   $("#root").innerHTML = `
   <div class="signin fade">
     <div class="signin-hero">
