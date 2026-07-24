@@ -684,6 +684,7 @@ function openTalk() {
     TALK.ctl = buildRailwayFlow("tfStage", "tfWorld", "tfWires", sketchGraph(sk));
     wireZoom();
     $$("tfCtrls").addEventListener("mousedown", e => e.stopPropagation());
+    showBuildBtn();   // a flow exists now → surface the "Done — lock the flow" button
   };
   // natural voice (OpenAI TTS) with browser fallback
   const speakBrowser = (text) => new Promise(res => { try { window.speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = ar ? "ar-SA" : "en-US"; u.rate = 0.98; u.pitch = 1.03; u.onend = res; u.onerror = res; TALK.speaking = true; window.speechSynthesis.speak(u); } catch (e) { res(); } }).then(() => { TALK.speaking = false; });
@@ -812,16 +813,19 @@ function openTalk() {
     if (!TALK || !TALK.launchOpen) return;
     goPhase(allConnected ? 2 : 1);   // skip connect if the flow needs no apps or they're already linked
   };
-  // When the voice interview has shaped the flow, ask if they want to add more — else offer the Done/lock button.
+  // As soon as a flow exists, surface the "Done — lock the flow" button so it's always reachable.
+  // The voice prompt to lock is only offered once the flow has taken some shape (stage >= 2).
   const showBuildBtn = () => {
     const ob = $$("tfOpen");
-    if (TALK.launchOpen || ob.dataset.mode === "lock") return;
-    ob.hidden = false; ob.disabled = false; ob.dataset.mode = "lock";
-    ob.textContent = L("✓ Done — lock the flow", "✓ تم — اقفل المخطط");
-    ob.onclick = () => { ob.hidden = true; openLaunch(); };
-    if (!TALK.askedLock) {
+    if (TALK.launchOpen) return;
+    if (ob.dataset.mode !== "lock") {
+      ob.hidden = false; ob.disabled = false; ob.dataset.mode = "lock";
+      ob.textContent = L("✓ Done — lock the flow", "✓ تم — اقفل المخطط");
+      ob.onclick = () => { ob.hidden = true; openLaunch(); };
+    }
+    if (!TALK.askedLock && (TALK.stage || 0) >= 2) {
       TALK.askedLock = true;
-      const q = L("Your flow's taking shape. Do you want to add anything else to it? If not, tap “Done” and I'll lock it — then I'll walk you through connecting, testing and deploying.", "مخططك يتشكّل. هل تريد إضافة أي شيء آخر إليه؟ إن لا، اضغط «تم» وسأقفله — ثم سأرشدك خلال الربط والتجربة والنشر.");
+      const q = L("Your flow's taking shape. Do you want to add anything else to it? When you're happy, tap “Done” and I'll lock it — then I'll walk you through connecting, testing and deploying.", "مخططك يتشكّل. هل تريد إضافة أي شيء آخر إليه؟ عندما تكون راضياً، اضغط «تم» وسأقفله — ثم سأرشدك خلال الربط والتجربة والنشر.");
       updateNow(q, 90); speak(q);
     }
   };
@@ -842,7 +846,7 @@ function openTalk() {
         if (bp.sketch && (bp.sketch.nodes || []).length) renderFlow(bp.sketch);
         const c = CONF[Math.min(stage, 5)]; $$("tfPct").textContent = c + "%"; $$("tfBar").style.width = c + "%";
         explanation = bp.explanation || explanation;
-        if (stage >= 4) showBuildBtn();
+        showBuildBtn();
       }
     } catch (e) {}
     rtSend({ type: "conversation.item.create", item: { type: "function_call_output", call_id: callId, output: JSON.stringify({ explanation }) } });
