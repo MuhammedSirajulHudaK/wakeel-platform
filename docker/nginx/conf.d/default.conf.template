@@ -62,6 +62,7 @@ server {
       include proxy.conf;
     }
 
+
     # ---- Wakeel branding overrides (served straight from mounted assets) ----
     location = /innogent.js {
       default_type application/javascript;
@@ -84,6 +85,27 @@ server {
       alias /innogent/innogent-favicon.svg;
     }
 
+    # ---- Wakeel Automations (n8n) served SAME-ORIGIN so it embeds inside Wakeel ----
+    # n8n emits /automations/* URLs (N8N_PATH) but serves at root, so strip the prefix.
+    location = /automations { return 302 /automations/; }
+    location /automations/ {
+      resolver 127.0.0.11 valid=30s ipv6=off;
+      set $n8n_upstream n8n:5678;
+      rewrite ^/automations/(.*)$ /$1 break;
+      proxy_pass http://$n8n_upstream;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_set_header Host $host;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto $scheme;
+      proxy_hide_header X-Frame-Options;
+      proxy_hide_header Content-Security-Policy;
+      proxy_read_timeout 3600s;
+      proxy_send_timeout 3600s;
+      proxy_buffering off;
+    }
+
     location / {
       proxy_pass http://web:3000;
       proxy_set_header Accept-Encoding "";
@@ -91,7 +113,7 @@ server {
       proxy_hide_header X-Frame-Options;
       sub_filter_once on;
       sub_filter_types text/html;
-      sub_filter '</head>' '<script src="/innogent.js" defer></script></head>';
+      sub_filter '</head>' '<script src="/innogent.js?v=2" defer></script></head>';
       include proxy.conf;
     }
 
@@ -112,18 +134,21 @@ server {
     ${HTTPS_CONFIG}
 }
 
-# Wakeel Community — proxy champions.innoventures.ae on a dedicated port so it can
-# be embedded (the origin sends frame-ancestors 'none'; we strip it here).
+# Wakeel connector engine — n8n on a dedicated port, embeddable (frame headers stripped).
 server {
-    listen 8081;
+    listen 5679;
     server_name _;
-
     location / {
-      proxy_pass https://champions.innoventures.ae;
-      proxy_set_header Host champions.innoventures.ae;
-      proxy_ssl_server_name on;
+      proxy_pass http://n8n:5678;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_set_header Host $host;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto $scheme;
       proxy_hide_header X-Frame-Options;
       proxy_hide_header Content-Security-Policy;
-      proxy_set_header Accept-Encoding "";
+      proxy_read_timeout 3600s;
+      proxy_send_timeout 3600s;
     }
 }

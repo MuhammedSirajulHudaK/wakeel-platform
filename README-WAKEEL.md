@@ -2,9 +2,28 @@
 
 Chat-first platform where any employee builds, tests, and deploys AI agents in
 plain English or Arabic. Built on [Dify](https://github.com/langgenius/dify)
-(open-source) as the engine, with a custom Wakeel experience layer.
+(the LLM/agent engine) and a bundled [n8n](https://n8n.io) connector engine,
+with a custom Wakeel experience + governance layer — benchmarked against Beam AI.
 
 > **Journey:** Build → Edit → Feedback (test + self-heal) → Deploy → Marketplace → Community
+
+## Feature set (Beam-benchmarked)
+
+Per agent:
+- **Flow** — Dify Studio orchestration canvas, chat-to-build design proposals
+- **Triggers** — manual, schedule, webhook/API, and Microsoft 365 (via bundled automations)
+- **Automation Modes** — per-step Copilot (human approves) / Autopilot (auto)
+- **Records / Views** — native searchable data table of the agent's registry
+- **Evaluate** — test datasets, LLM-judged pass/fail scoring, one-click prompt optimise
+- **Memory** — reference documents (RAG); **Governance** — auto-generated guardrails
+- **Config** — Variable Fill (insertable variables) + Structured Outputs (field schema)
+
+Workspace:
+- **Inbox** — human-in-the-loop approval queue
+- **Tasks** — run history with step logs, Retry/Rerun, 👍/👎 output rating
+- **Analytics** — completion / evaluation / approval / feedback scores, runtimes (7/30/90d)
+- **Integrations** (400+ connectors) · **Automations** (embedded n8n) · **Agent templates**
+- Arabic / English (full RTL), Getting-Started / Core Concepts help
 
 ---
 
