@@ -261,7 +261,7 @@ const T = {
   "I couldn't plan that — try describing the task in a bit more detail.": "تعذّر عليّ التخطيط لذلك — حاول وصف المهمة بمزيد من التفصيل.",
   // buttons / common
   "Create agent": "إنشاء وكيل", "Configure": "إعداد", "Install & connect": "تثبيت وربط",
-  "Request": "طلب", "Request access": "طلب التفعيل", "Champions": "الأبطال",
+  "Request": "طلب", "Request access": "طلب التفعيل",
   "Installed": "مُثبّت", "Get URL": "الحصول على الرابط", "Choose": "اختيار",
   "Save schedule": "حفظ الجدولة", "Native plugin": "إضافة أصلية", "Publish": "نشر",
   "Connect Microsoft 365": "ربط Microsoft 365", "All": "الكل", "Active": "نشط", "Save": "حفظ",
@@ -343,20 +343,18 @@ function logo(cls = "") { return `<div class="logo ${cls}"><span>و</span></div>
 
 /* ---------- login ---------- */
 const PLOGO = {
-  inno: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4.5 12a3 3 0 1 1 6 0 3 3 0 1 0 6 0 3 3 0 1 1-6 0 3 3 0 1 0-6 0z"/></svg>',
-  takalam: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M5 5h14v9H9l-4 4z"/><path d="M9 9h6M9 11.5h3" stroke-linecap="round"/></svg>',
   notension: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="11" width="3.2" height="8" rx="1"/><rect x="10.4" y="6" width="3.2" height="13" rx="1"/><rect x="16.8" y="13" width="3.2" height="6" rx="1"/></svg>',
 };
 const GOOGLE_G = '<svg viewBox="0 0 24 24" width="17" height="17"><path fill="#4285F4" d="M23 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.2a5.3 5.3 0 0 1-2.3 3.5v2.9h3.7C21.7 18.9 23 15.9 23 12.3z"/><path fill="#34A853" d="M12 24c3.1 0 5.7-1 7.6-2.8l-3.7-2.9c-1 .7-2.3 1.1-3.9 1.1-3 0-5.5-2-6.4-4.8H1.8v3C3.7 21.3 7.5 24 12 24z"/><path fill="#FBBC05" d="M5.6 14.6a7.2 7.2 0 0 1 0-4.6v-3H1.8a12 12 0 0 0 0 10.6l3.8-3z"/><path fill="#EA4335" d="M12 4.8c1.7 0 3.2.6 4.4 1.7l3.3-3.3C17.7 1.2 15.1 0 12 0 7.5 0 3.7 2.7 1.8 6.6l3.8 3c.9-2.8 3.4-4.8 6.4-4.8z"/></svg>';
 
 function renderLogin() {
   applyDir();
-  const partners = [["Innoventures", PLOGO.inno], ["notension.ai", PLOGO.notension]];
+  const partners = [["notension.ai", PLOGO.notension]];
   $("#root").innerHTML = `
   <div class="signin fade">
     <div class="signin-hero">
       <div class="wave"></div>
-      <div class="hero-logo"><div class="logo" style="width:34px;height:34px;border-radius:10px"><span>و</span></div><div style="font-size:20px;font-weight:800">Wakeel</div></div>
+      <div class="hero-logo"><div class="logo" style="width:34px;height:34px;border-radius:10px"><span>و</span></div><div style="font-size:20px;font-weight:800">Wakeel Simulator</div></div>
       <div class="hero-copy">
         <h2>Build <span class="wk-accent">وكيل</span> agents for Arabic-first government work</h2>
         <p>Design flows, run tasks, and keep approvals moving across English and Arabic operating surfaces.</p>
@@ -448,13 +446,12 @@ function renderShell() {
   $("#root").innerHTML = `
   <div class="app">
     <aside class="side">
-      <div class="side-top">${logo()}<div class="nm">Wakeel</div><span class="beta">${t("Beta")}</span></div>
+      <div class="side-top">${logo()}<div class="nm">Wakeel Simulator</div><span class="beta">${t("Beta")}</span></div>
       <nav class="nav">${NAV.map(([id, label, ic]) => `<a class="${VIEW === id ? "active" : ""}" data-v="${id}">${ic}<span>${t(label)}</span></a>`).join("")}</nav>
       <div class="side-sub">${t("Your agents")}</div>
       <div class="agent-list" id="agentList"><div class="empty-mini">${t("Loading…")}</div></div>
       <div class="new-agent" id="newAgent">${IC.plus} ${t("New agent")}</div>
       <div class="side-foot">
-        <div class="foot-row" id="supBtn">${IC.trophy}<span>${t("Champions")}</span></div>
         <div class="foot-row" id="userBtn"><div class="av">${esc((ME.email || "U")[0].toUpperCase())}</div><span>${esc(ME.email.split("@")[0])}</span></div>
       </div>
     </aside>
@@ -464,7 +461,6 @@ function renderShell() {
   document.querySelectorAll(".nav a").forEach(a => a.onclick = () => { VIEW = a.dataset.v; AGENT = null; COPILOT = false; if (a.dataset.v !== "home") ACTIVE_SKILL = null; location.hash = a.dataset.v; renderShell(); });
   $("#newAgent").onclick = () => { VIEW = "home"; THREAD = []; renderShell(); };
   $("#userBtn").onclick = openProfile;
-  $("#supBtn").onclick = () => window.open("https://champions.innoventures.ae/", "_blank", "noopener");
   loadAgents();
   ({ home: viewHome, skills: viewSkills, teams: viewTeams, governance: viewGovernance, security: viewSecurity, projects: () => viewEmpty("Projects", "Group related agents, files and notes.", IC.projects), inbox: viewInbox, tasks: viewTasks, templates: viewTemplates, integrations: viewIntegrations, automations: viewAutomations, views: viewAnalytics, developers: viewDevelopers, agent: viewAgent }[VIEW])();
   if (showCop) wireCopilot();
@@ -3332,7 +3328,7 @@ function openHelp() {
     <div style="display:flex;align-items:center;gap:12px">${logo("")}<div style="flex:1"><h2 style="margin:0">Getting started with Wakeel</h2><div style="color:var(--muted);font-size:13px">Build, test and deploy government AI agents — in Arabic or English.</div></div><button class="x" id="hx">×</button></div>
     <div class="help-grid">${CONCEPTS.map(([ic, t, d]) => `<div class="help-card"><div class="hc-ic">${IC[ic] || IC.spark}</div><div><b>${t}</b><p>${d}</p></div></div>`).join("")}</div>
     <div class="help-cta"><div><b>See it end to end</b><span>Take the 12-step product tour — one full cycle, with real screens.</span></div><a class="btn primary" href="${TOUR_URL}" target="_blank">${IC.play} Product tour ↗</a></div>
-    <div style="text-align:center;margin-top:14px"><span class="linky" id="hcBuild">Build your first agent</span> · <a class="linky" href="https://champions.innoventures.ae" target="_blank">Champions ↗</a></div>
+    <div style="text-align:center;margin-top:14px"><span class="linky" id="hcBuild">Build your first agent</span></div>
   </div>`;
   document.body.appendChild(d); d.onclick = () => d.remove(); $("#hx").onclick = () => d.remove();
   $("#hcBuild").onclick = () => { d.remove(); VIEW = "home"; THREAD = []; BUILD = true; renderShell(); };
